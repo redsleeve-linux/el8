@@ -1,7 +1,7 @@
 Name:    infiniband-diags
 Summary: OpenFabrics Alliance InfiniBand Diagnostic Tools
 Version: 2.1.0
-Release: 1%{?dist}
+Release: 1%{?dist}.redsleeve
 # Upstream allows either license to be used
 License: GPLv2 or BSD
 Url:     https://github.com/linux-rdma/infiniband-diags
@@ -18,7 +18,7 @@ Obsoletes: libibmad < %{version}-%{release}
 Obsoletes: openib-diags < 1.3
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
-ExcludeArch: s390 %{arm}
+ExcludeArch: s390
 %if 0%{?rhel} > 7
 ExcludeArch: s390x
 %endif
@@ -201,6 +201,9 @@ find ${RPM_BUILD_ROOT} -type f -name '*.la' -print -delete
 %{_libdir}/*.a
 
 %changelog
+* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> 2.1.0-1.redsleeve
+- fixed "ExcludeArch" statement
+
 * Tue Sep 25 2018 Honggang Li <honli@redhat.com> - 2.1.0-1
 - Rebase to latest upstream release v2.1.0
 - Resolves: bz1630652
