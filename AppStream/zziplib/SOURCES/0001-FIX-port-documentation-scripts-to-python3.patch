@@ -1,0 +1,850 @@
+From f04dd2918b15853e866d3941b72005696c8c3b8f Mon Sep 17 00:00:00 2001
+From: Jakub Martisko <jamartis@redhat.com>
+Date: Tue, 3 Jul 2018 09:33:07 +0200
+Subject: [PATCH] FIX: port documentation scripts to python3
+
+---
+ configure                             |  2 +-
+ configure.ac                          |  2 +-
+ docs/cpp2markdown-1.py                |  9 ++++--
+ docs/cpp2markdown.py                  |  6 ++--
+ docs/make-doc.py                      | 56 ++++++++++++++++++-----------------
+ docs/makedocs.py                      | 26 ++++++++--------
+ docs/zzipdoc/commentmarkup.py         |  5 ++--
+ docs/zzipdoc/dbk2htm.py               |  5 ++--
+ docs/zzipdoc/docbookdocument.py       | 34 +++++++++++----------
+ docs/zzipdoc/functionheader.py        |  3 +-
+ docs/zzipdoc/functionlisthtmlpage.py  | 14 +++++----
+ docs/zzipdoc/functionlistreference.py |  8 +++--
+ docs/zzipdoc/functionprototype.py     |  3 +-
+ docs/zzipdoc/htm2dbk.py               | 10 ++++---
+ docs/zzipdoc/htmldocument.py          | 34 +++++++++++----------
+ docs/zzipdoc/match.py                 | 17 ++++++-----
+ docs/zzipdoc/options.py               |  5 ++--
+ docs/zzipdoc/textfile.py              |  6 ++--
+ docs/zzipdoc/textfileheader.py        |  6 ++--
+ 18 files changed, 140 insertions(+), 109 deletions(-)
+
+diff --git a/configure b/configure
+index 72a5b6c..6ff3ee4 100755
+--- a/configure
++++ b/configure
+@@ -12270,7 +12270,7 @@ fi
+ done
+ test -n "$PERL" || PERL="echo no perl found for"
+ 
+-for ac_prog in python
++for ac_prog in python3
+ do
+   # Extract the first word of "$ac_prog", so it can be a program name with args.
+ set dummy $ac_prog; ac_word=$2
+diff --git a/configure.ac b/configure.ac
+index 4708f8d..68aeb73 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -87,7 +87,7 @@ AX_CREATE_PKGCONFIG_INFO(dnl
+ AX_PAX_TAR_CREATE
+ AX_PAX_TAR_EXTRACT
+ AC_PATH_PROGS(PERL, perl5 perl, echo no perl found for)
+-AC_PATH_PROGS(PYTHON, python, echo no python found for)
++AC_PATH_PROGS(PYTHON, python3, echo no python found for)
+ AC_PATH_PROGS(MKZIP, zip pkzip, :)
+ AC_PATH_PROGS(XMLTO, xmlto, :)
+ 
+diff --git a/docs/cpp2markdown-1.py b/docs/cpp2markdown-1.py
+index 60d28c4..1deaed9 100755
+--- a/docs/cpp2markdown-1.py
++++ b/docs/cpp2markdown-1.py
+@@ -1,9 +1,12 @@
+ #! /usr/bin/env python
++from __future__ import absolute_import
++from __future__ import print_function
+ import pygments.lexers.compiled as lexer
+ import optparse
+ import re
+ from pygments.token import Token
+ import logging
++from six.moves import range
+ 
+ logg = logging.getLogger(__name__)
+ 
+@@ -39,7 +42,7 @@ class CppToMarkdown:
+         check2 = re.compile(r"^\s[*]\s+\b[Cc]opyright\b")
+         empty1 = re.compile(r"^\s[*]\s*$")
+         state = "intro"
+-        for i in xrange(1,len(lines)-1):
++        for i in range(1,len(lines)-1):
+             line = lines[i]
+             if state == "intro":
+                 if empty1.match(line):
+@@ -108,7 +111,7 @@ class CppToMarkdown:
+     def run(self, filename):
+         filetext = open(filename).read()
+         for line in self.process(filetext, filename):
+-            print line
++            print(line)
+     def process(self, filetext, filename=""):
+         section_ruler = "-----------------------------------------"
+         copyright = ""
+@@ -136,7 +139,7 @@ class CppToMarkdown:
+             else:
+                 if text:
+                     yield "#### NOTES"
+-                    print token, text.replace("\n", "\n  ")
++                    print(token, text.replace("\n", "\n  "))
+         if copyright:
+             yield section_ruler
+             yield "### COPYRIGHT"
+diff --git a/docs/cpp2markdown.py b/docs/cpp2markdown.py
+index 710bbdc..b8fe11d 100644
+--- a/docs/cpp2markdown.py
++++ b/docs/cpp2markdown.py
+@@ -1,3 +1,5 @@
++from __future__ import absolute_import
++from __future__ import print_function
+ import pygments.lexers.compiled as lexer
+ import optparse
+ import re
+@@ -62,7 +64,7 @@ class CppToMarkdown:
+     def run(self, filename):
+         filetext = open(filename).read()
+         for line in self.process(filetext, filename):
+-            print line
++            print(line)
+     def process(self, filetext, filename=""):
+         for token, text in self.parse(filetext):
+             if token == FileInclude:
+@@ -86,7 +88,7 @@ class CppToMarkdown:
+             else:
+                 if text:
+                     yield "#### NOTES"
+-                    print token, text.replace("\n", "\n  ")
++                    print(token, text.replace("\n", "\n  "))
+     def isexported_function(self):
+         function = self.function_text.strip().replace("\n"," ")
+         logg.debug("@ --------------------------------------") 
+diff --git a/docs/make-doc.py b/docs/make-doc.py
+index f12553f..22775ef 100644
+--- a/docs/make-doc.py
++++ b/docs/make-doc.py
+@@ -1,5 +1,7 @@
+ #! /usr/bin/python
+ # -*- coding: UTF-8 -*-
++from __future__ import absolute_import
++from __future__ import print_function
+ import sys
+ import re
+ import string
+@@ -23,7 +25,7 @@ def s(string, pattern, repl, count=0):
+ def m(string, pattern):
+     return re.match(pattern, string)
+ def sorted_keys(dict):
+-    keys = dict.keys()
++    keys = list(dict.keys())
+     keys.sort()
+     return keys
+ 
+@@ -59,18 +61,18 @@ def section2html(text):
+                 "<para>" : "<p>", "</para>" : "</p>" ,
+                 "<function>" : "<link>", "</function>" : "</link>" }
+     for str in mapping:
+-        text = string.replace(text, str, mapping[str])
++        text = text.replace(str, mapping[str])
+     return text
+ def html(text):
+     return section2html(paramdef2html(text))
+ def cdata1(text):
+-    return string.replace(text, "&",  "&amp;")
++    return text.replace("&",  "&amp;")
+ def cdata31(text):
+-    return string.replace(string.replace(text, "<","&lt;"), ">","&gt;")
++    return text.replace(text, "<","&lt;").replace( ">","&gt;")
+ def cdata3(text):
+     return cdata31(cdata1(text))
+ def cdata43(text):
+-    return string.replace(text,"\"", "&quot;")
++    return text.replace("\"", "&quot;")
+ def cdata41(text):
+     return cdata43(cdata31(text))
+ def cdata4(text):
+@@ -126,7 +128,7 @@ def this_function_link(text, name):
+ class Options:
+     var = {}
+     def __getattr__(self, name):
+-        if not self.var.has_key(name): return None
++        if name not in self.var: return None
+         return self.var[name]
+     def __setattr__(self, name, value):
+         self.var[name] = value
+@@ -158,7 +160,7 @@ class File:
+         self.copyright = ""
+     def __getattr__(self, name):
+         """ defend against program to break on uninited members """
+-        if self.__dict__.has_key(name): return self.__dict__[name]
++        if name in self.__dict__: return self.__dict__[name]
+         warn("no such member: "+name); return None
+     def set_author(self, text):
+         if self.authors:
+@@ -215,7 +217,7 @@ def scan_options (options, list):
+         #else
+         try:
+             input = open(name, "r")
+-        except IOError, error:
++        except IOError as error:
+             warn(#...... (scan_options) ...............
+                 "can not open input file: "+name, error)
+             continue
+@@ -294,12 +296,12 @@ class Function:
+ #        return ""
+     def __getattr__(self, name):
+         """ defend against program exit on members being not inited """
+-        if self.__dict__.has_key(name): return self.__dict__[name]
++        if name in self.__dict__: return self.__dict__[name]
+         warn("no such member: "+name); return None
+     def dict(self):
+         return self.__dict__
+     def dict_sorted_keys(self):
+-        keys = self.__dict__.keys()
++        keys = list(self.__dict__.keys())
+         keys.sort()
+         return keys
+     def parse(self, prototype):
+@@ -376,7 +378,7 @@ def examine_head_anchors(func_list):
+         function.head = s(function.head, r"(.*)also:(.*)", lambda x
+                           : set_seealso(function, x.group(2)) and x.group(1))
+         if function.seealso and None:
+-            print "function[",function.name,"].seealso=",function.seealso
++            print("function[",function.name,"].seealso=",function.seealso)
+ examine_head_anchors(function_list)
+ 
+ # =============================================================== HTML =====
+@@ -455,7 +457,7 @@ def combined_html_pages(func_list):
+             s(ensure_name(this_function_link(section2html( func.body ),
+                                              func.name), func.name),
+               r"(?sx) (</?para>\s*) <br\s*\/>", r"\1"))
+-    return combined.values()
++    return list(combined.values())
+ html_pages = combined_html_pages(function_list)
+ 
+ def html_resolve_links_on_page(text, list):
+@@ -495,7 +497,7 @@ class HtmlPage:
+         return T
+     def add_page_map(self, list):
+         """ generate the index-block at the start of the onepage-html file """
+-        keys = list.keys()
++        keys = list(list.keys())
+         keys.sort()
+         for name in keys:
+             self.toc += "<tr valign=\"top\">\n"+ \
+@@ -524,11 +526,11 @@ html.add_page_list(html_pages)
+ # and finally print the html-formatted output
+ try:
+     F = open(o.libhtmlfile, "w")
+-except IOError, error:
++except IOError as error:
+     warn(# ............. open(o.libhtmlfile, "w") ..............
+         "can not open html output file: "+o.libhtmlfile, error)
+ else:
+-    print >> F, html.page_text()
++    print(html.page_text(), file=F)
+     F.close()
+ #fi
+ 
+@@ -987,40 +989,40 @@ doctype += '"http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd">'+"\n"
+ 
+ try:
+     F = open(o.docbookfile,"w")
+-except IOError, error:
++except IOError as error:
+     warn("can not open docbook output file: "+o.docbookfile, error)
+ else:
+-    print >> F, doctype, '<reference><title>Manual Pages</title>'
++    print(doctype, '<reference><title>Manual Pages</title>', file=F)
+ 
+     for page in combined_pages:
+-        print >> F, page.refentry_text()
++        print(page.refentry_text(), file=F)
+     #od
+ 
+     for page in header_refpages.values():
+         if not page.refentry: continue
+-        print >> F, "\n<!-- _______ "+page.id+" _______ -->",
+-        print >> F, page.refentry_text()
++        print("\n<!-- _______ "+page.id+" _______ -->", end=' ', file=F)
++        print(page.refentry_text(), file=F)
+     #od
+ 
+-    print >> F, "\n",'</reference>',"\n"
++    print("\n",'</reference>',"\n", file=F)
+     F.close()
+ #fi
+ 
+ # _____________________________________________________________________
+ try:
+     F = open( o.dumpdocfile, "w")
+-except IOError, error:
++except IOError as error:
+     warn ("can not open"+o.dumpdocfile,error)
+ else:
+     for func in function_list:
+         name = func.name
+-        print >> F, "<fn id=\""+name+"\">"+"<!-- FOR \""+name+"\" -->\n"
++        print("<fn id=\""+name+"\">"+"<!-- FOR \""+name+"\" -->\n", file=F)
+         for H in sorted_keys(func.dict()):
+-            print >> F, "<"+H+" name=\""+name+"\">",
+-            print >> F, str(func.dict()[H]),
+-            print >> F, "</"+H+">"
++            print("<"+H+" name=\""+name+"\">", end=' ', file=F)
++            print(str(func.dict()[H]), end=' ', file=F)
++            print("</"+H+">", file=F)
+         #od
+-        print >> F, "</fn><!-- END \""+name+"\" -->\n\n";
++        print("</fn><!-- END \""+name+"\" -->\n\n", file=F);
+     #od
+     F.close();
+ #fi
+diff --git a/docs/makedocs.py b/docs/makedocs.py
+index 1bc8f88..d987292 100644
+--- a/docs/makedocs.py
++++ b/docs/makedocs.py
+@@ -1,3 +1,5 @@
++from __future__ import absolute_import
++from __future__ import print_function
+ import sys
+ from zzipdoc.match import *
+ from zzipdoc.options import *
+@@ -37,7 +39,7 @@ class PerFile:
+         return None
+     def print_list_mainheader(self):
+         for t_fileheader in self.headers:
+-            print t_fileheader.get_filename(), t_fileheader.src_mainheader()
++            print(t_fileheader.get_filename(), t_fileheader.src_mainheader())
+         
+ class PerFunctionEntry:
+     def __init__(self, header, comment, prototype):
+@@ -66,10 +68,10 @@ class PerFunction:
+                                            functionprototype) ]
+     def print_list_titleline(self):
+         for funcheader in self.headers:
+-            print funcheader.get_filename(), "[=>]", funcheader.get_titleline()
++            print(funcheader.get_filename(), "[=>]", funcheader.get_titleline())
+     def print_list_name(self):
+         for funcheader in self.prototypes:
+-            print funcheader.get_filename(), "[>>]", funcheader.get_name()
++            print(funcheader.get_filename(), "[>>]", funcheader.get_name())
+ 
+ class PerFunctionFamilyEntry:
+     def __init__(self, leader):
+@@ -122,12 +124,12 @@ class PerFunctionFamily:
+         for name in self.retarget:
+             into = self.retarget[name]
+             if into not in name_list:
+-                print ("function '"+name+"' retarget into '"+into+
+-                       "' does not exist - keep alone")
++                print(("function '"+name+"' retarget into '"+into+
++                       "' does not exist - keep alone"))
+             if into in self.retarget:
+                 other = self.retarget[into]
+-                print ("function '"+name+"' retarget into '"+into+
+-                       "' which is itself a retarget into '"+other+"'")
++                print(("function '"+name+"' retarget into '"+into+
++                       "' which is itself a retarget into '"+other+"'"))
+             if into not in lead_list:
+                 lead_list += [ into ]
+         for func in self.functions:
+@@ -141,7 +143,7 @@ class PerFunctionFamily:
+                 entry.add(func) # the first
+                 self.entries += [ entry ]
+             else:
+-                print "head function '"+name+" has no entry"
++                print("head function '"+name+" has no entry")
+         for func in self.functions:
+             name = func.get_name()
+             if name in self.retarget:
+@@ -150,14 +152,14 @@ class PerFunctionFamily:
+                 if entry is not None:
+                     entry.add(func) # will not add duplicates
+                 else:
+-                    print "into function '"+name+" has no entry"
++                    print("into function '"+name+" has no entry")
+     def print_list_name(self):
+         for family in self.entries:
+             name = family.get_name()
+-            print name, ":",
++            print(name, ":", end=' ')
+             for item in family.functions:
+-                print item.get_name(), ",",
+-            print ""
++                print(item.get_name(), ",", end=' ')
++            print("")
+ class HtmlManualPageAdapter:
+     def __init__(self, entry):
+         """ usually takes a PerFunctionEntry """
+diff --git a/docs/zzipdoc/commentmarkup.py b/docs/zzipdoc/commentmarkup.py
+index 3f605a7..31727a3 100644
+--- a/docs/zzipdoc/commentmarkup.py
++++ b/docs/zzipdoc/commentmarkup.py
+@@ -1,4 +1,5 @@
+-from match import Match
++from __future__ import absolute_import
++from .match import Match
+ 
+ def markup_link_syntax(text):
+     """ markup the link-syntax ` => somewhere ` in the text block """
+@@ -31,7 +32,7 @@ class CommentMarkup:
+         comment = self.header.comment
+         try:
+             comment = self.header.get_otherlines()
+-        except Exception, e:
++        except Exception as e:
+             pass
+         mode = ""
+         text = ""
+diff --git a/docs/zzipdoc/dbk2htm.py b/docs/zzipdoc/dbk2htm.py
+index f8593e6..2b68e95 100644
+--- a/docs/zzipdoc/dbk2htm.py
++++ b/docs/zzipdoc/dbk2htm.py
+@@ -1,4 +1,5 @@
+-from match import Match
++from __future__ import absolute_import
++from .match import Match
+ import string
+ 
+ class dbk2htm_conversion:
+@@ -9,7 +10,7 @@ class dbk2htm_conversion:
+         pass
+     def section2html(self, text):
+         for str in self.mapping:
+-            text = string.replace(text, str, self.mapping[str])
++            text = text.replace(str, self.mapping[str])
+         return text
+     def paramdef2html(self, text):
+         s = Match()
+diff --git a/docs/zzipdoc/docbookdocument.py b/docs/zzipdoc/docbookdocument.py
+index c4602ad..44a0b23 100644
+--- a/docs/zzipdoc/docbookdocument.py
++++ b/docs/zzipdoc/docbookdocument.py
+@@ -1,6 +1,8 @@
+ #! /usr/bin/env python
+ # -*- coding: UTF-8 -*-
+-from match import Match
++from __future__ import absolute_import
++from __future__ import print_function
++from .match import Match
+ 
+ class DocbookDocument:
+     """ binds some xml content page with additional markup - in this
+@@ -23,14 +25,14 @@ class DocbookDocument:
+     def get_title(self):
+         if self.title: return title
+         try:   return self.text[0].get_title()
+-        except Exception, e: pass
++        except Exception as e: pass
+         return self.title
+     def _xml_doctype(self, rootnode):
+         return "<!DOCTYPE "+rootnode+self.docbook_dtd+">"
+     def _xml_text(self, xml):
+         """ accepts adapter objects with .xml_text() """
+         try:   return xml.xml_text()
+-        except Exception, e: print "DocbookDocument/text", e; pass
++        except Exception as e: print("DocbookDocument/text", e); pass
+         return str(xml)
+     def _fetch_rootnode(self, text):
+         fetch = Match(r"^[^<>]*<(\w+)\b")
+@@ -47,7 +49,7 @@ class DocbookDocument:
+         return filename
+     def save(self, filename = None):
+         filename = self._filename(filename)
+-        print "writing '"+filename+"'"
++        print("writing '"+filename+"'")
+         if len(self.text) > 1:
+             self.save_all(filename)
+         else:
+@@ -58,12 +60,12 @@ class DocbookDocument:
+             xml_text = self._xml_text(text)
+             rootnode = self._fetch_rootnode(xml_text)
+             doctype = self._xml_doctype(rootnode)
+-            print >>fd, doctype
+-            print >>fd, xml_text
++            print(doctype, file=fd)
++            print(xml_text, file=fd)
+             fd.close()
+             return True
+-        except IOError, e:
+-            print "could not open '"+filename+"'file", e
++        except IOError as e:
++            print("could not open '"+filename+"'file", e)
+             return False
+     def save_all(self, filename):
+         assert len(self.text) > 1
+@@ -76,20 +78,20 @@ class DocbookDocument:
+             else:
+                 rootnode = self.rootnode
+             doctype = self._xml_doctype(rootnode)
+-            print >>fd, doctype
++            print(doctype, file=fd)
+             title = self.get_title()
+             if title and self.rootnode in self.has_title_child:
+-                print >>fd, "<"+self.rootnode+'><title>'+title+'</title>'
++                print("<"+self.rootnode+'><title>'+title+'</title>', file=fd)
+             elif title:
+-                print >>fd, "<"+self.rootnode+' id="'+title+'">'
++                print("<"+self.rootnode+' id="'+title+'">', file=fd)
+             else:
+-                print >>fd, "<"+self.rootnode+'>'
++                print("<"+self.rootnode+'>', file=fd)
+             for text in self.text:
+                 text = self._xml_text(text)
+-                print >>fd, text
+-            print >>fd, "</"+self.rootnode+">"
++                print(text, file=fd)
++            print("</"+self.rootnode+">", file=fd)
+             fd.close()
+             return True
+-        except IOError, e:
+-            print "could not open '"+filename+"'file", e
++        except IOError as e:
++            print("could not open '"+filename+"'file", e)
+             return False
+diff --git a/docs/zzipdoc/functionheader.py b/docs/zzipdoc/functionheader.py
+index 81bb385..a424a6d 100644
+--- a/docs/zzipdoc/functionheader.py
++++ b/docs/zzipdoc/functionheader.py
+@@ -1,4 +1,5 @@
+-from match import Match
++from __future__ import absolute_import
++from .match import Match
+ 
+ class FunctionHeader:
+     """ parsing the comment block that is usually presented before
+diff --git a/docs/zzipdoc/functionlisthtmlpage.py b/docs/zzipdoc/functionlisthtmlpage.py
+index 4ec9178..8009194 100644
+--- a/docs/zzipdoc/functionlisthtmlpage.py
++++ b/docs/zzipdoc/functionlisthtmlpage.py
+@@ -1,5 +1,7 @@
+-from options import *
+-from match import Match
++from __future__ import absolute_import
++from __future__ import print_function
++from .options import *
++from .match import Match
+ 
+ class FunctionListHtmlPage:
+     """ The main part here is to create a TOC (table of contents) at the
+@@ -35,7 +37,7 @@ class FunctionListHtmlPage:
+         head_text = entry.head_xml_text()
+         body_text = entry.body_xml_text(name)
+         if not head_text:
+-            print "no head_text for", name
++            print("no head_text for", name)
+             return
+         try:
+             prespec = entry.head_get_prespec()
+@@ -43,7 +45,7 @@ class FunctionListHtmlPage:
+             callspec = entry.head_get_callspec()
+             head_text = ("<code><b><function>"+namespec+"</function></b>"
+                          +callspec+" : "+prespec+"</code>")
+-        except Exception, e:
++        except Exception as e:
+             pass
+         try:
+             extraline = ""
+@@ -56,7 +58,7 @@ class FunctionListHtmlPage:
+                              '<em><small>'+filename+'</small></em>'+
+                              '</td></table>')
+             body_text = extraline + body_text
+-        except Exception, e:
++        except Exception as e:
+             pass
+         def link(text):
+             return (text & Match("<function>(\w*)</function>")
+@@ -102,7 +104,7 @@ class FunctionListHtmlPage:
+         text &= (Match("(?s)<link>(\w+)</link>")
+                  >> (lambda x: self.resolve_internal(x.group(1))))
+         if len(self.not_found_in_anchors):
+-            print "not found in anchors: ", self.not_found_in_anchors
++            print("not found in anchors: ", self.not_found_in_anchors)
+         return (text & Match("(?s)<link>([^<>]*)</link>")
+                 >> "<code>\\1</code>")
+     def resolve_external(self, func, sect):
+diff --git a/docs/zzipdoc/functionlistreference.py b/docs/zzipdoc/functionlistreference.py
+index c38ff0a..5993d45 100644
+--- a/docs/zzipdoc/functionlistreference.py
++++ b/docs/zzipdoc/functionlistreference.py
+@@ -1,7 +1,9 @@
+ #! /usr/bin/env python
+ # -*- coding: UTF-8 -*-
+-from match import Match
+-from htm2dbk import *
++from __future__ import absolute_import
++from __future__ import print_function
++from .match import Match
++from .htm2dbk import *
+ 
+ class FunctionListReference:
+     """ Creating a docbook-style <reference> list of <refentry> parts
+@@ -19,7 +21,7 @@ class FunctionListReference:
+         description = entry.body_xml_text(name)
+         funcsynopsis = entry.head_xml_text()
+         if not funcsynopsis:
+-            print "no funcsynopsis for", name
++            print("no funcsynopsis for", name)
+             return
+         if self.entry is None:
+             self.entry = FunctionListRefEntry(entry, self.o)
+diff --git a/docs/zzipdoc/functionprototype.py b/docs/zzipdoc/functionprototype.py
+index fda85bb..1247f6c 100644
+--- a/docs/zzipdoc/functionprototype.py
++++ b/docs/zzipdoc/functionprototype.py
+@@ -1,4 +1,5 @@
+-from match import Match
++from __future__ import absolute_import
++from .match import Match
+ 
+ class FunctionPrototype:
+     """ takes a single function prototype line (cut from some source file)
+diff --git a/docs/zzipdoc/htm2dbk.py b/docs/zzipdoc/htm2dbk.py
+index ec9685b..12b70dd 100644
+--- a/docs/zzipdoc/htm2dbk.py
++++ b/docs/zzipdoc/htm2dbk.py
+@@ -6,8 +6,10 @@ The mapping of markups and links is far from perfect. But all we
+ want is the docbook-to-pdf converter and similar technology being
+ present in the world of docbook-to-anything converters. """
+ 
++from __future__ import absolute_import
++from __future__ import print_function
+ from datetime import date
+-import match
++from . import match
+ import sys
+ 
+ m = match.Match
+@@ -146,8 +148,8 @@ def htm2dbk_files(args):
+             doc.filename = filename
+             doc.add(f.read())
+             f.close()
+-        except IOError, e:
+-            print >> sys.stderr, "can not open "+filename
++        except IOError as e:
++            print("can not open "+filename, file=sys.stderr)
+     return doc.value()
+ 
+ def html2docbook(text):
+@@ -155,4 +157,4 @@ def html2docbook(text):
+     return htm2dbk_conversion().convert2(text)
+ 
+ if __name__ == "__main__":
+-    print htm2dbk_files(sys.argv[1:])
++    print(htm2dbk_files(sys.argv[1:]))
+diff --git a/docs/zzipdoc/htmldocument.py b/docs/zzipdoc/htmldocument.py
+index 47d58dc..5e4445a 100644
+--- a/docs/zzipdoc/htmldocument.py
++++ b/docs/zzipdoc/htmldocument.py
+@@ -1,6 +1,8 @@
+ #! /usr/bin/env python
+ # -*- coding: UTF-8 -*-
+-from match import Match
++from __future__ import absolute_import
++from __future__ import print_function
++from .match import Match
+ 
+ class HtmlDocument:
+     """ binds some html content page with additional markup - in this
+@@ -29,31 +31,31 @@ class HtmlDocument:
+     def get_title(self):
+         if self.title: return self.title
+         try:   return self.text[0].get_title()
+-        except Exception, e: pass
++        except Exception as e: pass
+         return self.title
+     def _html_meta(self, meta):
+         """ accepts adapter objects with .html_meta() """
+         try:   return meta.html_meta()
+-        except Exception, e: pass
++        except Exception as e: pass
+         return str(meta)
+     def _html_style(self, style):
+         """ accepts adapter objects with .html_style() and .xml_style() """
+         ee = None
+         try:   return style.html_style()
+-        except Exception, e: ee = e; pass
++        except Exception as e: ee = e; pass
+         try:   return style.xml_style()
+-        except Exception, e: print "HtmlDocument/style", ee, e; pass
++        except Exception as e: print("HtmlDocument/style", ee, e); pass
+         try:   return str(style)
+-        except Exception, e: print "HtmlDocument/style", e; return ""
++        except Exception as e: print("HtmlDocument/style", e); return ""
+     def _html_text(self, html):
+         """ accepts adapter objects with .html_text() and .xml_text() """
+         ee = None
+         try:   return html.html_text()
+-        except Exception, e: ee = e; pass
++        except Exception as e: ee = e; pass
+         try:   return html.xml_text()
+-        except Exception, e: print "HtmlDocument/text", ee, e; pass
++        except Exception as e: print("HtmlDocument/text", ee, e); pass
+         try:   return str(html)
+-        except Exception, e: print "HtmlDocument/text", e; return "&nbsp;"
++        except Exception as e: print("HtmlDocument/text", e); return "&nbsp;"
+     def navigation(self):
+         if self.navi:
+             return self.navi
+@@ -63,7 +65,7 @@ class HtmlDocument:
+                 self.navi = fd.read()
+                 fd.close()
+                 return self.navi
+-            except Exception, e:
++            except Exception as e:
+                 pass
+         return None
+     def html_header(self):
+@@ -103,15 +105,15 @@ class HtmlDocument:
+         return filename
+     def save(self, filename = None):
+         filename = self._filename(filename)
+-        print "writing '"+filename+"'"
++        print("writing '"+filename+"'")
+         try:
+             fd = open(filename, "w")
+-            print >>fd, self.html_header()
++            print(self.html_header(), file=fd)
+             for text in self.text:
+-                print >>fd, self._html_text(text)
+-            print >>fd, self.html_footer()
++                print(self._html_text(text), file=fd)
++            print(self.html_footer(), file=fd)
+             fd.close()
+             return True
+-        except IOError, e:
+-            print "could not open '"+filename+"'file", e
++        except IOError as e:
++            print("could not open '"+filename+"'file", e)
+             return False
+diff --git a/docs/zzipdoc/match.py b/docs/zzipdoc/match.py
+index a089ec3..5f12478 100644
+--- a/docs/zzipdoc/match.py
++++ b/docs/zzipdoc/match.py
+@@ -3,7 +3,10 @@
+ # @creator (C) 2003 Guido U. Draheim
+ # @license http://creativecommons.org/licenses/by-nc-sa/2.0/de/
+ 
++from __future__ import absolute_import
++from __future__ import print_function
+ import re
++import six
+ 
+ # ---------------------------------------------------------- Regex Match()
+ # beware, stupid python interprets backslashes in replace-parts only partially!
+@@ -18,7 +21,7 @@ class MatchReplace:
+         MatchReplace.__call__(self, matching, template, count, flags)
+     def __call__(self, matching, template = None, count = 0, flags = None):
+         """ other than __init__ the template may be left off to be unchanged"""
+-        if isinstance(count, basestring): # count/flags swapped over?
++        if isinstance(count, six.string_types): # count/flags swapped over?
+             flags = count; count = 0
+         if isinstance(matching, Match):
+             self.matching = matching
+@@ -57,7 +60,7 @@ class Match(str):
+     def __call__(self, pattern, flags = None):
+         assert isinstance(pattern, str) or pattern is None
+         assert isinstance(flags, str) or flags is None
+-        str.__init__(self, pattern)
++        super(Match,self).__init__()
+         self.replaced = 0 # set by subn() inside MatchReplace
+         self.found = None # set by search() to a MatchObject
+         self.pattern = pattern
+@@ -90,14 +93,14 @@ class Match(str):
+ if __name__ == "__main__":
+     # matching:
+     if "foo" & Match("oo"):
+-        print "oo"
++        print("oo")
+     x = Match()
+     if "foo" & x("(o+)"):
+-        print x[1]
++        print(x[1])
+     # replacing:
+     y = "fooboo" & Match("oo") >> "ee"
+-    print y
++    print(y)
+     r = Match("oo") >> "ee"
+-    print "fooboo" & r
++    print("fooboo" & r)
+     s = MatchReplace("oo", "ee")
+-    print "fooboo" & s
++    print("fooboo" & s)
+diff --git a/docs/zzipdoc/options.py b/docs/zzipdoc/options.py
+index c6758d5..4a93bb7 100644
+--- a/docs/zzipdoc/options.py
++++ b/docs/zzipdoc/options.py
+@@ -3,13 +3,14 @@
+ # @creator (C) 2003 Guido U. Draheim
+ # @license http://creativecommons.org/licenses/by-nc-sa/2.0/de/
+ 
+-from match import Match
++from __future__ import absolute_import
++from .match import Match
+ 
+ # use as o.optionname to check for commandline options.
+ class Options:
+     var = {}
+     def __getattr__(self, name):
+-        if not self.var.has_key(name): return None
++        if name not in self.var: return None
+         return self.var[name]
+     def __setattr__(self, name, value):
+         self.var[name] = value
+diff --git a/docs/zzipdoc/textfile.py b/docs/zzipdoc/textfile.py
+index bfaff8d..9fabeac 100644
+--- a/docs/zzipdoc/textfile.py
++++ b/docs/zzipdoc/textfile.py
+@@ -1,4 +1,6 @@
+ 
++from __future__ import absolute_import
++from six.moves import range
+ def _src_to_xml(text):
+     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt")
+ 
+@@ -17,7 +19,7 @@ class TextFile:
+             self.src_text = fd.read()
+             fd.close()
+             return True
+-        except IOError, e:
++        except IOError as e:
+             pass
+         return False
+     def assert_src_text(self):
+@@ -41,7 +43,7 @@ class TextFile:
+         self._line(self.src_text, offset)
+     def _line(self, text, offset):
+         line = 1
+-        for x in xrange(0,offset):
++        for x in range(0,offset):
+             if x == "\n":
+                 line += 1
+         return line
+diff --git a/docs/zzipdoc/textfileheader.py b/docs/zzipdoc/textfileheader.py
+index ceaa28e..63be1e1 100644
+--- a/docs/zzipdoc/textfileheader.py
++++ b/docs/zzipdoc/textfileheader.py
+@@ -1,4 +1,6 @@
+-from match import Match
++from __future__ import absolute_import
++from __future__ import print_function
++from .match import Match
+ 
+ class TextFileHeader:
+     """ scan for a comment block at the source file start and fill the
+@@ -17,7 +19,7 @@ class TextFileHeader:
+         x = Match()
+         text = self.textfile.get_src_text()
+         if not text:
+-            print "nonexistent file:", self.textfile.get_filename()
++            print("nonexistent file:", self.textfile.get_filename())
+             return False
+         if text & x(r"(?s)[/][*]+(\s(?:.(?!\*\/))*.)\*\/"
+                     r"(?:\s*\#(?:define|ifdef|endif)[ ]*\S*[ ]*\S*)*"
+-- 
+2.14.4
+
