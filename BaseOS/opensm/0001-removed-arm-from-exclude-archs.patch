@@ -1,0 +1,44 @@
+From 5d7cad9e063ef6e88574bd2f826aeac47db69aec Mon Sep 17 00:00:00 2001
+From: Jacco Ligthart <jacco@redsleeve.org>
+Date: Tue, 7 May 2019 23:50:29 +0200
+Subject: [PATCH] removed arm from exclude archs
+
+---
+ SPECS/opensm.spec | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/SPECS/opensm.spec b/SPECS/opensm.spec
+index b3a3869..327ad11 100644
+--- a/SPECS/opensm.spec
++++ b/SPECS/opensm.spec
+@@ -2,7 +2,7 @@
+ 
+ Name:    opensm
+ Version: 3.3.21
+-Release: 2%{?dist}
++Release: 2%{?dist}.redsleeve
+ Summary: OpenIB InfiniBand Subnet Manager and management utilities
+ Group:   System Environment/Daemons
+ License: GPLv2 or BSD
+@@ -27,7 +27,7 @@ Requires(post): systemd
+ Requires(preun): systemd
+ Requires(postun): systemd
+ # RDMA is not currently built on 32-bit ARM: #1484155
+-ExcludeArch: s390 %{arm}
++ExcludeArch: s390
+ 
+ %description
+ OpenSM is the OpenIB project's Subnet Manager for Infiniband networks.
+@@ -127,6 +127,9 @@ fi
+ %{_libdir}/lib*.a
+ 
+ %changelog
++* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 3.3.21-2.redsleeve
++- removed arm from exclude archs
++
+ * Fri Jan 11 2019 Honggang Li <honli@redhat.com> - 3.3.21-2
+ - Restore the 'subnet_prefix' option
+ - Resolves: bz1664575
+-- 
+2.18.1
+
