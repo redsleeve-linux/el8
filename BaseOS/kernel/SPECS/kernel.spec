@@ -228,6 +228,11 @@ Summary: The Linux kernel
 %define kernel_image arch/arm64/boot/Image.gz
 %endif
 
+%ifarch %{arm}
+%define asmarch arm
+%define hdrarch arm
+%endif
+
 # To temporarily exclude an architecture from being built, add it to
 # %%nobuildarches. Do _NOT_ use the ExclusiveArch: line, because if we
 # don't build kernel-headers then the new build system will no longer let
@@ -235,7 +240,7 @@ Summary: The Linux kernel
 # Which is a BadThing(tm).
 
 # We only build kernel-headers on the following...
-%define nobuildarches i386 i686
+%define nobuildarches i386 i686 %{arm}
 
 %ifarch %nobuildarches
 %define with_up 0
@@ -265,10 +270,10 @@ Group: System Environment/Kernel
 License: GPLv2 and Redistributable, no modification permitted
 URL: http://www.kernel.org/
 Version: %{rpmversion}
-Release: %{pkg_release}
+Release: %{pkg_release}.redsleeve
 # DO NOT CHANGE THE 'ExclusiveArch' LINE TO TEMPORARILY EXCLUDE AN ARCHITECTURE BUILD.
 # SET %%nobuildarches (ABOVE) INSTEAD
-ExclusiveArch: noarch i386 i686 x86_64 s390x aarch64 ppc64le
+ExclusiveArch: noarch i386 i686 x86_64 s390x aarch64 ppc64le %{arm}
 ExclusiveOS: Linux
 %ifnarch %{nobuildarches}
 Requires: kernel-core-uname-r = %{KVERREL}%{?variant}
@@ -2058,6 +2063,9 @@ fi
 #
 #
 %changelog
+* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> 4.18.0-80.el8.redsleeve
+- added arm to the ExclusiveArch and nobuildarches lists
+
 * Tue May 07 2019 CentOS Sources <bugs@centos.org> - 4.18.0-80.el8.centos
 - Apply debranding changes
 
