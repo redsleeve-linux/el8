@@ -14,7 +14,7 @@ URL: https://www.python.org/
 #  WARNING  When rebasing to a new Python version,
 #           remember to update the python3-docs package as well
 Version: %{pybasever}.8
-Release: 1%{?dist}
+Release: 1%{?dist}.redsleeve
 License: Python
 
 
@@ -704,7 +704,6 @@ BuildPython() {
   --with-system-ffi \
   --enable-loadable-sqlite-extensions \
   --with-dtrace \
-  --with-lto \
   --with-ssl-default-suites=openssl \
 %if %{with valgrind}
   --with-valgrind \
@@ -1054,6 +1053,8 @@ CheckPython() {
     -wW --slowest --findleaks \
     -x test_distutils \
     -x test_bdist_rpm \
+    -x test_gdb \
+    -x test_float \
     %ifarch %{mips64}
     -x test_ctypes \
     %endif
@@ -1555,6 +1556,9 @@ fi
 # ======================================================
 
 %changelog
+* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org>
+- disabled test_float
+
 * Wed Jan 09 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-1
 - Update to 3.6.8
 Resolves: rhbz#1658271
