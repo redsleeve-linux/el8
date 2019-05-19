@@ -1,7 +1,7 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
 Version:	2.0.12
-Release:	2%{dist}
+Release:	2%{dist}.redsleeve
 # libnuma is LGPLv2 and GPLv2
 # numactl binaries are GPLv2 only
 License:	GPLv2
@@ -11,7 +11,7 @@ Source0:	https://github.com/numactl/numactl/releases/download/%{version}/numactl
 Buildroot:	%{_tmppath}/%{name}-buildroot
 BuildRequires:	libtool automake autoconf
 
-ExcludeArch: s390 %{arm}
+ExcludeArch: s390
 
 #START INSERT
 #
@@ -112,6 +112,9 @@ make DESTDIR=$RPM_BUILD_ROOT install
 %{_mandir}/man3/*.3*
 
 %changelog
+* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.0.12-2.redsleeve
+- Don't exclude arm architectures
+
 * Mon Nov 26 2018 Pingfan Liu <piliu@redhat.com> - 2.0.12-2
 - Fix: Add ShmemHugePages and ShmemPmdMapped to system_meminfo[]
 
