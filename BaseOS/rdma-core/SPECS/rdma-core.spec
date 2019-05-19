@@ -1,6 +1,6 @@
 Name: rdma-core
 Version: 22
-Release: 2%{?dist}
+Release: 2%{?dist}.redsleeve
 Summary: RDMA core userspace libraries and daemons
 
 # Almost everything is licensed under the OFA dual GPLv2, 2 Clause BSD license
@@ -44,7 +44,7 @@ Obsoletes: rdma-ndd < %{version}-%{release}
 Conflicts: infiniband-diags <= 1.6.7
 Requires: pciutils
 # 32-bit arm is missing required arch-specific memory barriers,
-ExcludeArch: %{arm}
+#ExcludeArch: %{arm}
 
 # Since we recommend developers use Ninja, so should packagers, for consistency.
 %define CMAKE_FLAGS %{nil}
@@ -91,10 +91,12 @@ Provides: libcxgb4-static = %{version}-%{release}
 Obsoletes: libcxgb4-static < %{version}-%{release}
 Provides: libhfi1-static = %{version}-%{release}
 Obsoletes: libhfi1-static < %{version}-%{release}
+%ifnarch %{arm}
 Provides: libmlx4-static = %{version}-%{release}
 Obsoletes: libmlx4-static < %{version}-%{release}
 Provides: libmlx5-static = %{version}-%{release}
 Obsoletes: libmlx5-static < %{version}-%{release}
+%endif
 Provides: libi40iw-devel-static = %{version}-%{release}
 Obsoletes: libi40iw-devel-static < %{version}-%{release}
 
@@ -110,11 +112,13 @@ Provides: libhfi1 = %{version}-%{release}
 Obsoletes: libhfi1 < %{version}-%{release}
 Provides: libi40iw = %{version}-%{release}
 Obsoletes: libi40iw < %{version}-%{release}
+%ifnarch %{arm}
 Provides: libmlx4 = %{version}-%{release}
 Obsoletes: libmlx4 < %{version}-%{release}
 %ifnarch s390
 Provides: libmlx5 = %{version}-%{release}
 Obsoletes: libmlx5 < %{version}-%{release}
+%endif
 %endif
 Provides: librxe = %{version}-%{release}
 Obsoletes: librxe < %{version}-%{release}
@@ -339,7 +343,7 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %doc %{_docdir}/%{name}-%{version}/udev.md
 %config(noreplace) %{_sysconfdir}/rdma/*
 %config(noreplace) %{_sysconfdir}/udev/rules.d/*
-%ifnarch s390
+%ifnarch s390 %{arm}
 %config(noreplace) %{_sysconfdir}/modprobe.d/mlx4.conf
 %endif
 %config(noreplace) %{_sysconfdir}/modprobe.d/truescale.conf
@@ -375,7 +379,7 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %{_mandir}/man3/rdma*
 %{_mandir}/man3/umad*
 %{_mandir}/man3/*_to_ibv_rate.*
-%ifnarch s390
+%ifnarch s390 %{arm}
 %{_mandir}/man3/mlx4dv*
 %{_mandir}/man3/mlx5dv*
 %{_mandir}/man7/mlx5dv*
@@ -387,7 +391,7 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %dir %{_libdir}/libibverbs
 %{_libdir}/libibverbs*.so.*
 %{_libdir}/libibverbs/*.so
-%ifnarch s390
+%ifnarch s390 %{arm}
 %{_libdir}/libmlx4.so.*
 %{_libdir}/libmlx5.so.*
 %endif
@@ -397,7 +401,7 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %doc %{_docdir}/%{name}-%{version}/tag_matching.md
 %{_bindir}/rxe_cfg
 %{_mandir}/man7/rxe*
-%ifnarch s390
+%ifnarch s390 %{arm}
 %{_mandir}/man7/mlx4dv*
 %{_mandir}/man7/mlx5dv*
 %endif
@@ -482,6 +486,9 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %doc %{_docdir}/%{name}-%{version}/ibsrpdm.md
 
 %changelog
+* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 22-2.redsleeve
+- undo ExcludeArch
+
 * Thu Jan 10 2019 Jarod Wilson <jarod@redhat.com> - 22-2
 - Fix up covscan shellcheck warnings in ibdev2netdev
 - Related: rhbz#1643904
