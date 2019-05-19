@@ -1,0 +1,60 @@
+diff --git a/man/opensm.8.in b/man/opensm.8.in
+index df557682058f..283483389d20 100644
+--- a/man/opensm.8.in
++++ b/man/opensm.8.in
+@@ -11,6 +11,7 @@ opensm \- InfiniBand subnet manager and administration (SM/SA)
+ [\-g(uid) <GUID in hex>]
+ [\-l(mc) <LMC>]
+ [\-p(riority) <PRIORITY>]
++[\-\-subnet_prefix <PREFIX in hex>]
+ [\-\-smkey <SM_Key>]
+ [\-\-sm_sl <SL number>]
+ [\-r(eassign_lids)]
+@@ -136,6 +137,13 @@ This will effect the handover cases, where master
+ is chosen by priority and GUID.  Range goes from 0
+ (default and lowest priority) to 15 (highest).
+ .TP
++\fB\-\-subnet_prefix\fR <PREFIX in hex>
++This option specifies the subnet prefix to use
++on the fabric.  The default prefix is
++0xfe80000000000000.  OpenMPI in particular requires
++separate fabrics plugged into different ports to
++have different prefixes or else it won't run.
++.TP
+ \fB\-\-smkey\fR <SM_Key value>
+ This option specifies the SM\'s SM_Key (64 bits).
+ This will effect SM authentication.
+diff --git a/opensm/main.c b/opensm/main.c
+index 2d23fe2befef..b4bb3481cf8f 100644
+--- a/opensm/main.c
++++ b/opensm/main.c
+@@ -161,6 +161,9 @@ static void show_usage(void)
+ 	       "          This will effect the handover cases, where master\n"
+ 	       "          is chosen by priority and GUID.  Range goes\n"
+ 	       "          from 0 (lowest priority) to 15 (highest).\n\n");
++	printf("--subnet_prefix <prefix>\n"
++	       "          Set the subnet prefix to something other than the\n"
++	       "          default value of 0xfe80000000000000\n\n");
+ 	printf("--smkey, -k <SM_Key>\n"
+ 	       "          This option specifies the SM's SM_Key (64 bits).\n"
+ 	       "          This will effect SM authentication.\n"
+@@ -665,6 +668,7 @@ int main(int argc, char *argv[])
+ 		{"once", 0, NULL, 'o'},
+ 		{"reassign_lids", 0, NULL, 'r'},
+ 		{"priority", 1, NULL, 'p'},
++		{"subnet_prefix", 1, NULL, 15},
+ 		{"smkey", 1, NULL, 'k'},
+ 		{"routing_engine", 1, NULL, 'R'},
+ 		{"ucast_cache", 0, NULL, 'A'},
+@@ -1008,6 +1012,11 @@ int main(int argc, char *argv[])
+ 			printf(" Priority = %d\n", temp);
+ 			break;
+ 
++		case 16:
++			opt.subnet_prefix = cl_hton64(strtoull(optarg, NULL, 16));
++			printf(" Subnet_Prefix = <0x%" PRIx64 ">\n", cl_hton64(opt.subnet_prefix));
++			break;
++
+ 		case 'k':
+ 			sm_key = cl_hton64(strtoull(optarg, NULL, 16));
+ 			printf(" SM Key <0x%" PRIx64 ">\n", cl_hton64(sm_key));
