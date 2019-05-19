@@ -63,7 +63,7 @@
 Summary: A GNU collection of binary utilities
 Name: %{?cross}binutils%{?_with_debug:-debug}
 Version: 2.30
-Release: 49%{?dist}
+Release: 49%{?dist}.redsleeve
 License: GPLv3+
 URL: https://sourceware.org/binutils
 
@@ -354,6 +354,7 @@ Patch50: binutils-x86_64-ibt-enabled-tlsdesc.patch
 # Lifetime: Maybe fixed in 2.32.
 Patch51: binutils-gold-8-byte-note-segments.patch
 
+Patch1000: binutils-special-sections-in-groups.patch
 #----------------------------------------------------------------------------
 
 Provides: bundled(libiberty)
@@ -529,6 +530,7 @@ using libelf instead of BFD.
 %patch49 -p1
 %patch50 -p1
 %patch51 -p1
+%patch1000 -p1
 
 # We cannot run autotools as there is an exact requirement of autoconf-2.59.
 # FIXME - this is no longer true.  Maybe try reinstating autotool use ?
@@ -961,6 +963,9 @@ exit 0
 
 #----------------------------------------------------------------------------
 %changelog
+* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.30-49.redsleeve
+- Allow OS specific sections in section groups. (#1639485)
+
 * Tue Oct 09 2018 Nick Clifton  <nickc@redhat.com> - 2.30-49
 - Have the GOLD linker produce 8-byte aligned GNU Property notes.  (#1614908)
 

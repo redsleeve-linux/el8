@@ -1,0 +1,86 @@
+From f50e6d9d76415fe22021fe613bb02f2155c8a5b5 Mon Sep 17 00:00:00 2001
+From: Jacco Ligthart <jacco@redsleeve.org>
+Date: Tue, 7 May 2019 22:50:24 +0200
+Subject: [PATCH] Allow OS specific sections in section groups
+
+---
+ .../binutils-special-sections-in-groups.patch | 27 +++++++++++++++++++
+ SPECS/binutils.spec                           |  7 ++++-
+ 2 files changed, 33 insertions(+), 1 deletion(-)
+ create mode 100644 SOURCES/binutils-special-sections-in-groups.patch
+
+diff --git a/SOURCES/binutils-special-sections-in-groups.patch b/SOURCES/binutils-special-sections-in-groups.patch
+new file mode 100644
+index 0000000..7d319ab
+--- /dev/null
++++ b/SOURCES/binutils-special-sections-in-groups.patch
+@@ -0,0 +1,27 @@
++--- binutils.orig/bfd/elf.c	2018-10-19 11:42:10.107277490 +0100
+++++ binutils-2.31.1/bfd/elf.c	2018-10-19 11:44:33.607105801 +0100
++@@ -830,7 +830,13 @@ setup_group (bfd *abfd, Elf_Internal_Shd
++ 	}
++     }
++ 
++-  if (elf_group_name (newsect) == NULL)
+++  if (elf_group_name (newsect) == NULL
+++      /* OS specific sections might be in a group (eg ARM's ARM_EXIDX section)
+++	 but they will not have been added to the group because they do not
+++	 have contents that the ELF code in the BFD library knows how to
+++	 process.  This is OK though - we rely upon the target backends to
+++	 handle these sections for us.  */
+++      && hdr->sh_type < SHT_LOOS)
++     {
++       /* xgettext:c-format */
++       _bfd_error_handler (_("%B: no group info for section '%A'"),
++@@ -936,7 +942,8 @@ _bfd_elf_setup_sections (bfd *abfd)
++ 	  else if (idx->shdr->bfd_section)
++ 	    elf_sec_group (idx->shdr->bfd_section) = shdr->bfd_section;
++ 	  else if (idx->shdr->sh_type != SHT_RELA
++-		   && idx->shdr->sh_type != SHT_REL)
+++		   && idx->shdr->sh_type != SHT_REL
+++		   && idx->shdr->sh_type < SHT_LOOS)
++ 	    {
++ 	      /* There are some unknown sections in the group.  */
++ 	      _bfd_error_handler
+diff --git a/SPECS/binutils.spec b/SPECS/binutils.spec
+index 799ca42..920bc64 100644
+--- a/SPECS/binutils.spec
++++ b/SPECS/binutils.spec
+@@ -63,7 +63,7 @@
+ Summary: A GNU collection of binary utilities
+ Name: %{?cross}binutils%{?_with_debug:-debug}
+ Version: 2.30
+-Release: 49%{?dist}
++Release: 49%{?dist}.redsleeve
+ License: GPLv3+
+ URL: https://sourceware.org/binutils
+ 
+@@ -354,6 +354,7 @@ Patch50: binutils-x86_64-ibt-enabled-tlsdesc.patch
+ # Lifetime: Maybe fixed in 2.32.
+ Patch51: binutils-gold-8-byte-note-segments.patch
+ 
++Patch1000: binutils-special-sections-in-groups.patch
+ #----------------------------------------------------------------------------
+ 
+ Provides: bundled(libiberty)
+@@ -529,6 +530,7 @@ using libelf instead of BFD.
+ %patch49 -p1
+ %patch50 -p1
+ %patch51 -p1
++%patch1000 -p1
+ 
+ # We cannot run autotools as there is an exact requirement of autoconf-2.59.
+ # FIXME - this is no longer true.  Maybe try reinstating autotool use ?
+@@ -961,6 +963,9 @@ exit 0
+ 
+ #----------------------------------------------------------------------------
+ %changelog
++* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.30-49.redsleeve
++- Allow OS specific sections in section groups. (#1639485)
++
+ * Tue Oct 09 2018 Nick Clifton  <nickc@redhat.com> - 2.30-49
+ - Have the GOLD linker produce 8-byte aligned GNU Property notes.  (#1614908)
+ 
+-- 
+2.18.1
+
