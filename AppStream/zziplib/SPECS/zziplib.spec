@@ -1,7 +1,7 @@
 Summary: Lightweight library to easily extract data from zip files
 Name: zziplib
 Version: 0.13.68
-Release: 7%{?dist}
+Release: 7%{?dist}.redsleeve
 License: LGPLv2+ or MPLv1.1
 Group: Applications/Archiving
 URL: http://zziplib.sourceforge.net/
@@ -103,10 +103,10 @@ sed -i 's|^runpath_var=LD_RUN_PATH|runpath_var=DIE_RPATH_DIE|g' */libtool
 # Only patch generated _config.h on non-i686 and armv7hl
 # These platforms have a correct _config.h already
 cd _builddir
-%ifarch i686 armv7hl
+%ifarch i686 %{arm}
 %apply_patch %{PATCH101} -p2
 %endif
-%ifnarch i686 armv7hl
+%ifnarch i686 %{arm}
 %apply_patch %{PATCH100} -p2
 %endif
 cd ..
@@ -138,6 +138,9 @@ make install DESTDIR=%{buildroot}
 %{_mandir}/man3/*
 
 %changelog
+* Sat May 19 2019 Jacco Ligthart <jacco@redsleeve.org> 0.13.68-7.redsleeve
+- changed test for 32bit arm from armv7hl to %{arm}
+
 * Tue Oct 16 2018 Jakub Martisko <jamartis@redhat.com> - 0.13.68-7
 - Fix CVE-2018-17828
 - Resolves: #1635890
