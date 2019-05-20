@@ -1,0 +1,31 @@
+From b344e32cdf7064a1f2ff7ef37027edda6589404f Mon Sep 17 00:00:00 2001
+From: Ray Zhang <zhanglei002@gmail.com>
+Date: Wed, 27 Feb 2019 06:54:05 +0000
+Subject: [PATCH] glx: fix shared memory leak in X11
+
+call XShmDetach to allow X server to free shared memory
+
+Fixes: bcd80be49a8260c2233d "drisw/glx: use XShm if possible"
+Signed-off-by: Ray Zhang <zhanglei002@gmail.com>
+Reviewed-by: Dave Airlie <airlied@redhat.com>
+---
+ src/glx/drisw_glx.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/glx/drisw_glx.c b/src/glx/drisw_glx.c
+index 00c7fa100ab..48c03ca42e0 100644
+--- a/src/glx/drisw_glx.c
++++ b/src/glx/drisw_glx.c
+@@ -147,6 +147,9 @@ XDestroyDrawable(struct drisw_drawable * pdp, Display * dpy, XID drawable)
+    if (pdp->ximage)
+       XDestroyImage(pdp->ximage);
+ 
++   if (pdp->shminfo.shmid > 0)
++      XShmDetach(dpy, &pdp->shminfo);
++
+    free(pdp->visinfo);
+ 
+    XFreeGC(dpy, pdp->gc);
+-- 
+2.20.1
+

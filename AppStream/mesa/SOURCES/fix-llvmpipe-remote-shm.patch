@@ -1,0 +1,68 @@
+From 607a59f2922b1261920bae94efe4dc87da18d576 Mon Sep 17 00:00:00 2001
+From: Adam Jackson <ajax@redhat.com>
+Date: Tue, 5 Mar 2019 15:31:51 -0500
+Subject: [PATCH] drisw: Try harder to probe whether MIT-SHM works
+
+XQueryExtension merely tells you whether the extension exists, it
+doesn't tell you whether you're local enough for it to work.
+XShmQueryVersion is not enough to discover this either, you need to
+provoke the server to do actual work, and if it thinks you're remote it
+will throw BadRequest at you. So send an invalid ShmDetach and use the
+error code to distinguish local from remote.
+
+Signed-off-by: Adam Jackson <ajax@redhat.com>
+---
+ src/glx/drisw_glx.c | 26 ++++++++++++++++++++++----
+ 1 file changed, 22 insertions(+), 4 deletions(-)
+
+diff --git a/src/glx/drisw_glx.c b/src/glx/drisw_glx.c
+index c63b097a71a..67698d1c450 100644
+--- a/src/glx/drisw_glx.c
++++ b/src/glx/drisw_glx.c
+@@ -73,11 +73,10 @@ handle_xerror(Display *dpy, XErrorEvent *event)
+    (void) dpy;
+ 
+    assert(xshm_opcode != -1);
+-   if (event->request_code != xshm_opcode ||
+-       event->minor_code != X_ShmAttach)
++   if (event->request_code != xshm_opcode)
+       return 0;
+ 
+-   xshm_error = 1;
++   xshm_error = event->error_code;
+    return 0;
+ }
+ 
+@@ -826,9 +825,28 @@ driswBindExtensions(struct drisw_screen *psc, const __DRIextension **extensions)
+ static int
+ check_xshm(Display *dpy)
+ {
++   int (*old_handler)(Display *, XErrorEvent *);
++
+    int ignore;
++   XShmSegmentInfo info = { 0, };
++
++   if (!XQueryExtension(dpy, "MIT-SHM", &xshm_opcode, &ignore, &ignore))
++      return False;
++
++   old_handler = XSetErrorHandler(handle_xerror);
++   XShmDetach(dpy, &info);
++   XSync(dpy, False);
++   (void) XSetErrorHandler(old_handler);
+ 
+-   return XQueryExtension(dpy, "MIT-SHM", &xshm_opcode, &ignore, &ignore);
++   /* BadRequest means we're a remote client. If we were local we'd
++    * expect BadValue since 'info' has an invalid segment name.
++    */
++   if (xshm_error == BadRequest)
++      return False;
++
++   /* reset this as others read it later */
++   xshm_error = 0;
++   return True;
+ }
+ 
+ static struct glx_screen *
+-- 
+2.20.1
+
