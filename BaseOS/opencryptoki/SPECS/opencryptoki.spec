@@ -1,7 +1,7 @@
 Name:			opencryptoki
 Summary:		Implementation of the PKCS#11 (Cryptoki) specification v2.11
 Version:		3.10.0
-Release:		3%{?dist}
+Release:		3%{?dist}.redsleeve
 License:		CPL
 Group:			System Environment/Base
 URL:			http://sourceforge.net/projects/opencryptoki
@@ -185,6 +185,7 @@ configured with Enterprise PKCS#11 (EP11) firmware.
 
 
 %build
+export LIBS="-latomic "
 ./bootstrap.sh
 
 %configure --with-systemd=%{_unitdir}	\
@@ -330,6 +331,9 @@ exit 0
 
 
 %changelog
+* Tue May 21 2019 Jacco Ligthart <jacco@redsleeve.org> - 3.10.0-3.redsleeve
+- added atomic libs
+
 * Fri Dec 14 2018 Than Ngo <than@redhat.com> - 3.10.0-3
 - Resolves: #1657683, can't establish libica token in FIPS mode
 - Resolves: #1652856, EP11 token fails when using Strict-Session mode or VHSM-Mode
