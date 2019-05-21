@@ -1,0 +1,25 @@
+From f00a16d3e3b83f1cfa7d66bfc2369254abec58d4 Mon Sep 17 00:00:00 2001
+From: rpm-build <rpm-build>
+Date: Thu, 6 Sep 2018 12:03:53 +0200
+Subject: [PATCH] Fix the page size on aarch64
+
+---
+ Source/JavaScriptCore/heap/MarkedBlock.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Source/JavaScriptCore/heap/MarkedBlock.h b/Source/JavaScriptCore/heap/MarkedBlock.h
+index e240f0ae..6bf88692 100644
+--- a/Source/JavaScriptCore/heap/MarkedBlock.h
++++ b/Source/JavaScriptCore/heap/MarkedBlock.h
+@@ -68,7 +68,7 @@ public:
+     static constexpr size_t atomSize = 16; // bytes
+ 
+     // Block size must be at least as large as the system page size.
+-#if CPU(PPC64) || CPU(PPC64LE) || CPU(PPC) || CPU(UNKNOWN)
++#if CPU(PPC64) || CPU(PPC64LE) || CPU(PPC) || CPU(ARM64) || CPU(UNKNOWN)
+     static constexpr size_t blockSize = 64 * KB;
+ #else
+     static constexpr size_t blockSize = 16 * KB;
+-- 
+2.17.1
+

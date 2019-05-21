@@ -1,0 +1,25 @@
+diff --git a/Source/WebCore/accessibility/AccessibilityObject.cpp b/Source/WebCore/accessibility/AccessibilityObject.cpp
+index f10a1519..523dfd46 100644
+--- a/Source/WebCore/accessibility/AccessibilityObject.cpp
++++ b/Source/WebCore/accessibility/AccessibilityObject.cpp
+@@ -70,6 +70,7 @@
+ #include "RenderWidget.h"
+ #include "RenderedPosition.h"
+ #include "RuntimeEnabledFeatures.h"
++#include "ScriptDisallowedScope.h"
+ #include "Settings.h"
+ #include "TextCheckerClient.h"
+ #include "TextCheckingHelper.h"
+@@ -1783,7 +1784,11 @@ void AccessibilityObject::updateBackingStore()
+     // Updating the layout may delete this object.
+     RefPtr<AccessibilityObject> protectedThis(this);
+     if (auto* document = this->document()) {
+-        if (!document->view()->layoutContext().isInRenderTreeLayout() && !document->inRenderTreeUpdate() && !document->inStyleRecalc())
++        if (!document->view()->layoutContext().isInRenderTreeLayout()
++            && !document->inRenderTreeUpdate()
++            && !document->inStyleRecalc()
++            && ScriptDisallowedScope::InMainThread::isScriptAllowed())
++
+             document->updateLayoutIgnorePendingStylesheets();
+     }
+     updateChildrenIfNecessary();
