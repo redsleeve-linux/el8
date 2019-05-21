@@ -1,0 +1,61 @@
+commit 227ffdba6b919e18b03fed59b07e2c0212b40303
+Author: Ingo Franzki <ifranzki@linux.ibm.com>
+Date:   Thu Aug 2 14:48:47 2018 +0200
+
+    Fix bug with master key encryption with FIPS enabled libica
+    
+    When running with a FIPS enabled libica, the ICA token fails to
+    initialize, because the 3DES key derived from the user or SO pin is
+    considered invalid because the first and the third part of the
+    3DES key is the same.
+    
+    For clear key tokens, the token specific 3DES-CBC function is
+    used for the master key encryption. In case of the ICA token,
+    the ICA token specific 3DES-CBC function fails, because libica
+    rejects the key when compiled with FIPS support. This leads to
+    an error during token initialization.
+    
+    Instead of using the token specific 3DES-CBC function, the code
+    now always falls back to the (OpenSSL) based software encryption
+    function, as it is also done for secure key tokens.
+    
+    Signed-off-by: Ingo Franzki <ifranzki@linux.ibm.com>
+
+diff --git a/usr/lib/pkcs11/common/loadsave.c b/usr/lib/pkcs11/common/loadsave.c
+index a593b932..a5532c9d 100644
+--- a/usr/lib/pkcs11/common/loadsave.c
++++ b/usr/lib/pkcs11/common/loadsave.c
+@@ -206,12 +206,14 @@ static CK_RV encrypt_data_with_clear_key(STDLL_TokData_t * tokdata,
+ 	/* If token doesn't have a specific key size that means that it uses a
+ 	 * clear key.
+ 	 */
+-	if (token_specific.token_keysize == 0) {
++    if (token_specific.token_keysize == 0 &&
++        token_specific.data_store.encryption_algorithm != CKM_DES3_CBC) {
+ 		return encrypt_data(tokdata, key, keylen, iv, clear, clear_len,
+ 				    cipher, p_cipher_len);
+ 	}
+ 
+-	/* Fall back to a software alternative if key is secure. */
++    /* Fall back to a software alternative if key is secure, or
++     * if token's data store encryption algorithm is 3DES_CBC */
+ 	initial_vector = duplicate_initial_vector(iv);
+ 	if (initial_vector == NULL) {
+ 		TRACE_ERROR("%s\n", ock_err(ERR_HOST_MEMORY));
+@@ -322,12 +324,14 @@ static CK_RV decrypt_data_with_clear_key(STDLL_TokData_t *tokdata,
+ 	/* If token doesn't have a specific key size that means that it uses a
+ 	 * clear key.
+ 	 */
+-	if (token_specific.token_keysize == 0) {
++    if (token_specific.token_keysize == 0 &&
++        token_specific.data_store.encryption_algorithm != CKM_DES3_CBC) {
+ 		return decrypt_data(tokdata, key, keylen, iv, cipher,
+ 				    cipher_len, clear, p_clear_len);
+ 	}
+ 
+-	/* Fall back to a software alternative if key is secure. */
++    /* Fall back to a software alternative if key is secure, or
++     * if token's data store encryption algorithm is 3DES_CBC */
+ 	initial_vector = duplicate_initial_vector(iv);
+ 	if (initial_vector == NULL) {
+ 		TRACE_ERROR("%s\n", ock_err(ERR_HOST_MEMORY));
