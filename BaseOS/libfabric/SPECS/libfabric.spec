@@ -1,6 +1,6 @@
 Name:           libfabric
 Version:        1.6.2
-Release:        1%{?dist}
+Release:        1%{?dist}.redsleeve
 Summary:        Open Fabric Interfaces
 
 License:        BSD or GPLv2
@@ -48,6 +48,7 @@ developing applications that use %{name}.
 %setup -q
 
 %build
+export LDFLAGS="$LDFLAGS -latomic"
 %configure --disable-static --disable-silent-rules
 %make_build
 
@@ -83,6 +84,9 @@ find %{buildroot} -name '*.la' -exec rm -f {} ';'
 
 
 %changelog
+* Tue May 21 2019 Jacco Ligthart <jacco@redsleeve.org> - 1.6.2-1
+- added atomic libs
+
 * Mon Dec 10 2018 Honggang Li <honli@redhat.com> - 1.6.2-1
 - Rebase to upstream release v1.6.2
 - Resolves: bz1654870
