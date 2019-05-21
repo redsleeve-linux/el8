@@ -1,0 +1,44 @@
+From 55c334ef11316d8a59aaf07c83a6522e9ed8dc3f Mon Sep 17 00:00:00 2001
+From: Jacco Ligthart <jacco@redsleeve.org>
+Date: Tue, 21 May 2019 22:27:28 +0200
+Subject: [PATCH] added %{arm} to the no hardware architectures
+
+---
+ SPECS/mesa.spec | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/SPECS/mesa.spec b/SPECS/mesa.spec
+index 442f6fd..e78a677 100644
+--- a/SPECS/mesa.spec
++++ b/SPECS/mesa.spec
+@@ -1,7 +1,7 @@
+ %global llvm_toolset %{nil}
+ %global llvm_pkg_prefix %{nil}
+ 
+-%ifarch s390x
++%ifarch s390x %{arm}
+ %define with_hardware 0
+ %define base_drivers swrast
+ %else
+@@ -51,7 +51,7 @@
+ Name:           mesa
+ Summary:        Mesa graphics libraries
+ Version:        18.3.1
+-Release:        5%{?rctag:.%{rctag}}%{?dist}
++Release:        5%{?rctag:.%{rctag}}%{?dist}.redsleeve
+ 
+ License:        MIT
+ URL:            http://www.mesa3d.org
+@@ -622,6 +622,9 @@ done
+ %endif
+ 
+ %changelog
++* Tue May 21 2019 Jacco Ligthart <jacco@redsleeve.org> - 18.3.1-5.redsleeve
++- added %{arm} to the no hardware architectures
++
+ * Thu Apr 04 2019 Dave Airlie <airlied@redhat.com> - 18.3.1-5
+ - Fix remote shm detection again
+ 
+-- 
+2.18.1
+

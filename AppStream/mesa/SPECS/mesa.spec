@@ -1,7 +1,7 @@
 %global llvm_toolset %{nil}
 %global llvm_pkg_prefix %{nil}
 
-%ifarch s390x
+%ifarch s390x %{arm}
 %define with_hardware 0
 %define base_drivers swrast
 %else
@@ -51,7 +51,7 @@
 Name:           mesa
 Summary:        Mesa graphics libraries
 Version:        18.3.1
-Release:        5%{?rctag:.%{rctag}}%{?dist}
+Release:        5%{?rctag:.%{rctag}}%{?dist}.redsleeve
 
 License:        MIT
 URL:            http://www.mesa3d.org
@@ -622,6 +622,9 @@ done
 %endif
 
 %changelog
+* Tue May 21 2019 Jacco Ligthart <jacco@redsleeve.org> - 18.3.1-5.redsleeve
+- added %{arm} to the no hardware architectures
+
 * Thu Apr 04 2019 Dave Airlie <airlied@redhat.com> - 18.3.1-5
 - Fix remote shm detection again
 
