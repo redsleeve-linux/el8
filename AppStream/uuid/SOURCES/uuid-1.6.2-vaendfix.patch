@@ -1,0 +1,19 @@
+diff -up uuid-1.6.2/uuid_str.c.vaendfix uuid-1.6.2/uuid_str.c
+--- uuid-1.6.2/uuid_str.c.vaendfix	2008-03-07 11:49:59.000000000 +0100
++++ uuid-1.6.2/uuid_str.c	2018-10-14 12:56:20.500131215 +0200
+@@ -698,6 +698,7 @@ str_vasprintf(
+ 
+     va_copy(ap_tmp, ap);
+     n = str_vsnprintf(NULL, 0, fmt, ap_tmp);
++    va_end(ap_tmp);
+     if ((rv = (char *)malloc(n+1)) == NULL)
+         return NULL;
+     str_vsnprintf(rv, n+1, fmt, ap);
+@@ -738,6 +739,7 @@ str_vrsprintf(
+         va_copy(ap_tmp, ap);
+         n = strlen(*str);
+         rv = str_vsnprintf(NULL, 0, fmt, ap_tmp);
++        va_end(ap_tmp);
+         if ((*str = (char *)realloc(*str, n+rv+1)) == NULL)
+             return -1;
+         str_vsnprintf((*str)+n, rv+1, fmt, ap);
