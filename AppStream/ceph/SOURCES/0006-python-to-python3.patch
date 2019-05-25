@@ -1,0 +1,72 @@
+diff -ur ceph-12.2.5/src/brag/client/ceph-brag ceph-12.2.5-mod/src/brag/client/ceph-brag
+--- ceph-12.2.5/src/brag/client/ceph-brag	2018-04-23 18:18:33.000000000 +0200
++++ ceph-12.2.5-mod/src/brag/client/ceph-brag	2018-05-22 21:06:32.952813105 +0200
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ 
+ from __future__ import print_function
+ 
+diff -ur ceph-12.2.5/src/ceph-create-keys ceph-12.2.5-mod/src/ceph-create-keys
+--- ceph-12.2.5/src/ceph-create-keys	2018-04-23 18:18:33.000000000 +0200
++++ ceph-12.2.5-mod/src/ceph-create-keys	2018-05-22 21:09:49.103398176 +0200
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ import argparse
+ import errno
+ import json
+diff -ur ceph-12.2.5/src/ceph-detect-init/ceph_detect_init/main.py ceph-12.2.5-mod/src/ceph-detect-init/ceph_detect_init/main.py
+--- ceph-12.2.5/src/ceph-detect-init/ceph_detect_init/main.py	2018-04-23 18:18:33.000000000 +0200
++++ ceph-12.2.5-mod/src/ceph-detect-init/ceph_detect_init/main.py	2018-05-22 21:09:14.943993086 +0200
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Copyright (C) 2015 <contact@redhat.com>
+ # Copyright (C) 2015 SUSE LINUX GmbH
+diff -ur ceph-12.2.5/src/ceph-disk/ceph_disk/main.py ceph-12.2.5-mod/src/ceph-disk/ceph_disk/main.py
+--- ceph-12.2.5/src/ceph-disk/ceph_disk/main.py	2018-04-23 18:18:33.000000000 +0200
++++ ceph-12.2.5-mod/src/ceph-disk/ceph_disk/main.py	2018-05-22 21:11:02.606118074 +0200
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ #
+ # Copyright (C) 2015, 2016, 2017 Red Hat <contact@redhat.com>
+ # Copyright (C) 2014 Inktank <info@inktank.com>
+diff -ur ceph-12.2.5/src/ceph-rest-api ceph-12.2.5-mod/src/ceph-rest-api
+--- ceph-12.2.5/src/ceph-rest-api	2018-04-23 18:18:33.000000000 +0200
++++ ceph-12.2.5-mod/src/ceph-rest-api	2018-05-22 21:10:50.202334095 +0200
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ # vim: ts=4 sw=4 smarttab expandtab
+ 
+ import argparse
+diff -ur ceph-12.2.5/src/ceph-volume/bin/ceph-volume ceph-12.2.5-mod/src/ceph-volume/bin/ceph-volume
+--- ceph-12.2.5/src/ceph-volume/bin/ceph-volume	2018-04-23 18:18:33.000000000 +0200
++++ ceph-12.2.5-mod/src/ceph-volume/bin/ceph-volume	2018-05-22 21:07:43.104592535 +0200
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ 
+ from ceph_volume import main
+ 
+diff -ur ceph-12.2.5/src/ceph-volume/bin/ceph-volume-systemd ceph-12.2.5-mod/src/ceph-volume/bin/ceph-volume-systemd
+--- ceph-12.2.5/src/ceph-volume/bin/ceph-volume-systemd	2018-04-23 18:18:33.000000000 +0200
++++ ceph-12.2.5-mod/src/ceph-volume/bin/ceph-volume-systemd	2018-05-22 21:07:46.628531163 +0200
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ 
+ from ceph_volume.systemd import main
+ 
+diff -ur ceph-12.2.5/src/mount.fuse.ceph ceph-12.2.5-mod/src/mount.fuse.ceph
+--- ceph-12.2.5/src/mount.fuse.ceph	2018-04-23 18:18:33.000000000 +0200
++++ ceph-12.2.5-mod/src/mount.fuse.ceph	2018-05-22 21:08:06.355187609 +0200
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ '''
+ Helper to mount ceph-fuse from /etc/fstab.  To use, add an entry
+ like:

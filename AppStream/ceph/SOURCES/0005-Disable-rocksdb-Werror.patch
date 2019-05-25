@@ -1,0 +1,33 @@
+diff -ur ceph-12.2.5/src/rocksdb/CMakeLists.txt ceph-12.2.5-mod/src/rocksdb/CMakeLists.txt
+--- ceph-12.2.5/src/rocksdb/CMakeLists.txt	2018-03-12 02:58:51.000000000 +0100
++++ ceph-12.2.5-mod/src/rocksdb/CMakeLists.txt	2018-05-22 19:37:31.767465710 +0200
+@@ -174,15 +174,6 @@
+   PROPERTIES COMPILE_FLAGS "-msse4.2")
+ endif()
+ 
+-option(FAIL_ON_WARNINGS "Treat compile warnings as errors" ON)
+-if(FAIL_ON_WARNINGS)
+-  if(MSVC)
+-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
+-  else() # assume GCC
+-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+-  endif()
+-endif()
+-
+ option(WITH_ASAN "build with ASAN" OFF)
+ if(WITH_ASAN)
+   add_definitions(-DROCKSDB_TSAN_RUN)
+diff -ur ceph-12.2.5/src/rocksdb/Makefile ceph-12.2.5-mod/src/rocksdb/Makefile
+--- ceph-12.2.5/src/rocksdb/Makefile	2018-03-12 02:58:51.000000000 +0100
++++ ceph-12.2.5-mod/src/rocksdb/Makefile	2018-05-22 19:37:59.043996026 +0200
+@@ -243,10 +243,6 @@
+ WARNING_FLAGS = -W -Wextra -Wall -Wsign-compare -Wshadow \
+   -Wno-unused-parameter
+ 
+-ifndef DISABLE_WARNING_AS_ERROR
+-	WARNING_FLAGS += -Werror
+-endif
+-
+ 
+ ifdef LUA_PATH
+ 

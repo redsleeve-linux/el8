@@ -1,0 +1,23 @@
+From f1d4451ab56bd8b13ffcbafd165d5038bc7a2b19 Mon Sep 17 00:00:00 2001
+From: Boris Ranto <branto@redhat.com>
+Date: Wed, 6 Jun 2018 21:38:47 +0200
+Subject: [PATCH] Fix python executable
+
+Signed-off-by: Boris Ranto <branto@redhat.com>
+---
+ src/ceph.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/ceph.in b/src/ceph.in
+index 7c1eda2c09..5e0471cb74 100755
+--- a/src/ceph.in
++++ b/src/ceph.in
+@@ -1,4 +1,4 @@
+-#!@PYTHON_EXECUTABLE@
++#!@PYTHON3_EXECUTABLE@
+ # -*- mode:python -*-
+ # vim: ts=4 sw=4 smarttab expandtab
+ #
+-- 
+2.14.3
+

@@ -1,0 +1,49 @@
+From 680066203eb1e4c7334d4ce84e4b42e97d990ad6 Mon Sep 17 00:00:00 2001
+From: Boris Ranto <branto@redhat.com>
+Date: Wed, 30 May 2018 08:58:47 +0200
+Subject: [PATCH] Strip away python2
+
+---
+ src/CMakeLists.txt        | 4 ----
+ src/pybind/CMakeLists.txt | 3 +--
+ 2 files changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 2b59424f74..788e29c8a2 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -243,10 +243,6 @@ if(WITH_CEPHFS_JAVA)
+   add_subdirectory(java)
+ endif()
+ 
+-# Python stuff
+-find_package(PythonInterp 2 REQUIRED)
+-find_package(PythonLibs 2 REQUIRED)
+-
+ option(WITH_PYTHON3 "build python3 bindings" "CHECK")
+ if(WITH_PYTHON3 MATCHES "check|CHECK")
+   find_package(Python3Interp 3 QUIET)
+diff --git a/src/pybind/CMakeLists.txt b/src/pybind/CMakeLists.txt
+index dbdb23f1c5..1a14df972e 100644
+--- a/src/pybind/CMakeLists.txt
++++ b/src/pybind/CMakeLists.txt
+@@ -6,7 +6,6 @@ set(CYTHON_MODULE_DIR ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules)
+ if(WITH_PYTHON3)
+   set(py_vers 3)
+ endif()
+-list(APPEND py_vers 2)
+ 
+ foreach(python_version ${py_vers})
+   if(${python_version} EQUAL 2)
+@@ -58,7 +57,7 @@ endforeach()
+ 
+ install(FILES
+   ${CMAKE_CURRENT_SOURCE_DIR}/ceph_rest_api.py
+-  DESTINATION ${PYTHON_INSTDIR})
++  DESTINATION ${PYTHON${PYTHON_VERSION}_INSTDIR})
+ 
+ if(WITH_MGR)
+   # Location needs to match default setting for mgr_module_path, currently:
+-- 
+2.14.3
+

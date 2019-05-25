@@ -1,0 +1,26 @@
+From 5ef603f388957b472326180a1e23ade61e80c163 Mon Sep 17 00:00:00 2001
+From: "Adam C. Emerson" <aemerson@redhat.com>
+Date: Tue, 8 May 2018 16:50:02 -0400
+Subject: [PATCH] mount: Enlarge buffer to fix overflow warning
+
+Signed-off-by: Adam C. Emerson <aemerson@redhat.com>
+---
+ src/mount/canonicalize.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/mount/canonicalize.c b/src/mount/canonicalize.c
+index 7561e41ac5..02efbbedff 100644
+--- a/src/mount/canonicalize.c
++++ b/src/mount/canonicalize.c
+@@ -154,7 +154,7 @@ canonicalize_dm_name(const char *ptname)
+ {
+ 	FILE	*f;
+ 	size_t	sz;
+-	char	path[256], name[256], *res = NULL;
++	char	path[268], name[256], *res = NULL;
+ 
+ 	snprintf(path, sizeof(path), "/sys/block/%s/dm/name", ptname);
+ 	if (!(f = fopen(path, "r")))
+-- 
+2.14.3
+
