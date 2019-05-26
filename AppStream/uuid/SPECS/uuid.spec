@@ -6,7 +6,7 @@
 
 Name:           uuid
 Version:        1.6.2
-Release:        42%{?dist}
+Release:        42%{?dist}.redsleeve
 Summary:        Universally Unique Identifier library
 License:        MIT
 Group:          System Environment/Libraries
@@ -129,7 +129,7 @@ export CXXFLAGS="$RPM_OPT_FLAGS"
     --with-cxx \
     --without-pgsql
 
-make LIBTOOL=/usr/bin/libtool CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" %{?_smp_mflags}
+make LIBTOOL="/usr/bin/libtool  --tag=CC" CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" %{?_smp_mflags}
 
 # Build the Perl module.
 pushd perl
@@ -224,6 +224,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/libossp-uuid_dce.so
 
 %changelog
+* Fri May 24 2019 Jacco Ligthart <jacco@redsleeve.org> - 1.6.2-42.redsleeve
+- added "--tag=CC" to the make command due to libtool errors
+
 * Mon Oct 15 2018 Michal Hlavinka <mhlavink@redhat.com> - 1.6.2-42
 - fix coverity scan found issues (#1602724)
 
