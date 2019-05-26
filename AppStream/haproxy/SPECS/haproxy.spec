@@ -8,7 +8,7 @@
 
 Name:           haproxy
 Version:        1.8.15
-Release:        5%{?dist}
+Release:        5%{?dist}.redsleeve
 Summary:        HAProxy reverse proxy for high availability environments
 
 Group:          System Environment/Daemons
@@ -60,7 +60,7 @@ regparm_opts=
 regparm_opts="USE_REGPARM=1"
 %endif
 
-%{__make} %{?_smp_mflags} CPU="generic" TARGET="linux2628" USE_OPENSSL=1 USE_PCRE=1 USE_ZLIB=1 USE_LUA=1 USE_CRYPT_H=1 USE_SYSTEMD=1 USE_LINUX_TPROXY=1 USE_GETADDRINFO=1 ${regparm_opts} ADDINC="%{optflags}" ADDLIB="%{__global_ldflags}"
+%{__make} %{?_smp_mflags} CPU="generic" TARGET="linux2628" USE_OPENSSL=1 USE_PCRE=1 USE_ZLIB=1 USE_LUA=1 USE_CRYPT_H=1 USE_SYSTEMD=1 USE_LINUX_TPROXY=1 USE_GETADDRINFO=1 ${regparm_opts} ADDINC="%{optflags}" ADDLIB="%{__global_ldflags} -latomic"
 
 pushd contrib/halog
 %{__make} ${halog} OPTIMIZE="%{optflags} %{build_ldflags}" LDFLAGS=
@@ -138,6 +138,9 @@ exit 0
 %{_mandir}/man1/*
 
 %changelog
+* Sat May 25 2019 Jacco Ligthart <jacco@redsleeve.org> - 1.8.15-5.redsleeve
+- added -latomic
+
 * Wed Jan 09 2019 Ryan O'Hara <rohara@redhat.com> - 1.8.15-5
 - Resolve CVE-2018-20615 (#1664533)
 
