@@ -7,7 +7,7 @@
 
 Name:           webkit2gtk3
 Version:        2.22.6
-Release:        1%{?dist}
+Release:        1%{?dist}.redsleeve
 Summary:        GTK+ Web content engine library
 
 License:        LGPLv2
@@ -186,7 +186,7 @@ pushd %{_target_platform}
   -DCMAKE_BUILD_TYPE=Release \
   -DENABLE_GTKDOC=ON \
   -DENABLE_MINIBROWSER=ON \
-%ifarch s390x %{power64} aarch64
+%ifarch s390x %{power64} aarch64 %{arm}
   -DENABLE_JIT=OFF \
   -DUSE_SYSTEM_MALLOC=ON \
 %endif
@@ -195,8 +195,8 @@ popd
 
 # Remove the static amount of jobs once
 # https://projects.engineering.redhat.com/browse/BREW-2146 is resolved
-# make %{?_smp_mflags} -C %{_target_platform}
-make -j6 -C %{_target_platform}
+make %{?_smp_mflags} -C %{_target_platform}
+# make -j6 -C %{_target_platform}
 
 %install
 %make_install -C %{_target_platform}
@@ -274,6 +274,9 @@ make -j6 -C %{_target_platform}
 %{_datadir}/gtk-doc/html/webkitdomgtk-4.0/
 
 %changelog
+* Tue May 21 2019 Jacco Ligthart <kacco@redsleeve.org> - 2.22.6-1.redsleeve
+- disable JIT and use system malloc
+
 * Tue Feb 12 2019 Eike Rathke <erack@redhat.com> - 2.22.6-1
 - Resolves: rhbz#1676489 Update to 2.22.6
 
