@@ -1,0 +1,22 @@
+
+There is no need to "suck in" the apr/apr-util symbols when using
+a shared libapr{,util}, it just bloats the symbol table; so don't.
+
+Upstream-HEAD: needed
+Upstream-2.0: omit
+Upstream-Status: EXPORT_DIRS change is conditional on using shared apr
+
+diff --git a/server/Makefile.in b/server/Makefile.in
+index 1fa3344..f635d76 100644
+--- a/server/Makefile.in
++++ b/server/Makefile.in
+@@ -60,9 +60,6 @@ export_files:
+ 	      ls $$dir/*.h ; \
+ 	  done; \
+ 	  echo "$(top_srcdir)/server/mpm_fdqueue.h"; \
+-	  for dir in $(EXPORT_DIRS_APR); do \
+-	      ls $$dir/ap[ru].h $$dir/ap[ru]_*.h 2>/dev/null; \
+-	  done; \
+ 	) | sed -e s,//,/,g | sort -u > $@
+ 
+ exports.c: export_files

@@ -1,0 +1,31 @@
+diff --git a/modules/ssl/ssl_engine_config.c b/modules/ssl/ssl_engine_config.c
+index 4cfd2d0..6ac55bd 100644
+--- a/modules/ssl/ssl_engine_config.c
++++ b/modules/ssl/ssl_engine_config.c
+@@ -776,9 +776,11 @@ const char *ssl_cmd_SSLCipherSuite(cmd_parms *cmd,
+     }
+     
+     if (!strcmp("SSL", arg1)) {
+-        /* always disable null and export ciphers */
+-        arg2 = apr_pstrcat(cmd->pool, arg2, ":!aNULL:!eNULL:!EXP", NULL);
+         if (cmd->path) {
++            /* Disable null and export ciphers by default, except for PROFILE=
++             * configs where the parser doesn't cope. */
++            if (strncmp(arg2, "PROFILE=", 8) != 0)
++                arg2 = apr_pstrcat(cmd->pool, arg2, ":!aNULL:!eNULL:!EXP", NULL);
+             dc->szCipherSuite = arg2;
+         }
+         else {
+@@ -1542,8 +1544,10 @@ const char *ssl_cmd_SSLProxyCipherSuite(cmd_parms *cmd,
+     }
+     
+     if (!strcmp("SSL", arg1)) {
+-        /* always disable null and export ciphers */
+-        arg2 = apr_pstrcat(cmd->pool, arg2, ":!aNULL:!eNULL:!EXP", NULL);
++        /* Disable null and export ciphers by default, except for PROFILE=
++         * configs where the parser doesn't cope. */
++        if (strncmp(arg2, "PROFILE=", 8) != 0)
++            arg2 = apr_pstrcat(cmd->pool, arg2, ":!aNULL:!eNULL:!EXP", NULL);
+         dc->proxy->auth.cipher_suite = arg2;
+         return NULL;
+     }

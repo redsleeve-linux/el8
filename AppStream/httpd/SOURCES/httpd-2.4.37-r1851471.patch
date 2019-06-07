@@ -1,0 +1,45 @@
+# ./pullrev.sh 1851471
+http://svn.apache.org/viewvc?view=revision&revision=1851471
+
+--- httpd-2.4.37/modules/ssl/ssl_engine_io.c
++++ httpd-2.4.37/modules/ssl/ssl_engine_io.c
+@@ -200,6 +200,8 @@
+     apr_bucket *e;
+     int need_flush;
+ 
++    BIO_clear_retry_flags(bio);
++
+     /* Abort early if the client has initiated a renegotiation. */
+     if (outctx->filter_ctx->config->reneg_state == RENEG_ABORT) {
+         outctx->rc = APR_ECONNABORTED;
+@@ -206,12 +208,6 @@
+         return -1;
+     }
+ 
+-    /* when handshaking we'll have a small number of bytes.
+-     * max size SSL will pass us here is about 16k.
+-     * (16413 bytes to be exact)
+-     */
+-    BIO_clear_retry_flags(bio);
+-
+     /* Use a transient bucket for the output data - any downstream
+      * filter must setaside if necessary. */
+     e = apr_bucket_transient_create(in, inl, outctx->bb->bucket_alloc);
+@@ -458,6 +454,8 @@
+     if (!in)
+         return 0;
+ 
++    BIO_clear_retry_flags(bio);
++
+     /* Abort early if the client has initiated a renegotiation. */
+     if (inctx->filter_ctx->config->reneg_state == RENEG_ABORT) {
+         inctx->rc = APR_ECONNABORTED;
+@@ -464,8 +462,6 @@
+         return -1;
+     }
+ 
+-    BIO_clear_retry_flags(bio);
+-
+     if (!inctx->bb) {
+         inctx->rc = APR_EOF;
+         return -1;

@@ -1,0 +1,16 @@
+diff --git a/modules/aaa/mod_access_compat.c b/modules/aaa/mod_access_compat.c
+index 3023803..2edf440 100644
+--- a/modules/aaa/mod_access_compat.c
++++ b/modules/aaa/mod_access_compat.c
+@@ -152,6 +152,11 @@ static const char *allow_cmd(cmd_parms *cmd, void *dv, const char *from,
+     if (strcasecmp(from, "from"))
+         return "allow and deny must be followed by 'from'";
+ 
++    s = ap_strchr(where, '#');
++    if (s) {
++        *s = '\0';
++    }
++
+     a = (allowdeny *) apr_array_push(cmd->info ? d->allows : d->denys);
+     a->x.from = where;
+     a->limited = cmd->limited;
