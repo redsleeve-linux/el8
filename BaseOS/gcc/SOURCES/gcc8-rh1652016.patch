@@ -1,0 +1,124 @@
+commit e7c4d49ab27338e6bc8b0272c4036da58482bde0
+Author: krebbel <krebbel@138bc75d-0d04-0410-961f-82ee72b054a4>
+Date:   Mon Nov 26 15:15:57 2018 +0000
+
+    S/390: Fix flogr RTX.
+    
+    The flogr instruction uses a 64 bit register pair target operand.  In
+    the RTX we model this as a write to a TImode register.  Unfortunately
+    the RTX's being assigned to the two parts of the target operand were
+    swapped.  This is no problem if in the end the flogr instruction will
+    be emitted since the instruction still does what the clzdi expander
+    expects.  However, a problem arises when the RTX is used to optimize
+    CLZ for a constant input operand.  Even then it matters only if the
+    expression couldn't be folded on tree level already.
+    
+    In the testcase this happened thanks to loop unrolling on RTL level.
+    The iteration variable is used as an argument to the clz
+    builtin. Due to the loop unrolling it becomes a constant and after
+    folding the broken RTX leads to a wrong assumption.
+    
+    gcc/ChangeLog:
+    
+    2018-11-26  Andreas Krebbel  <krebbel@linux.ibm.com>
+    
+            Backport from mainline
+            2018-11-20  Andreas Krebbel  <krebbel@linux.ibm.com>
+    
+            * config/s390/s390.md ("clztidi2"): Swap the RTX's written to the
+            DImode parts of the target operand.
+    
+    gcc/testsuite/ChangeLog:
+    
+    2018-11-26  Andreas Krebbel  <krebbel@linux.ibm.com>
+    
+            Backport from mainline
+            2018-11-20  Andreas Krebbel  <krebbel@linux.ibm.com>
+    
+            * gcc.target/s390/flogr-1.c: New test.
+    
+    git-svn-id: svn+ssh://gcc.gnu.org/svn/gcc/branches/gcc-8-branch@266465 138bc75d-0d04-0410-961f-82ee72b054a4
+
+diff --git a/gcc/config/s390/s390.md b/gcc/config/s390/s390.md
+index c4d391bc9b5..53bb1985285 100644
+--- a/gcc/config/s390/s390.md
++++ b/gcc/config/s390/s390.md
+@@ -8861,17 +8861,17 @@
+   DONE;
+ })
+ 
++; CLZ result is in hard reg op0 - this is the high part of the target operand
++; The source with the left-most one bit cleared is in hard reg op0 + 1 - the low part
+ (define_insn "clztidi2"
+   [(set (match_operand:TI 0 "register_operand" "=d")
+ 	(ior:TI
+-	  (ashift:TI
+-            (zero_extend:TI
+-   	      (xor:DI (match_operand:DI 1 "register_operand" "d")
+-                      (lshiftrt (match_operand:DI 2 "const_int_operand" "")
+-				(subreg:SI (clz:DI (match_dup 1)) 4))))
+-
+-	    (const_int 64))
+-          (zero_extend:TI (clz:DI (match_dup 1)))))
++	  (ashift:TI (zero_extend:TI (clz:DI (match_operand:DI 1 "register_operand" "d")))
++		     (const_int 64))
++	  (zero_extend:TI
++	   (xor:DI (match_dup 1)
++		   (lshiftrt (match_operand:DI 2 "const_int_operand" "")
++			     (subreg:SI (clz:DI (match_dup 1)) 4))))))
+    (clobber (reg:CC CC_REGNUM))]
+   "UINTVAL (operands[2]) == HOST_WIDE_INT_1U << 63
+    && TARGET_EXTIMM && TARGET_ZARCH"
+diff --git a/gcc/testsuite/gcc.target/s390/flogr-1.c b/gcc/testsuite/gcc.target/s390/flogr-1.c
+new file mode 100644
+index 00000000000..a3869000d62
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/s390/flogr-1.c
+@@ -0,0 +1,47 @@
++/* { dg-do run } */
++/* { dg-options "-O2 -funroll-loops -march=z9-109" } */
++/* { dg-require-effective-target stdint_types } */
++
++/* Folding of the FLOGR caused a wrong value to be returned by
++   __builtin_clz becuase of a problem in the RTX we emit for FLOGR.
++   The problematic folding can only be triggered with constants inputs
++   introduced on RTL level.  In this case it happens with loop
++   unrolling.  */
++
++#include <stdint.h>
++#include <assert.h>
++
++static inline uint32_t pow2_ceil_u32(uint32_t x) {
++  if (x <= 1) {
++    return x;
++  }
++  int msb_on_index;
++  msb_on_index = (31 ^ __builtin_clz(x - 1));
++  assert(msb_on_index < 31);
++  return 1U << (msb_on_index + 1);
++}
++
++void __attribute__((noinline,noclone))
++die (int a)
++{
++  if (a)
++    __builtin_abort ();
++}
++
++void test_pow2_ceil_u32(void) {
++  unsigned i;
++
++  for (i = 0; i < 18; i++) {
++      uint32_t a_ = (pow2_ceil_u32(((uint32_t)1) << i));
++      if (!(a_ == (((uint32_t)1) << i))) {
++	die(1);
++      }
++  }
++}
++
++int
++main(void) {
++  test_pow2_ceil_u32();
++
++  return 0;
++}
