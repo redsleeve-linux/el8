@@ -17,7 +17,7 @@
 %if 0%{?rhel} > 7
 %global build_ada 0
 %global build_objc 0
-%global build_go 0
+%global build_go 1
 %global build_libgccjit 0
 %else
 %ifarch %{ix86} x86_64 ia64 ppc %{power64} alpha s390x %{arm} aarch64
@@ -104,7 +104,7 @@
 Summary: Various compilers (C, C++, Objective-C, ...)
 Name: gcc
 Version: %{gcc_version}
-Release: %{gcc_release}.5%{?dist}
+Release: %{gcc_release}.5%{?dist}.redsleeve
 # libgcc, libgfortran, libgomp, libstdc++ and crtstuff have
 # GCC Runtime Exception.
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
@@ -283,6 +283,7 @@ Patch1000: nvptx-tools-no-ptxas.patch
 Patch1001: nvptx-tools-build.patch
 Patch1002: nvptx-tools-glibc.patch
 
+Patch10000: gcc8-progbits-arm.patch
 
 # On ARM EABI systems, we do want -gnueabi to be part of the
 # target triple.
@@ -894,6 +895,8 @@ fi
 
 # This test causes fork failures, because it spawns way too many threads
 rm -f gcc/testsuite/go.test/test/chan/goroutines.go
+
+%patch10000 -p0 -b .arm-progbits~
 
 %build
 
@@ -3157,6 +3160,10 @@ fi
 %endif
 
 %changelog
+* Sat Jun 29 2019 Bjarne Saltbaek <bjarne@redsleeve.org> 8.2.1-3.5.redsleeve
+- Enabled gcc-go build on EL8
+- Added patch from gcc-go on arm
+
 * Mon Dec 10 2018 Marek Polacek <polacek@redhat.com 8.2.1-3.5
 - remove python2 dependecy (#1595385)
 
