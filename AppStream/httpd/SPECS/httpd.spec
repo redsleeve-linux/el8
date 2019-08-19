@@ -13,7 +13,7 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.37
-Release: 11%{?dist}
+Release: 11%{?dist}.redsleeve
 URL: https://httpd.apache.org/
 Source0: https://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
 Source1: index.html
@@ -784,6 +784,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_rpmconfigdir}/macros.d/macros.httpd
 
 %changelog
+* Fri Jun 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.4.37-11.el8.redsleeve
+- Rebranded for RedSleeve
+
 * Tue May 07 2019 CentOS Sources <bugs@centos.org> - 2.4.37-11.el8.centos
 - Apply debranding changes
 

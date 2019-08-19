@@ -1,0 +1,67 @@
+From ca3111caac2f2342a86be135c1be56239a9fc561 Mon Sep 17 00:00:00 2001
+From: Jacco Ligthart <jacco@redsleeve.org>
+Date: Fri, 7 Jun 2019 22:36:24 +0200
+Subject: [PATCH] Rebranded for RedSleeve
+
+---
+ SOURCES/index.html | 6 +++---
+ SPECS/httpd.spec   | 5 ++++-
+ 2 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/SOURCES/index.html b/SOURCES/index.html
+index 06ad3fc..9541e5e 100644
+--- a/SOURCES/index.html
++++ b/SOURCES/index.html
+@@ -2,7 +2,7 @@
+ 
+ <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+ 	<head>
+-		<title>Test Page for the Apache HTTP Server on Red Hat Enterprise Linux</title>
++		<title>Test Page for the Apache HTTP Server on Red Sleeve Enterprise Linux</title>
+ 		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+ 		<style type="text/css">
+ 			/*<![CDATA[*/
+@@ -85,7 +85,7 @@
+ 	</head>
+ 
+ 	<body>
+-		<h1>Red Hat Enterprise Linux <strong>Test Page</strong></h1>
++		<h1>Red Sleeve Enterprise Linux <strong>Test Page</strong></h1>
+ 
+ 		<div class="content">
+ 			<div class="content-middle">
+@@ -103,7 +103,7 @@
+ 
+ 					<p>For example, if you experienced problems while visiting www.example.com, you should send e-mail to "webmaster@example.com".</p>
+ 
+-					<p>For information on Red Hat Enterprise Linux, please visit the <a href="http://www.redhat.com/">Red Hat, Inc. website</a>. The documentation for Red Hat Enterprise Linux is <a href="http://www.redhat.com/docs/manuals/enterprise/">available on the Red Hat, Inc. website</a>.</p>
++					<p>For information on Red Sleeve Enterprise Linux, please visit the <a href="http://www.redsleeve.com/">Red Sleeve website</a>.</p>
+ 					<hr />
+ 				</div>
+ 
+diff --git a/SPECS/httpd.spec b/SPECS/httpd.spec
+index 3e7845f..63ebe0b 100644
+--- a/SPECS/httpd.spec
++++ b/SPECS/httpd.spec
+@@ -13,7 +13,7 @@
+ Summary: Apache HTTP Server
+ Name: httpd
+ Version: 2.4.37
+-Release: 11%{?dist}
++Release: 11%{?dist}.redsleeve
+ URL: https://httpd.apache.org/
+ Source0: https://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
+ Source1: index.html
+@@ -784,6 +784,9 @@ rm -rf $RPM_BUILD_ROOT
+ %{_rpmconfigdir}/macros.d/macros.httpd
+ 
+ %changelog
++* Fri Jun 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.4.37-11.el8.redsleeve
++- Rebranded for RedSleeve
++
+ * Tue May 07 2019 CentOS Sources <bugs@centos.org> - 2.4.37-11.el8.centos
+ - Apply debranding changes
+ 
+-- 
+2.18.1
+
