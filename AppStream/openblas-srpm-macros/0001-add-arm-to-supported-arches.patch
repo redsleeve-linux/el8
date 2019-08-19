@@ -1,0 +1,43 @@
+From a98d0604941938e067588271785ee445b1276271 Mon Sep 17 00:00:00 2001
+From: Jacco Ligthart <jacco@redsleeve.org>
+Date: Mon, 19 Aug 2019 23:51:22 +0200
+Subject: [PATCH] add %{arm} to supported arches
+
+---
+ SOURCES/macros.openblas-srpm    | 2 +-
+ SPECS/openblas-srpm-macros.spec | 5 ++++-
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/SOURCES/macros.openblas-srpm b/SOURCES/macros.openblas-srpm
+index c4f9fdc..0a6d702 100644
+--- a/SOURCES/macros.openblas-srpm
++++ b/SOURCES/macros.openblas-srpm
+@@ -1,2 +1,2 @@
+ # Architectures that OpenBLAS supports
+-%openblas_arches x86_64 %{ix86} armv7hl %{power64} aarch64 s390x
++%openblas_arches x86_64 %{ix86} %{arm} %{power64} aarch64 s390x
+diff --git a/SPECS/openblas-srpm-macros.spec b/SPECS/openblas-srpm-macros.spec
+index e2d23bb..e77afca 100644
+--- a/SPECS/openblas-srpm-macros.spec
++++ b/SPECS/openblas-srpm-macros.spec
+@@ -1,6 +1,6 @@
+ Name:           openblas-srpm-macros
+ Version:        2
+-Release:        2%{?dist}
++Release:        2%{?dist}.redsleeve
+ Summary:        OpenBLAS architecture macros
+ Group:          Development/Libraries
+ License:        MIT
+@@ -28,6 +28,9 @@ install -m0644 %SOURCE0 %{buildroot}%{macrosdir}/macros.openblas-srpm
+ 
+ 
+ %changelog
++* Mon Aug 19 2019 Jacco Ligthart <jacco@redsleeve.org> - 2-2.redsleeve
++- add %{arm} to supported arches
++
+ * Thu Jul 27 2017 Fedora Release Engineering <releng@fedoraproject.org> - 2-2
+ - Rebuilt for https://fedoraproject.org/wiki/Fedora_27_Mass_Rebuild
+ 
+-- 
+2.18.1
+

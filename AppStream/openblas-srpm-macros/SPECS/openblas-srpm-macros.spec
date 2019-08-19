@@ -1,6 +1,6 @@
 Name:           openblas-srpm-macros
 Version:        2
-Release:        2%{?dist}
+Release:        2%{?dist}.redsleeve
 Summary:        OpenBLAS architecture macros
 Group:          Development/Libraries
 License:        MIT
@@ -28,6 +28,9 @@ install -m0644 %SOURCE0 %{buildroot}%{macrosdir}/macros.openblas-srpm
 
 
 %changelog
+* Mon Aug 19 2019 Jacco Ligthart <jacco@redsleeve.org> - 2-2.redsleeve
+- add %{arm} to supported arches
+
 * Thu Jul 27 2017 Fedora Release Engineering <releng@fedoraproject.org> - 2-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_27_Mass_Rebuild
 
