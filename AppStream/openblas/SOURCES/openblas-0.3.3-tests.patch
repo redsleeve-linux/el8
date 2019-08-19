@@ -1,0 +1,19 @@
+diff --git a/Makefile b/Makefile
+index d99521b..01bba2f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -122,11 +122,11 @@ tests :
+ ifeq ($(NOFORTRAN), $(filter 0,$(NOFORTRAN)))
+ 	touch $(LIBNAME)
+ ifndef NO_FBLAS
+-	$(MAKE) -C test all
+-	$(MAKE) -C utest all
++	$(MAKE) -C test FC="$(FC)" CC="$(CC)" COMMON_OPT="$(COMMON_OPT)" FCOMMON_OPT="$(FCOMMON_OPT)" all
++	$(MAKE) -C utest FC="$(FC)" CC="$(CC)" COMMON_OPT="$(COMMON_OPT)" FCOMMON_OPT="$(FCOMMON_OPT)" all
+ endif
+ ifndef NO_CBLAS
+-	$(MAKE) -C ctest all
++	$(MAKE) -C ctest FC="$(FC)" CC="$(CC)" COMMON_OPT="$(COMMON_OPT)" FCOMMON_OPT="$(FCOMMON_OPT)" all
+ endif
+ endif
+ 
