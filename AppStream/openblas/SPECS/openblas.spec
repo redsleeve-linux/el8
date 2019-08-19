@@ -15,7 +15,7 @@
 
 Name:           openblas
 Version:        0.3.3
-Release:        2%{?dist}
+Release:        2%{?dist}.redsleeve
 Summary:        An optimized BLAS library based on GotoBLAS2
 Group:          Development/Libraries
 License:        BSD
@@ -360,6 +360,9 @@ export AVX="NO_AVX2=1"
 %endif
 
 %endif
+%ifarch armv5tel
+TARGET="TARGET=ARMV5 DYNAMIC_ARCH=0"
+%endif
 %ifarch armv7hl
 TARGET="TARGET=ARMV7 DYNAMIC_ARCH=0"
 %endif
@@ -437,6 +440,9 @@ cp -a %{_includedir}/lapacke %{buildroot}%{_includedir}/%{name}
 %multilib_fix_c_header --file %{_includedir}/openblas/openblas_config.h
 
 # Fix name of libraries
+%ifarch armv5tel
+suffix="_armv5"
+%endif
 %ifarch armv7hl
 suffix="_armv7"
 %endif
@@ -680,6 +686,9 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig
 %endif
 
 %changelog
+* Mon Aug 19 2019 Jacco Ligthart <jacco@redsleeve.org> - 0.3.3-2.redsleeve
+- added armv5tel
+
 * Wed Nov 07 2018 Nikola Forró <nforro@redhat.com> - 0.3.3-2
 - Fix i686-x86_64 multilib difference
   related: #1627890
