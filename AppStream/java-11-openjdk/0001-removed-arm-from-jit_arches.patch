@@ -1,0 +1,44 @@
+From 231d3d976eb96e1b1f2a109204cdae3b082d9af9 Mon Sep 17 00:00:00 2001
+From: Jacco Ligthart <jacco@redsleeve.org>
+Date: Tue, 20 Aug 2019 00:39:04 +0200
+Subject: [PATCH] removed %{arm} from jit_arches
+
+---
+ SPECS/java-11-openjdk.spec | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/SPECS/java-11-openjdk.spec b/SPECS/java-11-openjdk.spec
+index 0f938c9..45a99e0 100644
+--- a/SPECS/java-11-openjdk.spec
++++ b/SPECS/java-11-openjdk.spec
+@@ -77,7 +77,7 @@
+ %global ppc64le         ppc64le
+ %global ppc64be         ppc64 ppc64p7
+ %global multilib_arches %{power64} sparc64 x86_64
+-%global jit_arches      %{ix86} x86_64 sparcv9 sparc64 %{aarch64} %{power64} %{arm} s390x
++%global jit_arches      %{ix86} x86_64 sparcv9 sparc64 %{aarch64} %{power64} s390x
+ %global aot_arches      x86_64 %{aarch64}
+ 
+ # By default, we build a debug build during main build on JIT architectures
+@@ -960,7 +960,7 @@ Provides: java-src%{?1} = %{epoch}:%{version}-%{release}
+ 
+ Name:    java-%{javaver}-%{origin}
+ Version: %{newjavaver}.%{buildver}
+-Release: 2%{?dist}
++Release: 2%{?dist}.redsleeve
+ # java-1.5.0-ibm from jpackage.org set Epoch to 1 for unknown reasons
+ # and this change was brought into RHEL-4. java-1.5.0-ibm packages
+ # also included the epoch in their virtual provides. This created a
+@@ -1897,6 +1897,9 @@ require "copy_jdk_configs.lua"
+ 
+ 
+ %changelog
++* Mon Jul 08 2019 Jacco Ligthart <jacco@redsleeve.org> - 1:11.0.2.7-2.redsleeve
++- removed %{arm} from jit_arches
++
+ * Fri Feb 08 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.2.7-2
+ - Add explicit requirement for libXcomposite which is used when performing
+   screenshots from Java.
+-- 
+2.18.1
+
