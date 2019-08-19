@@ -1,11 +1,11 @@
 %global qt_module qttools
 
-%global qdoc 1
+%global qdoc 0
 
 Summary: Qt5 - QtTool components
 Name:    qt5-qttools
 Version: 5.11.1
-Release: 5%{?dist}
+Release: 5%{?dist}.redsleeve
 
 License: LGPLv3 or LGPLv2
 Url:     http://www.qt.io
@@ -175,7 +175,7 @@ Requires: %{name}-common = %{version}-%{release}
 %endif
 
 %build
-export LLVM_INSTALL_DIR=/usr
+#export LLVM_INSTALL_DIR=/usr
 
 %{qmake_qt5}
 
@@ -463,6 +463,9 @@ fi
 
 
 %changelog
+* Mon Jun 03 2019 Jacco Ligthart <jacco@redsleeve.org> - 5.11.1-5.redsleeve
+- disabled qdoc, which needs clang, which is not available for armv5
+
 * Wed Dec 12 2018 Tom Stellard <tstellar@redhat.com> - 5.11.1-5
 - Rebuld for LLVM 7.0.1
   Resolves: bz#1657229
