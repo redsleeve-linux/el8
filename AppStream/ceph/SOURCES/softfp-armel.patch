@@ -1,0 +1,10 @@
+--- a/cmake/modules/SIMDExt.cmake
++++ b/cmake/modules/SIMDExt.cmake
+@@ -71,6 +71,6 @@
+   CHECK_C_COMPILER_FLAG(-mfpu=neon HAVE_ARM_NEON)
+   if(HAVE_ARM_NEON)
+-    set(SIMD_COMPILE_FLAGS "${SIMD_COMPILE_FLAGS} -mfpu=neon")
++    set(HAVE_ARM_NEON 0)
+   endif()
+ 
+ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64")

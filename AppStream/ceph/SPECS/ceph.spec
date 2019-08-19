@@ -42,7 +42,7 @@
 #################################################################################
 Name:		ceph
 Version:	12.2.7
-Release:	9%{?dist}
+Release:	9%{?dist}.redsleeve
 %if 0%{?fedora} || 0%{?rhel}
 Epoch:		1
 %endif
@@ -67,6 +67,7 @@ Patch005:	0005-Disable-rocksdb-Werror.patch
 Patch006:	0006-python-to-python3.patch
 Patch007:	0007-Strip-away-python2.patch
 Patch008:	0008-Fix-python-executable.patch
+Patch1000:	softfp-armel.patch
 %if 0%{?suse_version}
 %if 0%{?is_opensuse}
 ExclusiveArch:	x86_64 aarch64 ppc64 ppc64le
@@ -378,7 +379,7 @@ env | sort
 
 # unlimit _smp_mflags in system macro if not set above
 # Brew cannot handle -j24 here
-%define _smp_ncpus_max 16
+%define _smp_ncpus_max 2
 # extract the number of processors for use with cmake
 %define _smp_ncpus %(echo %{_smp_mflags} | sed 's/-j//')
 
@@ -393,6 +394,7 @@ cmake .. \
     -DCMAKE_INSTALL_MANDIR=%{_mandir} \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
+    -DCMAKE_CXX_STANDARD_LIBRARIES="-latomic" \
     -DWITH_MGR=OFF \
     -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=ON \
@@ -785,6 +787,9 @@ fi
 
 
 %changelog
+* Sat May 25 2019 Jacco Ligthart <jacco@redsleeve.org> - 1:12.2.7-9.redsleeve
+- patched for no NEON and -latomic
+
 * Wed Oct 03 2018 Boris Ranto <branto@redhat.com> - 1:12.2.7-9
 - fix link-time hardening (1630554)
 
