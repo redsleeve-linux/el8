@@ -14,7 +14,7 @@ URL: https://www.python.org/
 #  WARNING  When rebasing to a new Python version,
 #           remember to update the python3-docs package as well
 Version: %{pybasever}.8
-Release: 1%{?dist}.redsleeve
+Release: 15.1%{?dist}
 License: Python
 
 
@@ -24,6 +24,10 @@ License: Python
 
 # Note that the bcond macros are named for the CLI option they create.
 # "%%bcond_without" means "ENABLE by default and create a --without option"
+
+# Whether to use RPM build wheels from the python-{pip,setuptools}-wheel package
+# Uses upstream bundled prebuilt wheels otherwise
+%bcond_without rpmwheels
 
 # Expensive optimizations (mainly, profile-guided optimizations)
 %ifarch %{ix86} x86_64
@@ -36,9 +40,6 @@ License: Python
 
 # Run the test suite in %%check
 %bcond_without tests
-
-# Ability to reuse RPM-installed pip using rewheel
-%bcond_without rewheel
 
 # Extra build for debugging the interpreter or C-API extensions
 # (the -debug subpackages)
@@ -188,6 +189,7 @@ BuildRequires: ncurses-devel
 BuildRequires: openssl-devel
 BuildRequires: pkgconfig
 BuildRequires: readline-devel
+BuildRequires: redhat-rpm-config >= 118
 BuildRequires: sqlite-devel
 BuildRequires: gdb
 
@@ -208,9 +210,9 @@ BuildRequires: /usr/bin/dtrace
 # workaround http://bugs.python.org/issue19804 (test_uuid requires ifconfig)
 BuildRequires: /usr/sbin/ifconfig
 
-%if %{with rewheel}
-BuildRequires: python3-setuptools
-BuildRequires: python3-pip
+%if %{with rpmwheels}
+BuildRequires: python3-setuptools-wheel
+BuildRequires: python3-pip-wheel
 
 # Verify that the BuildRoot includes python36.
 # Not actually needed for build.
@@ -320,10 +322,9 @@ Patch170: 00170-gc-assertions.patch
 Patch178: 00178-dont-duplicate-flags-in-sysconfig.patch
 
 # 00189 #
-# Add the rewheel module, allowing to recreate wheels from already installed
-# ones
-# https://github.com/bkabrda/rewheel
-Patch189: 00189-add-rewheel-module.patch
+# Instead of bundled wheels, use our RPM packaged wheels from
+# /usr/share/python3-wheels
+Patch189: 00189-use-rpm-wheels.patch
 
 # 00205 #
 # LIBPL variable in makefile takes LIBPL from configure.ac
@@ -356,6 +357,78 @@ Patch274: 00274-fix-arch-names.patch
 # See also: https://bugzilla.redhat.com/show_bug.cgi?id=1489816
 Patch294: 00294-define-TLS-cipher-suite-on-build-time.patch
 
+# 00317 #
+# Security fix for CVE-2019-5010: Fix segfault in ssl's cert parser
+# https://bugzilla.redhat.com/show_bug.cgi?id=1666789
+# Fixed upstream: https://bugs.python.org/issue35746
+Patch317: 00317-CVE-2019-5010.patch
+
+# 00318 #
+# test_ssl fixes for TLS 1.3 and OpenSSL 1.1.1
+# https://bugzilla.redhat.com/show_bug.cgi?id=1639531
+# https://bugs.python.org/issue32947#msg333990
+# https://github.com/python/cpython/pull/11612
+Patch318: 00318-test-ssl-fix-for-tls-13.patch
+
+# 00319 #
+# Fix test_tarfile on ppc64
+# https://bugzilla.redhat.com/show_bug.cgi?id=1639490
+# https://bugs.python.org/issue35772
+Patch319: 00319-test_tarfile_ppc64.patch
+
+# 00320 #
+# Security fix for CVE-2019-9636 and CVE-2019-10160: Information Disclosure due to urlsplit improper NFKC normalization
+# Fixed upstream: https://bugs.python.org/issue36216 and https://bugs.python.org/issue36742
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1689318
+Patch320: 00320-CVE-2019-9636-and-CVE-2019-10160.patch
+
+# 00324 #
+# Disallow control chars in http URLs
+# Security fix for CVE-2019-9740 and CVE-2019-9947
+# Fixed upstream: https://bugs.python.org/issue30458
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1704365
+# and https://bugzilla.redhat.com/show_bug.cgi?id=1703531
+Patch324: 00324-disallow-control-chars-in-http-urls.patch
+
+# 00325 #
+# Unnecessary URL scheme exists to allow local_file:// reading file  in urllib
+# Security fix for CVE-2019-9948
+# Fixed upstream: https://bugs.python.org/issue35907
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1714643
+Patch325: 00325-CVE-2019-9948.patch
+
+# 00326 #
+# Don't set the post-handshake authentication verify flag on client side
+# on TLS 1.3, as it also implicitly enables cert chain validation and an
+# SSL/TLS connection will fail when verify mode is set to CERT_NONE.
+# Fixed upstream: https://bugs.python.org/issue37428
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1725721
+Patch326: 00326-do-not-set-PHA-verify-flag-on-client-side.patch
+
+# 00327 #
+# Enable TLS 1.3 post-handshake authentication in http.client for default
+# context or if a cert_file is passed to HTTPSConnection
+# Fixed upstream: https://bugs.python.org/issue37440
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1671353
+Patch327: 00327-enable-tls-1.3-PHA-in-http.client.patch
+
+# 00329 #
+# Support OpenSSL FIPS mode
+# - Fallback implementations md5, sha1, sha256, sha512 are removed in favor of OpenSSL wrappers
+# - In FIPS mode, OpenSSL wrappers are always used in hashlib
+# - add a new "usedforsecurity" keyword argument to the various digest
+#   algorithms in hashlib so that you can whitelist a callsite with
+#   "usedforsecurity=False"
+# - OpenSSL wrappers for the hashes blake2{b512,s256},
+#     sha3_{224,256,384,512}, shake_{128,256} are now exported from _hashlib
+# - In FIPS mode, the blake2, sha3 and shake hashes use OpenSSL wrappers
+#   and do not offer extended functionality (keys, tree hashing, custom digest size)
+# - In FIPS mode, hmac.HMAC can only be instantiated with an OpenSSL wrapper
+#   or an string with OpenSSL hash name as the "digestmod" argument.
+#   The argument must be specified (instead of defaulting to ‘md5’).
+# Resolves: rhbz#1731424
+Patch329: 00329-fips.patch
+
 # (New patches go here ^^^)
 #
 # When adding new patches to "python" and "python3" in Fedora, EL, etc.,
@@ -381,9 +454,21 @@ Provides: python(abi) = %{pybasever}
 
 Requires: %{name}-libs%{?_isa} = %{version}-%{release}
 
-%if %{with rewheel}
+%if %{with rpmwheels}
+
+# RHEL8 was forked from F28 and thus required python3-setuptools/pip here
+# for the rewheel module to work. We've since backported the use of RPM
+# prepared wheels from F29+ into RHEL8, and thus this dependency isn't
+# strictly needed.
+# However, it is possible, that some packages in BaseOS actually depend on
+# setuptools/pip without declaring the dependency in their spec file. Thus
+# we're keeping these dependencies here to avoid the possibility of breaking
+# them.
 Requires: platform-python-setuptools
 Requires: platform-python-pip
+
+Requires: python3-setuptools-wheel
+Requires: python3-pip-wheel
 %endif
 
 # Runtime require alternatives
@@ -430,6 +515,14 @@ Requires: chkconfig
 %if %{with gdbm}
 # When built with this (as guarded by the BuildRequires above), require it
 Requires: gdbm%{?_isa} >= 1:1.13
+%endif
+
+%if %{with rpmwheels}
+Requires: python3-setuptools-wheel
+Requires: python3-pip-wheel
+%else
+Provides: bundled(python3-pip) = 18.1
+Provides: bundled(python3-setuptools) = 40.6.2
 %endif
 
 # There are files in the standard library that have python shebang.
@@ -487,11 +580,14 @@ Requires: python-rpm-macros
 Requires: python3-rpm-macros
 Requires: python3-rpm-generators
 
-# https://bugzilla.redhat.com/show_bug.cgi?id=1217376
-# https://bugzilla.redhat.com/show_bug.cgi?id=1496757
-# https://bugzilla.redhat.com/show_bug.cgi?id=1218294
-# TODO change to a specific subpackage once available (#1218294)
-Requires: redhat-rpm-config
+# This is not "API" (packages that need setuptools should still BuildRequire it)
+# However some packages apparently can build both with and without setuptools
+# producing egg-info as file or directory (depending on setuptools presence).
+# Directory-to-file updates are problematic in RPM, so we ensure setuptools is
+# installed when -devel is required.
+# See https://bugzilla.redhat.com/show_bug.cgi?id=1623914
+# See https://fedoraproject.org/wiki/Packaging:Directory_Replacement
+Requires: platform-python-setuptools
 
 Provides: %{name}-2to3 = %{version}-%{release}
 Provides: 2to3 = %{version}-%{release}
@@ -605,11 +701,6 @@ so extensions for both versions can co-exist in the same directory.
 rm -r Modules/expat
 rm -r Modules/zlib
 
-%if %{with rewheel}
-%global pip_version %(pip%{pybasever} --version | cut -d' ' -f2)
-sed -r -i s/'_PIP_VERSION = "[0-9.]+"'/'_PIP_VERSION = "%{pip_version}"'/ Lib/ensurepip/__init__.py
-%endif
-
 #
 # Apply patches:
 #
@@ -626,8 +717,9 @@ sed -r -i s/'_PIP_VERSION = "[0-9.]+"'/'_PIP_VERSION = "%{pip_version}"'/ Lib/en
 %patch170 -p1
 %patch178 -p1
 
-%if %{with rewheel}
+%if %{with rpmwheels}
 %patch189 -p1
+rm Lib/ensurepip/_bundled/*.whl
 %endif
 
 %patch205 -p1
@@ -635,6 +727,16 @@ sed -r -i s/'_PIP_VERSION = "[0-9.]+"'/'_PIP_VERSION = "%{pip_version}"'/ Lib/en
 %patch262 -p1
 %patch274 -p1
 %patch294 -p1
+%patch317 -p1
+%patch318 -p1
+%patch319 -p1
+%patch320 -p1
+%patch324 -p1
+%patch325 -p1
+%patch326 -p1
+%patch327 -p1
+%patch329 -p1
+
 
 # Remove files that should be generated by the build
 # (This is after patching, so that we can use patches directly from upstream)
@@ -669,13 +771,21 @@ topdir=$(pwd)
 %endif
 
 # Set common compiler/linker flags
-export CFLAGS="$RPM_OPT_FLAGS -D_GNU_SOURCE -fPIC -fwrapv"
-export CXXFLAGS="$RPM_OPT_FLAGS -D_GNU_SOURCE -fPIC -fwrapv"
+# We utilize the %%extension_...flags macros here so users building C/C++
+# extensions with our python won't get all the compiler/linker flags used
+# in RHEL RPMs.
+# Standard library built here will still use the %%build_...flags,
+# RHEL packages utilizing %%py3_build will use them as well
+# https://fedoraproject.org/wiki/Changes/Python_Extension_Flags
+export CFLAGS="%{extension_cflags} -D_GNU_SOURCE -fPIC -fwrapv"
+export CFLAGS_NODIST="%{build_cflags} -D_GNU_SOURCE -fPIC -fwrapv"
+export CXXFLAGS="%{extension_cxxflags} -D_GNU_SOURCE -fPIC -fwrapv"
 export CPPFLAGS="$(pkg-config --cflags-only-I libffi)"
-export OPT="$RPM_OPT_FLAGS -D_GNU_SOURCE -fPIC -fwrapv"
+export OPT="%{extension_cflags} -D_GNU_SOURCE -fPIC -fwrapv"
 export LINKCC="gcc"
 export CFLAGS="$CFLAGS $(pkg-config --cflags openssl)"
-export LDFLAGS="$RPM_LD_FLAGS -g $(pkg-config --libs-only-L openssl)"
+export LDFLAGS="%{extension_ldflags} -g $(pkg-config --libs-only-L openssl)"
+export LDFLAGS_NODIST="%{build_ldflags} -g $(pkg-config --libs-only-L openssl)"
 
 # We can build several different configurations of Python: regular and debug.
 # Define a common function that does one build:
@@ -704,6 +814,7 @@ BuildPython() {
   --with-system-ffi \
   --enable-loadable-sqlite-extensions \
   --with-dtrace \
+  --with-lto \
   --with-ssl-default-suites=openssl \
 %if %{with valgrind}
   --with-valgrind \
@@ -984,7 +1095,7 @@ rm %{buildroot}%{_mandir}/man1/python3.1
 
 # Install the unversioned-python script and its man page
 install -m 755 %{SOURCE12} %{buildroot}%{_libexecdir}/no-python
-install -m 644 %{SOURCE13} %{buildroot}%{_mandir}/man1/unversioned-python.1.gz
+install -m 644 %{SOURCE13} %{buildroot}%{_mandir}/man1/unversioned-python.1
 # Touch the files that are controlled by `alternatives` so we can declare them
 # as ghosts in the files section
 touch %{buildroot}%{_bindir}/unversioned-python
@@ -1053,15 +1164,17 @@ CheckPython() {
     -wW --slowest --findleaks \
     -x test_distutils \
     -x test_bdist_rpm \
+    %ifarch %{arm}
     -x test_gdb \
-    -x test_float \
+    %endif
     %ifarch %{mips64}
     -x test_ctypes \
     %endif
+    %ifarch s390x
+    -x test_gdb \
+    %endif
     %ifarch ppc64le
-    -x test_buffer \
-    -x test_tarfile \
-    -x test_ssl \
+    -x test_gdb \
     %endif
 
   echo FINISHED: CHECKING OF PYTHON FOR CONFIGURATION: $ConfName
@@ -1129,7 +1242,9 @@ fi
 
 %exclude %{_bindir}/pyvenv
 %{_bindir}/pyvenv-%{pybasever}
-%{_mandir}/*/*
+
+%{_mandir}/man1/python3.6.1*
+%{_mandir}/man1/unversioned-python.1*
 
 %files libs
 %license LICENSE
@@ -1164,13 +1279,11 @@ fi
 %dir %{pylibdir}/ensurepip/__pycache__/
 %{pylibdir}/ensurepip/*.py
 %{pylibdir}/ensurepip/__pycache__/*%{bytecode_suffixes}
+%if %{with rpmwheels}
 %exclude %{pylibdir}/ensurepip/_bundled
-
-%if %{with rewheel}
-%dir %{pylibdir}/ensurepip/rewheel/
-%dir %{pylibdir}/ensurepip/rewheel/__pycache__/
-%{pylibdir}/ensurepip/rewheel/*.py
-%{pylibdir}/ensurepip/rewheel/__pycache__/*%{bytecode_suffixes}
+%else
+%dir %{pylibdir}/ensurepip/_bundled
+%{pylibdir}/ensurepip/_bundled/*.whl
 %endif
 
 # The majority of the test module lives in the test subpackage
@@ -1198,11 +1311,8 @@ fi
 %{pylibdir}/pydoc_data
 
 %{dynload_dir}/_blake2.%{SOABI_optimized}.so
-%{dynload_dir}/_md5.%{SOABI_optimized}.so
-%{dynload_dir}/_sha1.%{SOABI_optimized}.so
-%{dynload_dir}/_sha256.%{SOABI_optimized}.so
 %{dynload_dir}/_sha3.%{SOABI_optimized}.so
-%{dynload_dir}/_sha512.%{SOABI_optimized}.so
+%{dynload_dir}/_hmacopenssl.%{SOABI_optimized}.so
 
 %{dynload_dir}/_asyncio.%{SOABI_optimized}.so
 %{dynload_dir}/_bisect.%{SOABI_optimized}.so
@@ -1437,11 +1547,8 @@ fi
 # ...with debug builds of the built-in "extension" modules:
 
 %{dynload_dir}/_blake2.%{SOABI_debug}.so
-%{dynload_dir}/_md5.%{SOABI_debug}.so
-%{dynload_dir}/_sha1.%{SOABI_debug}.so
-%{dynload_dir}/_sha256.%{SOABI_debug}.so
 %{dynload_dir}/_sha3.%{SOABI_debug}.so
-%{dynload_dir}/_sha512.%{SOABI_debug}.so
+%{dynload_dir}/_hmacopenssl.%{SOABI_debug}.so
 
 %{dynload_dir}/_asyncio.%{SOABI_debug}.so
 %{dynload_dir}/_bisect.%{SOABI_debug}.so
@@ -1556,8 +1663,66 @@ fi
 # ======================================================
 
 %changelog
-* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org>
-- disabled test_float
+* Fri Oct 11 2019 Tomas Orsava <torsava@redhat.com> - 3.6.8-15.1
+- Patch 329 (FIPS) modified: Added workaround for mod_ssl:
+  Skip error checking in _Py_hashlib_fips_error
+Resolves: rhbz#1760106
+
+* Thu Aug 29 2019 Tomas Orsava <torsava@redhat.com> - 3.6.8-15
+- Patch 329 that adds support for OpenSSL FIPS mode has been improved and
+  bugfixed
+Resolves: rhbz#1744670 rhbz#1745499 rhbz#1745685
+
+* Tue Aug 06 2019 Tomas Orsava <torsava@redhat.com> - 3.6.8-14
+- Adding a new patch 329 that adds support for OpenSSL FIPS mode
+- Explicitly listing man pages in files section to fix an RPM warning
+Resolves: rhbz#1731424
+
+* Tue Jul 02 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-13
+- Do not set PHA verify flag on client side (rhbz#1725721)
+- Enable TLS 1.3 post-handshake authentication in http.client (rhbz#1671353)
+
+* Fri Jun 21 2019 Miro Hrončok <mhroncok@redhat.com> - 3.6.8-12
+- Use RPM built wheels of pip and setuptools in ensurepip instead of our rewheel patch
+- Require platform-python-setuptools from platform-python-devel to prevent packaging errors
+Resolves: rhbz#1701286
+
+* Fri Jun 07 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-11
+- Fix for CVE-2019-10160
+Resolves: rhbz#1689318
+
+* Wed May 29 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-10
+- Security fix for CVE-2019-9948
+Resolves: rhbz#1714643
+
+* Tue May 21 2019 Miro Hrončok <mhroncok@redhat.com> - 3.6.8-9
+- Reduced default build flags used to build extension modules
+  https://fedoraproject.org/wiki/Changes/Python_Extension_Flags
+Resolves: rhbz#1634784
+
+* Mon May 13 2019 Tomas Orsava <torsava@redhat.com> - 3.6.8-8
+- gzip the unversioned-python man page
+Resolves: rhbz#1665514
+
+* Wed May 08 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-7
+- Disallow control chars in http URLs
+- Fixes CVE-2019-9740 and CVE-2019-9947
+Resolves: rhbz#1704365 and rhbz#1703531
+
+* Fri May 03 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-6
+- Updated fix for CVE-2019-9636 (rhbz#1689318)
+
+* Wed Apr 3 2019 Miro Hrončok <mhroncok@redhat.com> - 3.6.8-5
+- Security fix for CVE-2019-9636 (rhbz#1689318)
+
+* Wed Mar 20 2019 Victor Stinner <vstinner@redhat.com> - 3.6.8-4
+- Security fix for CVE-2019-5010 (rhbz#1666789)
+
+* Wed Mar 13 2019 Victor Stinner <vstinner@redhat.com> - 3.6.8-3
+- Fix test_tarfile on ppc64 (rhbz#1639490)
+
+* Fri Jan 18 2019 Victor Stinner <vstinner@redhat.com> - 3.6.8-2
+- test_ssl fixes for TLS 1.3 and OpenSSL 1.1.1 (rhbz#1639531)
 
 * Wed Jan 09 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-1
 - Update to 3.6.8
