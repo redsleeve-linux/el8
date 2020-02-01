@@ -63,7 +63,7 @@
 Summary: A GNU collection of binary utilities
 Name: %{?cross}binutils%{?_with_debug:-debug}
 Version: 2.30
-Release: 49%{?dist}.redsleeve
+Release: 58%{?dist}.0.1
 License: GPLv3+
 URL: https://sourceware.org/binutils
 
@@ -354,7 +354,36 @@ Patch50: binutils-x86_64-ibt-enabled-tlsdesc.patch
 # Lifetime: Maybe fixed in 2.32.
 Patch51: binutils-gold-8-byte-note-segments.patch
 
-Patch1000: binutils-special-sections-in-groups.patch
+# Purpose:  Add support for disassembling NFP binaries.
+# Lifetime: Fixed in 2.31.
+Patch52: binutils-nfp.patch
+
+# Purpose:  Add support for the arch13 extension to the s390x architecture.
+# Lifetime: Fixed in 2.31.
+Patch53: binutils-s390x-arch13.patch
+
+# Purpose:  Add support for partially relocatable GOT sections on the s390x architecture.
+# Lifetime: Fixed in 2.31.
+Patch54: binutils-s390x-partial-relro.patch
+
+# Purpose:  Do not enable IBT if an object file contains code but no GNU Property notes.
+# Lifetime: Fixed in 2.33
+Patch55: binutils-x86-IBT-and-missing-notes.patch
+
+# Purpose:  Fixes a problem with the AArch64 port of the GOLD linker.
+# Lifetime: Fixed in 2.32
+Patch56: binutils-AArch64-gold.patch
+
+# Purpose:  Stop the BFD library from complaining about files with multiple
+#           relocations against the same section.  Allows examination of
+#           special kernel modules.
+# Lifetime: Fixed in 2.33
+Patch57: binutils-multiple-relocs-for-same-section.patch
+
+# Purpose:  Allow OS specific sections in section groups.
+# Lifetime: Might be fixed in 2.33
+Patch9999: binutils-special-sections-in-groups.patch
+
 #----------------------------------------------------------------------------
 
 Provides: bundled(libiberty)
@@ -530,7 +559,16 @@ using libelf instead of BFD.
 %patch49 -p1
 %patch50 -p1
 %patch51 -p1
-%patch1000 -p1
+%patch52 -p1
+%patch53 -p1
+%patch54 -p1
+%patch55 -p1
+%patch56 -p1
+%patch57 -p1
+
+%ifarch %{arm}
+%patch9999 -p1
+%endif
 
 # We cannot run autotools as there is an exact requirement of autoconf-2.59.
 # FIXME - this is no longer true.  Maybe try reinstating autotool use ?
@@ -963,8 +1001,38 @@ exit 0
 
 #----------------------------------------------------------------------------
 %changelog
-* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.30-49.redsleeve
-- Allow OS specific sections in section groups. (#1639485)
+* Fri Jan 10 2020 bstinson@centosproject.org - 2.30-58.0.1
+- Rebuild to allow us to obsolete erroneously released i686 packages
+
+* Wed Nov  6 2019 Pablo Greco <pgreco@centosproject.org> - 2.30-58
+- Fix bad linking in armhfp
+
+* Fri Sep 13 2019 Nick Clifton  <nickc@redhat.com> 2.30-58
+- Stop the BFD library from complaining about sections with multiple sets of relocations.  (#1749084)
+
+* Mon May 20 2019 Nick Clifton  <nickc@redhat.com> - 2.30-57
+- Fix a thinko in the new gas tests for the s390x arch13 extension.  (#1710860)
+
+* Mon May 20 2019 Nick Clifton  <nickc@redhat.com> - 2.30-56
+- Remove a spurious debugging message left in the binutils-note-merge-improvements.patch.
+
+* Mon May 20 2019 Nick Clifton  <nickc@redhat.com> - 2.30-55
+- Fix a problem when producing non-PIE binaries using the GOLD linker for AArch64.  (#1693661)
+
+* Thu Mar 14 2019 Nick Clifton  <nickc@redhat.com> - 2.30-54
+- Further enhance the support for the arch13 extensions to the s390x architecture.  (#1659437)
+
+* Wed Mar 13 2019 Nick Clifton  <nickc@redhat.com> - 2.30-53
+- Do not enable IBT when an object file contains code but no GNU Property notes.  (#1687774)
+
+* Mon Mar 11 2019 Nick Clifton  <nickc@redhat.com> - 2.30-52
+- Add support for partially relocatable GOT sections on the s390x architecture.  (#1525406)
+
+* Mon Mar 11 2019 Nick Clifton  <nickc@redhat.com> - 2.30-51
+- Add support for the arch13 extension to the s390x architecture.  (#1659437)
+
+* Mon Mar 11 2019 Nick Clifton  <nickc@redhat.com> - 2.30-50
+- Add support for disassembling NFP binaries.  (#1644391)
 
 * Tue Oct 09 2018 Nick Clifton  <nickc@redhat.com> - 2.30-49
 - Have the GOLD linker produce 8-byte aligned GNU Property notes.  (#1614908)
