@@ -1,15 +1,13 @@
 Name:    infiniband-diags
 Summary: OpenFabrics Alliance InfiniBand Diagnostic Tools
-Version: 2.1.0
-Release: 1%{?dist}.redsleeve
+Version: 2.2.0
+Release: 3%{?dist}
 # Upstream allows either license to be used
 License: GPLv2 or BSD
 Url:     https://github.com/linux-rdma/infiniband-diags
 Source0: https://github.com/linux-rdma/%{name}/releases/download/%{version}/%{name}-%{version}.tar.gz
-Patch1:  0001-Add-latest-new-device-ID-to-device-white-lists.patch
 
 BuildRequires: gcc
-BuildRequires: glib2-devel
 BuildRequires: libibumad-devel
 BuildRequires: opensm-devel
 Provides: perl(IBswcountlimits)
@@ -18,7 +16,7 @@ Obsoletes: libibmad < %{version}-%{release}
 Obsoletes: openib-diags < 1.3
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
-ExcludeArch: s390
+ExcludeArch: s390 %{arm}
 %if 0%{?rhel} > 7
 ExcludeArch: s390x
 %endif
@@ -60,7 +58,6 @@ Static libraries for the infiniband-diags and libibmad libraries.
 
 %prep
 %setup
-%patch1 -p1
 
 %build
 %configure --enable-compat-utils
@@ -201,8 +198,17 @@ find ${RPM_BUILD_ROOT} -type f -name '*.la' -print -delete
 %{_libdir}/*.a
 
 %changelog
-* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> 2.1.0-1.redsleeve
-- fixed "ExcludeArch" statement
+* Fri May 31 2019 Honggang Li <honli@redhat.com> - 2.2.0-3
+- Add 'make' as dependency for gating case
+- Resolves: bz1682387
+
+* Fri May 31 2019 Honggang Li <honli@redhat.com> - 2.2.0-2
+- Fix an OSCI gating issue
+- Resolves: bz1682387
+
+* Thu May 30 2019 Honggang Li <honli@redhat.com> - 2.2.0-1
+- Rebase to latest upstream release v2.2.0
+- Resolves: bz1709390
 
 * Tue Sep 25 2018 Honggang Li <honli@redhat.com> - 2.1.0-1
 - Rebase to latest upstream release v2.1.0
