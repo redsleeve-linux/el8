@@ -1,0 +1,32 @@
+From 992687f9ee00d016b450c1aed5b6c8558023881e Mon Sep 17 00:00:00 2001
+From: Nicolas Morey-Chaisemartin <nmoreychaisemartin@suse.com>
+Date: Thu, 18 Apr 2019 09:09:56 +0200
+Subject: [PATCH 1/8] osm_opensm.c: Fix use of enum as NULL pointer in
+ osm_opensm_init_finish
+
+Fixes this warning:
+osm_opensm.c:543:31: warning: expression which evaluates to zero treated as a null pointer constant of type 'struct osm_routing_engine *' [-Wnon-literal-null-conversion]
+        p_osm->routing_engine_used = OSM_ROUTING_ENGINE_TYPE_NONE;
+
+Signed-off-by: Nicolas Morey-Chaisemartin <nmoreychaisemartin@suse.com>
+Signed-off-by: Hal Rosenstock <hal@mellanox.com>
+---
+ opensm/osm_opensm.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/opensm/osm_opensm.c b/opensm/osm_opensm.c
+index d43fe825..da493c7a 100644
+--- a/opensm/osm_opensm.c
++++ b/opensm/osm_opensm.c
+@@ -540,7 +540,7 @@ ib_api_status_t osm_opensm_init_finish(IN osm_opensm_t * p_osm,
+ 
+ 	setup_routing_engines(p_osm, p_opt->routing_engine_names);
+ 
+-	p_osm->routing_engine_used = OSM_ROUTING_ENGINE_TYPE_NONE;
++	p_osm->routing_engine_used = NULL;
+ 
+ 	p_osm->node_name_map = open_node_name_map(p_opt->node_name_map_name);
+ 
+-- 
+2.20.1
+

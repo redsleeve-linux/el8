@@ -1,8 +1,8 @@
 %global __remake_config 1
 
 Name:    opensm
-Version: 3.3.21
-Release: 2%{?dist}.redsleeve
+Version: 3.3.22
+Release: 2%{?dist}
 Summary: OpenIB InfiniBand Subnet Manager and management utilities
 Group:   System Environment/Daemons
 License: GPLv2 or BSD
@@ -15,7 +15,11 @@ Source5: opensm.service
 Source6: opensm.launch
 Source7: opensm.rwtab
 Source8: opensm.partitions
-Patch1:  opensm-3.3.13-prefix.patch
+
+Patch1:  0001-osm_opensm.c-Fix-use-of-enum-as-NULL-pointer-in-osm_.patch
+Patch2:  0003-osm_-port-ucast_ftree-.c-Remove-unused-static-functi.patch
+Patch3:  0002-osm_ucast_ftree.c-Fix-clang-warning-about-empty-loop.patch
+Patch4:  0008-ib_types-Drop-packed-attribute-where-unnecessary.patch
 
 BuildRequires: libibumad-devel, systemd, systemd-units
 BuildRequires: bison, flex, byacc, gcc
@@ -27,7 +31,7 @@ Requires(post): systemd
 Requires(preun): systemd
 Requires(postun): systemd
 # RDMA is not currently built on 32-bit ARM: #1484155
-ExcludeArch: s390
+ExcludeArch: s390 %{arm}
 
 %description
 OpenSM is the OpenIB project's Subnet Manager for Infiniband networks.
@@ -62,12 +66,15 @@ Static version of opensm libraries
 %prep
 %setup -q
 %patch1 -p1
+%patch2 -p1
+%patch3 -p1
+%patch4 -p1
 
 %build
 %if %{__remake_config}
 ./autogen.sh
 %endif
-%configure --with-opensm-conf-sub-dir=rdma CFLAGS="$CFLAGS -fno-strict-aliasing"
+%configure --with-opensm-conf-sub-dir=rdma
 make %{?_smp_mflags}
 cd opensm
 ./opensm -c ../opensm-%{version}.conf
@@ -127,8 +134,13 @@ fi
 %{_libdir}/lib*.a
 
 %changelog
-* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 3.3.21-2.redsleeve
-- removed arm from exclude archs
+* Thu May 30 2019 Honggang Li <honli@redhat.com> - 3.3.22-2
+- Onboard gating configuration
+- Resolves: bz1682401
+
+* Wed May 15 2019 Honggang Li <honli@redhat.com> - 3.3.22-1
+- Rebase to latest upstream release 3.3.22
+- Resolves: bz1708475
 
 * Fri Jan 11 2019 Honggang Li <honli@redhat.com> - 3.3.21-2
 - Restore the 'subnet_prefix' option
