@@ -19,7 +19,7 @@
 %global distro_build 147
 
 # Sign the x86_64 kernel for secure boot authentication
-%ifarch x86_64 aarch64 s390x ppc64le
+%ifarch x86_64 aarch64
 %global signkernel 1
 %else
 %global signkernel 0
@@ -42,10 +42,10 @@
 # define buildid .local
 
 %define rpmversion 4.18.0
-%define pkgrelease 147.0.3.el8_1
+%define pkgrelease 147.3.1.el8_1
 
 # allow pkg_release to have configurable %%{?dist} tag
-%define specrelease 147.0.3%{?dist}
+%define specrelease 147.3.1%{?dist}
 
 %define pkg_release %{specrelease}%{?buildid}
 
@@ -247,11 +247,6 @@
 %define kernel_image arch/arm64/boot/Image.gz
 %endif
 
-%ifarch %{arm}
-%define asmarch arm
-%define hdrarch arm
-%endif
-
 # To temporarily exclude an architecture from being built, add it to
 # %%nobuildarches. Do _NOT_ use the ExclusiveArch: line, because if we
 # don't build kernel-headers then the new build system will no longer let
@@ -259,7 +254,7 @@
 # Which is a BadThing(tm).
 
 # We only build kernel-headers on the following...
-%define nobuildarches i386 i686 %{arm}
+%define nobuildarches i386 i686
 
 %ifarch %nobuildarches
 %define with_up 0
@@ -289,11 +284,11 @@ Group: System Environment/Kernel
 License: GPLv2 and Redistributable, no modification permitted
 URL: http://www.kernel.org/
 Version: %{rpmversion}
-Release: %{pkg_release}.redsleeve
+Release: %{pkg_release}
 Summary: The Linux kernel, based on version %{version}, heavily modified with backports
 # DO NOT CHANGE THE 'ExclusiveArch' LINE TO TEMPORARILY EXCLUDE AN ARCHITECTURE BUILD.
 # SET %%nobuildarches (ABOVE) INSTEAD
-ExclusiveArch: noarch i386 i686 x86_64 s390x aarch64 ppc64le %{arm}
+ExclusiveArch: noarch i386 i686 x86_64 s390x aarch64 ppc64le
 ExclusiveOS: Linux
 %ifnarch %{nobuildarches}
 Requires: kernel-core-uname-r = %{KVERREL}%{?variant}
@@ -392,33 +387,23 @@ Source11: x509.genkey
 
 %if %{?released_kernel}
 
-Source12: securebootca.cer
-Source13: secureboot.cer
-Source14: secureboot_s390.cer
-Source15: secureboot_ppc.cer
+Source12: centos-ca-secureboot.der
+Source13: centossecureboot001.crt
 
 %define secureboot_ca %{SOURCE12}
 %ifarch x86_64 aarch64
 %define secureboot_key %{SOURCE13}
-%define pesign_name redhatsecureboot301
-%endif
-%ifarch s390x
-%define secureboot_key %{SOURCE14}
-%define pesign_name redhatsecureboot302
-%endif
-%ifarch ppc64le
-%define secureboot_key %{SOURCE15}
-%define pesign_name redhatsecureboot303
+%define pesign_name centossecureboot001
 %endif
 
 %else # released_kernel
 
-Source12: redhatsecurebootca2.cer
-Source13: redhatsecureboot003.cer
+Source12: centos-ca-secureboot.der
+Source13: centossecureboot001.crt
 
 %define secureboot_ca %{SOURCE12}
 %define secureboot_key %{SOURCE13}
-%define pesign_name redhatsecureboot003
+%define pesign_name centossecureboot001
 
 %endif # released_kernel
 
@@ -468,7 +453,14 @@ Source301: kernel-kabi-dw-%{rpmversion}-%{distro_build}.tar.bz2
 Source2000: cpupower.service
 Source2001: cpupower.config
 
+# Sources for CentOS debranding
+Source9000: centos.pem
+
 ## Patches needed for building this package
+
+Patch1000: debrand-single-cpu.patch
+Patch1001: debrand-rh_taint.patch
+#Patch1002: debrand-rh-i686-cpu.patch 
 
 # empty final patch to facilitate testing of kernel patches
 Patch999999: linux-kernel-test.patch
@@ -478,7 +470,7 @@ Patch999999: linux-kernel-test.patch
 BuildRoot: %{_tmppath}/kernel-%{KVERREL}-root
 
 %description
-This is the package which provides the Linux kernel for Red Hat Enterprise
+This is the package which provides the Linux kernel for CentOS 
 Linux. It is based on upstream Linux at version %{version} and maintains kABI
 compatibility of a set of approved symbols, however it is heavily modified with
 backports and fixes pulled from newer upstream Linux kernel releases. This means
@@ -487,7 +479,7 @@ from newer upstream linux versions, while maintaining a well tested and stable
 core. Some of the components/backports that may be pulled in are: changes like
 updates to the core kernel (eg.: scheduler, cgroups, memory management, security
 fixes and features), updates to block layer, supported filesystems, major driver
-updates for supported hardware in Red Hat Enterprise Linux, enhancements for
+updates for supported hardware in CentOS  Linux, enhancements for
 enterprise customers, etc.
 
 #
@@ -716,11 +708,11 @@ kernel-gcov includes the gcov graph and source files for gcov coverage collectio
 %endif
 
 %package -n kernel-abi-whitelists
-Summary: The Red Hat Enterprise Linux kernel ABI symbol whitelists
+Summary: The CentOS  Linux kernel ABI symbol whitelists
 Group: System Environment/Kernel
 AutoReqProv: no
 %description -n kernel-abi-whitelists
-The kABI package contains information pertaining to the Red Hat Enterprise
+The kABI package contains information pertaining to the CentOS 
 Linux kernel ABI, including lists of kernel symbols that are needed by
 external Linux kernel modules, and a yum plugin to aid enforcement.
 
@@ -730,8 +722,8 @@ Summary: The baseline dataset for kABI verification using DWARF data
 Group: System Environment/Kernel
 AutoReqProv: no
 %description kabidw-base
-The kabidw-base package contains data describing the current ABI of the Red Hat
-Enterprise Linux kernel, suitable for the kabi-dw tool.
+The kabidw-base package contains data describing the current ABI of the CentOS
+ Linux kernel, suitable for the kabi-dw tool.
 %endif
 
 #
@@ -803,7 +795,7 @@ Requires: kernel%{?1:-%{1}}-modules-uname-r = %{KVERREL}%{?variant}%{?1:+%{1}}\
 AutoReq: no\
 AutoProv: yes\
 %description %{?1:%{1}-}modules-internal\
-This package provides kernel modules for the %{?2:%{2} }kernel package for Red Hat internal usage.\
+This package provides kernel modules for the %{?2:%{2} }kernel package for CentOS internal usage.\
 %{nil}
 
 #
@@ -976,11 +968,17 @@ ApplyOptionalPatch()
 }
 
 %setup -q -n kernel-%{rpmversion}-%{pkgrelease} -c
+
+cp -v %{SOURCE9000} linux-%{rpmversion}-%{pkgrelease}/certs/rhel.pem
 mv linux-%{rpmversion}-%{pkgrelease} linux-%{KVERREL}
 
 cd linux-%{KVERREL}
 
 ApplyOptionalPatch linux-kernel-test.patch
+ApplyOptionalPatch debrand-single-cpu.patch
+ApplyOptionalPatch debrand-rh_taint.patch
+#ApplyOptionalPatch debrand-rh-i686-cpu.patch 
+
 
 # END OF PATCH APPLICATIONS
 
@@ -1550,7 +1548,7 @@ BuildKernel() {
     # build a BLS config for this kernel
     %{SOURCE43} "$KernelVer" "$RPM_BUILD_ROOT" "%{?variant}"
 
-    # Red Hat UEFI Secure Boot CA cert, which can be used to authenticate the kernel
+    # CentOS UEFI Secure Boot CA cert, which can be used to authenticate the kernel
     mkdir -p $RPM_BUILD_ROOT%{_datadir}/doc/kernel-keys/$KernelVer
     install -m 0644 %{secureboot_ca} $RPM_BUILD_ROOT%{_datadir}/doc/kernel-keys/$KernelVer/kernel-signing-ca.cer
     %ifarch s390x ppc64le
@@ -2322,16 +2320,57 @@ fi
 #
 #
 %changelog
-* Sat Nov 23 2019 Jacco Ligthart <jacco@redsleeve.org> 4.18.0-147.0.3.el8.redsleeve
-- added arm to the ExclusiveArch and nobuildarches lists
-
-* Wed Nov 13 2019 CentOS Sources <bugs@centos.org> - 4.18.0-147.0.3.el8.centos
+* Tue Dec 17 2019 CentOS Sources <bugs@centos.org> - 4.18.0-147.3.1.el8.centos
 - Apply debranding changes
 
-* Mon Nov 11 2019 Frantisek Hrbata <fhrbata@redhat.com> [4.18.0-147.0.3.el8_1]
-- [drm] drm/i915/cmdparser: Fix jump whitelist clearing (Dave Airlie) [1756871 1756873] {CVE-2019-0155}
+* Tue Nov 26 2019 Herton R. Krzesinski <herton@redhat.com> [4.18.0-147.3.1.el8_1]
+- [x86] kvm: svm: taint module and print taint message iff nested is enabled (Bandan Das) [1776114 1775410]
 
-* Sun Nov 03 2019 Frantisek Hrbata <fhrbata@redhat.com> [4.18.0-147.0.2.el8_1]
+* Fri Nov 22 2019 Herton R. Krzesinski <herton@redhat.com> [4.18.0-147.2.1.el8_1]
+- [sched] fair: Scale bandwidth quota and period without losing quota/period ratio precision (Phil Auld) [1773568 1706247]
+- [sched] fair: Fix -Wunused-but-set-variable warnings (Phil Auld) [1773568 1706247]
+- [sched] fair: Fix low cpu usage with high throttling by removing expiration of cpu-local slices (Phil Auld) [1773568 1706247]
+- [powerpc] powerpc/pseries: Track LMB nid instead of using device tree (Steve Best) [1772110 1758742]
+- [powerpc] powerpc/pseries/memory-hotplug: Only update DT once per memory DLPAR request (Steve Best) [1772110 1758742]
+- [powerpc] powerpc/rtas: allow rescheduling while changing cpu states (Steve Best) [1772109 1758651]
+- [powerpc] powerpc/pseries/mobility: use cond_resched when updating device tree (Steve Best) [1772109 1758651]
+- [netdrv] i40e: Do not check VF state in i40e_ndo_get_vf_config (Stefan Assmann) [1770177 1752498]
+- [fs] CIFS: Fix use after free of file info structures (Dave Wysochanski) [1767357 1757865]
+- [fs] cifs: use cifsInodeInfo->open_file_lock while iterating to avoid a panic (Dave Wysochanski) [1767357 1757865]
+- [netdrv] net/ibmvnic: prevent more than one thread from running in reset (Steve Best) [1764830 1756943]
+- [netdrv] net/ibmvnic: unlock rtnl_lock in reset so linkwatch_event can run (Steve Best) [1764830 1756943]
+- [netdrv] ibmvnic: Warn unknown speed message only when carrier is present (Steve Best) [1764832 1749873]
+- [netdrv] net/ibmvnic: Fix missing { in __ibmvnic_reset (Steve Best) [1764832 1749873]
+- [netdrv] net/ibmvnic: free reset work of removed device from queue (Steve Best) [1764832 1749873]
+- [netdrv] ibmvnic: Do not process reset during or after device removal (Steve Best) [1764832 1749873]
+- [cpuidle] cpuidle: governor: Add new governors to cpuidle_governors again (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle-haltpoll: do not set an owner to allow modunload (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle-haltpoll: set haltpoll as preferred governor (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle: allow governor switch on cpuidle_register_driver() (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle: Add cpuidle.governor= command line parameter (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle-haltpoll: vcpu hotplug support (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle-haltpoll: disable host side polling when kvm virtualized (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle: add haltpoll governor (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle: header file stubs must be "static inline" (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] governors: unify last_state_idx (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle: add poll_limit_ns to cpuidle_device structure (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle: poll_state: Fix default time limit (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle: poll_state: Disregard disable idle states (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle: poll_state: Revise loop termination condition (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle: menu: Fix wakeup statistics updates for polling state (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] cpuidle-haltpoll: return -ENODEV on modinit failure (Marcelo Tosatti) [1764831 1759282]
+- [cpuidle] add cpuidle-haltpoll driver (Marcelo Tosatti) [1764831 1759282]
+- [x86] kvm: x86: add host poll control msrs (Vitaly Kuznetsov) [1764831 1749495]
+- [s390] s390/setup: Fix kernel lock down for s390 (Philipp Rudo) [1764827 1748343]
+- [powerpc] powerpc: Allow flush_(inval_)dcache_range to work across ranges >4GB (Steve Best) [1764826 1744062]
+- [fs] mm/huge_memory: fix vmf_insert_pfn_{pmd, pud}() crash, handle unaligned addresses (Jeff Moyer) [1764825 1743159]
+- [mm] mm/huge_memory.c: fix modifying of page protection by insert_pfn_pmd() (Jeff Moyer) [1764825 1743159]
+- [pci] PCI: hv: Use bytes 4 and 5 from instance ID as the PCI domain numbers (Mohammed Gamal) [1764634 1671288]
+- [pci] PCI: hv: Detect and fix Hyper-V PCI domain number collision (Mohammed Gamal) [1764634 1671288]
+
+* Tue Nov 12 2019 Frantisek Hrbata <fhrbata@redhat.com> [4.18.0-147.1.1.el8_1]
+- [arm64] arm64/sve: Fix wrong free for task->thread.sve_state (Andrew Jones) [1767358 1756450]
+- [drm] drm/i915/cmdparser: Fix jump whitelist clearing (Dave Airlie) [1756871 1756873] {CVE-2019-0155}
 - [drm] drm/i915: Lower RM timeout to avoid DSI hard hangs (Dave Airlie) [1766056 1756805] {CVE-2019-0154}
 - [drm] drm/i915/gen8+: Add RC6 CTX corruption WA (Dave Airlie) [1766056 1756805] {CVE-2019-0154}
 - [drm] drm/i915/cmdparser: Ignore Length operands during command matching (Dave Airlie) [1756871 1756873] {CVE-2019-0155}
