@@ -1,0 +1,279 @@
+2019-05-29  Jakub Jelinek  <jakub@redhat.com>
+
+	PR fortran/90329
+	* lto-streamer.h (LTO_minor_version): Bump to 2.
+
+	Backported from mainline
+	2019-05-16  Jakub Jelinek  <jakub@redhat.com>
+
+	PR fortran/90329
+	* tree-core.h (struct tree_decl_common): Document
+	decl_nonshareable_flag for PARM_DECLs.
+	* tree.h (DECL_HIDDEN_STRING_LENGTH): Define.
+	* calls.c (expand_call): Don't try tail call if caller
+	has any DECL_HIDDEN_STRING_LENGTH PARM_DECLs that are or might be
+	passed on the stack and callee needs to pass any arguments on the
+	stack.
+	* tree-streamer-in.c (unpack_ts_decl_common_value_fields): Use
+	else if instead of series of mutually exclusive ifs.  Handle
+	DECL_HIDDEN_STRING_LENGTH for PARM_DECLs.
+	* tree-streamer-out.c (pack_ts_decl_common_value_fields): Likewise.
+
+	* lang.opt (fbroken-callers): Remove.
+	(ftail-call-workaround, ftail-call-workaround=): New options.
+	* gfortran.h (struct gfc_namespace): Add implicit_interface_calls.
+	* interface.c (gfc_procedure_use): Set implicit_interface_calls
+	for calls to implicit interface procedures.
+	* trans-decl.c (create_function_arglist): Use flag_tail_call_workaround
+	instead of flag_broken_callers.  If it is not 2, also require
+	sym->ns->implicit_interface_calls.
+	* invoke.texi (fbroken-callers): Remove documentation.
+	(ftail-call-workaround, ftail-call-workaround=): Document.
+
+	2019-05-19  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	PR fortran/90329
+	* invoke.texi: Document -fbroken-callers.
+	* lang.opt: Add -fbroken-callers.
+	* trans-decl.c (create_function_arglist): Only set
+	DECL_HIDDEN_STRING_LENGTH if flag_broken_callers is set.
+
+	2019-05-16  Jakub Jelinek  <jakub@redhat.com>
+
+	PR fortran/90329
+	* trans-decl.c (create_function_arglist): Set
+	DECL_HIDDEN_STRING_LENGTH on hidden string length PARM_DECLs if
+	len is constant.
+
+--- gcc/calls.c
++++ gcc/calls.c
+@@ -3754,6 +3754,28 @@ expand_call (tree exp, rtx target, int ignore)
+       || dbg_cnt (tail_call) == false)
+     try_tail_call = 0;
+ 
++  /* Workaround buggy C/C++ wrappers around Fortran routines with
++     character(len=constant) arguments if the hidden string length arguments
++     are passed on the stack; if the callers forget to pass those arguments,
++     attempting to tail call in such routines leads to stack corruption.
++     Avoid tail calls in functions where at least one such hidden string
++     length argument is passed (partially or fully) on the stack in the
++     caller and the callee needs to pass any arguments on the stack.
++     See PR90329.  */
++  if (try_tail_call && maybe_ne (args_size.constant, 0))
++    for (tree arg = DECL_ARGUMENTS (current_function_decl);
++	 arg; arg = DECL_CHAIN (arg))
++      if (DECL_HIDDEN_STRING_LENGTH (arg) && DECL_INCOMING_RTL (arg))
++	{
++	  subrtx_iterator::array_type array;
++	  FOR_EACH_SUBRTX (iter, array, DECL_INCOMING_RTL (arg), NONCONST)
++	    if (MEM_P (*iter))
++	      {
++		try_tail_call = 0;
++		break;
++	      }
++	}
++
+   /* If the user has marked the function as requiring tail-call
+      optimization, attempt it.  */
+   if (must_tail_call)
+--- gcc/fortran/gfortran.h
++++ gcc/fortran/gfortran.h
+@@ -1857,6 +1857,9 @@ typedef struct gfc_namespace
+ 
+   /* Set to 1 for !$ACC ROUTINE namespaces.  */
+   unsigned oacc_routine:1;
++
++  /* Set to 1 if there are any calls to procedures with implicit interface.  */
++  unsigned implicit_interface_calls:1;
+ }
+ gfc_namespace;
+ 
+--- gcc/fortran/interface.c
++++ gcc/fortran/interface.c
+@@ -3657,6 +3657,7 @@ gfc_procedure_use (gfc_symbol *sym, gfc_actual_arglist **ap, locus *where)
+ 	gfc_warning (OPT_Wimplicit_procedure,
+ 		     "Procedure %qs called at %L is not explicitly declared",
+ 		     sym->name, where);
++      gfc_find_proc_namespace (sym->ns)->implicit_interface_calls = 1;
+     }
+ 
+   if (sym->attr.if_source == IFSRC_UNKNOWN)
+--- gcc/fortran/invoke.texi
++++ gcc/fortran/invoke.texi
+@@ -181,7 +181,8 @@ and warnings}.
+ @item Code Generation Options
+ @xref{Code Gen Options,,Options for code generation conventions}.
+ @gccoptlist{-faggressive-function-elimination -fblas-matmul-limit=@var{n} @gol
+--fbounds-check -fcheck-array-temporaries @gol
++-fbounds-check -ftail-call-workaround -ftail-call-workaround=@var{n} @gol
++-fcheck-array-temporaries @gol
+ -fcheck=@var{<all|array-temps|bounds|do|mem|pointer|recursion>} @gol
+ -fcoarray=@var{<none|single|lib>} -fexternal-blas -ff2c
+ -ffrontend-loop-interchange @gol
+@@ -1580,6 +1581,39 @@ warnings for generated array temporaries.
+ @c Note: This option is also referred in gcc's manpage
+ Deprecated alias for @option{-fcheck=bounds}.
+ 
++@item -ftail-call-workaround
++@itemx -ftail-call-workaround=@var{n}
++@opindex @code{tail-call-workaround}
++Some C interfaces to Fortran codes violate the gfortran ABI by
++omitting the hidden character length arguments as described in
++@xref{Argument passing conventions}.  This can lead to crashes
++because pushing arguments for tail calls can overflow the stack.
++
++To provide a workaround for existing binary packages, this option
++disables tail call optimization for gfortran procedures with character
++arguments.  With @option{-ftail-call-workaround=2} tail call optimization
++is disabled in all gfortran procedures with character arguments,
++with @option{-ftail-call-workaround=1} or equivalent
++@option{-ftail-call-workaround} only in gfortran procedures with character
++arguments that call implicitly prototyped procedures.
++
++Using this option can lead to problems including crashes due to
++insufficient stack space.
++
++It is @emph{very strongly} recommended to fix the code in question.
++The @option{-fc-prototypes-external} option can be used to generate
++prototypes which conform to gfortran's ABI, for inclusion in the
++source code.
++
++Support for this option will likely be withdrawn in a future release
++of gfortran.
++
++The negative form, @option{-fno-tail-call-workaround} or equivalent
++@option{-ftail-call-workaround=0}, can be used to disable this option.
++
++Default is currently @option{-ftail-call-workaround}, this will change
++in future releases.
++
+ @item -fcheck-array-temporaries
+ @opindex @code{fcheck-array-temporaries}
+ Deprecated alias for @option{-fcheck=array-temps}.
+--- gcc/fortran/lang.opt
++++ gcc/fortran/lang.opt
+@@ -742,6 +742,13 @@ fsign-zero
+ Fortran Var(flag_sign_zero) Init(1)
+ Apply negative sign to zero values.
+ 
++ftail-call-workaround
++Fortran Alias(ftail-call-workaround=,1,0)
++
++ftail-call-workaround=
++Fortran RejectNegative Joined UInteger IntegerRange(0, 2) Var(flag_tail_call_workaround) Init(1)
++Disallow tail call optimization when a calling routine may have omitted character lengths.
++
+ funderscoring
+ Fortran Var(flag_underscoring) Init(1)
+ Append underscores to externally visible names.
+--- gcc/fortran/trans-decl.c
++++ gcc/fortran/trans-decl.c
+@@ -2513,6 +2513,17 @@ create_function_arglist (gfc_symbol * sym)
+ 	  TREE_READONLY (length) = 1;
+ 	  gfc_finish_decl (length);
+ 
++	  /* Marking the length DECL_HIDDEN_STRING_LENGTH will lead
++	     to tail calls being disabled.  Only do that if we
++	     potentially have broken callers.  */
++	  if (flag_tail_call_workaround
++	      && f->sym->ts.u.cl
++	      && f->sym->ts.u.cl->length
++	      && f->sym->ts.u.cl->length->expr_type == EXPR_CONSTANT
++	      && (flag_tail_call_workaround == 2
++		  || f->sym->ns->implicit_interface_calls))
++	    DECL_HIDDEN_STRING_LENGTH (length) = 1;
++
+ 	  /* Remember the passed value.  */
+           if (!f->sym->ts.u.cl ||  f->sym->ts.u.cl->passed_length)
+             {
+--- gcc/lto-streamer.h
++++ gcc/lto-streamer.h
+@@ -121,7 +121,7 @@ along with GCC; see the file COPYING3.  If not see
+      form followed by the data for the string.  */
+ 
+ #define LTO_major_version 7
+-#define LTO_minor_version 1
++#define LTO_minor_version 2
+ 
+ typedef unsigned char	lto_decl_flags_t;
+ 
+--- gcc/tree-core.h
++++ gcc/tree-core.h
+@@ -1644,6 +1644,7 @@ struct GTY(()) tree_decl_common {
+   /* In a VAR_DECL and PARM_DECL, this is DECL_READ_P.  */
+   unsigned decl_read_flag : 1;
+   /* In a VAR_DECL or RESULT_DECL, this is DECL_NONSHAREABLE.  */
++  /* In a PARM_DECL, this is DECL_HIDDEN_STRING_LENGTH.  */
+   unsigned decl_nonshareable_flag : 1;
+ 
+   /* DECL_OFFSET_ALIGN, used only for FIELD_DECLs.  */
+--- gcc/tree-streamer-in.c
++++ gcc/tree-streamer-in.c
+@@ -252,7 +252,7 @@ unpack_ts_decl_common_value_fields (struct bitpack_d *bp, tree expr)
+       LABEL_DECL_UID (expr) = -1;
+     }
+ 
+-  if (TREE_CODE (expr) == FIELD_DECL)
++  else if (TREE_CODE (expr) == FIELD_DECL)
+     {
+       DECL_PACKED (expr) = (unsigned) bp_unpack_value (bp, 1);
+       DECL_NONADDRESSABLE_P (expr) = (unsigned) bp_unpack_value (bp, 1);
+@@ -260,12 +260,15 @@ unpack_ts_decl_common_value_fields (struct bitpack_d *bp, tree expr)
+       expr->decl_common.off_align = bp_unpack_value (bp, 8);
+     }
+ 
+-  if (VAR_P (expr))
++  else if (VAR_P (expr))
+     {
+       DECL_HAS_DEBUG_EXPR_P (expr) = (unsigned) bp_unpack_value (bp, 1);
+       DECL_NONLOCAL_FRAME (expr) = (unsigned) bp_unpack_value (bp, 1);
+     }
+ 
++  else if (TREE_CODE (expr) == PARM_DECL)
++    DECL_HIDDEN_STRING_LENGTH (expr) = (unsigned) bp_unpack_value (bp, 1);
++
+   if (TREE_CODE (expr) == RESULT_DECL
+       || TREE_CODE (expr) == PARM_DECL
+       || VAR_P (expr))
+--- gcc/tree-streamer-out.c
++++ gcc/tree-streamer-out.c
+@@ -212,7 +212,7 @@ pack_ts_decl_common_value_fields (struct bitpack_d *bp, tree expr)
+       bp_pack_var_len_unsigned (bp, EH_LANDING_PAD_NR (expr));
+     }
+ 
+-  if (TREE_CODE (expr) == FIELD_DECL)
++  else if (TREE_CODE (expr) == FIELD_DECL)
+     {
+       bp_pack_value (bp, DECL_PACKED (expr), 1);
+       bp_pack_value (bp, DECL_NONADDRESSABLE_P (expr), 1);
+@@ -220,12 +220,15 @@ pack_ts_decl_common_value_fields (struct bitpack_d *bp, tree expr)
+       bp_pack_value (bp, expr->decl_common.off_align, 8);
+     }
+ 
+-  if (VAR_P (expr))
++  else if (VAR_P (expr))
+     {
+       bp_pack_value (bp, DECL_HAS_DEBUG_EXPR_P (expr), 1);
+       bp_pack_value (bp, DECL_NONLOCAL_FRAME (expr), 1);
+     }
+ 
++  else if (TREE_CODE (expr) == PARM_DECL)
++    bp_pack_value (bp, DECL_HIDDEN_STRING_LENGTH (expr), 1);
++
+   if (TREE_CODE (expr) == RESULT_DECL
+       || TREE_CODE (expr) == PARM_DECL
+       || VAR_P (expr))
+--- gcc/tree.h
++++ gcc/tree.h
+@@ -909,6 +909,11 @@ extern void omp_clause_range_check_failed (const_tree, const char *, int,
+   (TREE_CHECK2 (NODE, VAR_DECL, \
+ 		RESULT_DECL)->decl_common.decl_nonshareable_flag)
+ 
++/* In a PARM_DECL, set for Fortran hidden string length arguments that some
++   buggy callers don't pass to the callee.  */
++#define DECL_HIDDEN_STRING_LENGTH(NODE) \
++  (TREE_CHECK (NODE, PARM_DECL)->decl_common.decl_nonshareable_flag)
++
+ /* In a CALL_EXPR, means that the call is the jump from a thunk to the
+    thunked-to function.  */
+ #define CALL_FROM_THUNK_P(NODE) (CALL_EXPR_CHECK (NODE)->base.protected_flag)

@@ -1,0 +1,55 @@
+2019-07-04  Jakub Jelinek  <jakub@redhat.com>
+
+	PR rtl-optimization/90756
+	* explow.c (promote_ssa_mode): Always use TYPE_MODE, don't bypass it
+	for VECTOR_TYPE_P.
+
+--- gcc/explow.c
++++ gcc/explow.c
+@@ -892,16 +892,7 @@ promote_ssa_mode (const_tree name, int *punsignedp)
+ 
+   tree type = TREE_TYPE (name);
+   int unsignedp = TYPE_UNSIGNED (type);
+-  machine_mode mode = TYPE_MODE (type);
+-
+-  /* Bypass TYPE_MODE when it maps vector modes to BLKmode.  */
+-  if (mode == BLKmode)
+-    {
+-      gcc_assert (VECTOR_TYPE_P (type));
+-      mode = type->type_common.mode;
+-    }
+-
+-  machine_mode pmode = promote_mode (type, mode, &unsignedp);
++  machine_mode pmode = promote_mode (type, TYPE_MODE (type), &unsignedp);
+   if (punsignedp)
+     *punsignedp = unsignedp;
+ 
+--- /dev/null
++++ gcc/testsuite/gcc.dg/pr90756.c
+@@ -0,0 +1,26 @@
++/* PR rtl-optimization/90756 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -Wno-psabi" } */
++/* { dg-additional-options "-mno-sse" { target ia32 } } */
++
++typedef float B __attribute__((vector_size(4 * sizeof (float))));
++typedef unsigned long long C __attribute__((vector_size(4 * sizeof (long long))));
++typedef short D __attribute__((vector_size(4 * sizeof (short))));
++B z;
++void foo (C);
++C bar (D);
++B baz ();
++D qux (B);
++
++void
++quux (int x)
++{
++  B n = z, b = z;
++  while (1)
++    switch (x)
++      {
++      case 0: n = baz (); /* FALLTHRU */
++      case 1: { B o = n; n = b; b = o; } /* FALLTHRU */
++      case 2: { D u = qux (b); C v = bar (u); foo (v); }
++      }
++}

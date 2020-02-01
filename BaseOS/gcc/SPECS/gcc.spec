@@ -1,10 +1,10 @@
-%global DATE 20180905
-%global SVNREV 264110
-%global gcc_version 8.2.1
+%global DATE 20190507
+%global SVNREV 270976
+%global gcc_version 8.3.1
 %global gcc_major 8
 # Note, gcc_release must be integer, if you want to add suffixes to
 # %%{release}, append them after %%{gcc_release} on Release: line.
-%global gcc_release 3
+%global gcc_release 4
 %global nvptx_tools_gitrev c28050f60193b3b95a18866a96f03334e874e78f
 %global nvptx_newlib_gitrev aadc8eb0ec43b7cd0dd2dfb484bae63c8b05ef24
 %global _unpackaged_files_terminate_build 0
@@ -17,7 +17,7 @@
 %if 0%{?rhel} > 7
 %global build_ada 0
 %global build_objc 0
-%global build_go 1
+%global build_go 0
 %global build_libgccjit 0
 %else
 %ifarch %{ix86} x86_64 ia64 ppc %{power64} alpha s390x %{arm} aarch64
@@ -104,7 +104,7 @@
 Summary: Various compilers (C, C++, Objective-C, ...)
 Name: gcc
 Version: %{gcc_version}
-Release: %{gcc_release}.5%{?dist}.redsleeve
+Release: %{gcc_release}.5%{?dist}
 # libgcc, libgfortran, libgomp, libstdc++ and crtstuff have
 # GCC Runtime Exception.
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
@@ -268,22 +268,25 @@ Patch11: gcc8-rh1512529-aarch64.patch
 Patch12: gcc8-mcet.patch
 Patch13: gcc8-rh1574936.patch
 Patch14: gcc8-libgcc-hardened.patch
-Patch15: gcc8-rh1612514.patch
-Patch16: gcc8-pr60790.patch
-Patch17: gcc8-rh1652016.patch
+Patch15: gcc8-rh1670535.patch
+Patch16: gcc8-pr85400.patch
+Patch17: gcc8-libgomp-20190503.patch
+Patch18: gcc8-pr86747.patch
+Patch19: gcc8-libgomp-testsuite.patch
+Patch20: gcc8-rh1711346.patch
+Patch21: gcc8-rh1730380.patch
+Patch22: gcc8-pr86098.patch
+Patch23: gcc8-pr90139.patch
+Patch24: gcc8-pr90756.patch
 
-Patch21: gcc8-rh1652929-1.patch
-Patch22: gcc8-rh1652929-2.patch
-Patch23: gcc8-rh1652929-3.patch
-Patch24: gcc8-rh1652929-4.patch
-Patch25: gcc8-rh1652929-5.patch
-
+Patch30: gcc8-rh1668903-1.patch
+Patch31: gcc8-rh1668903-2.patch
+Patch32: gcc8-rh1668903-3.patch
 
 Patch1000: nvptx-tools-no-ptxas.patch
 Patch1001: nvptx-tools-build.patch
 Patch1002: nvptx-tools-glibc.patch
 
-Patch10000: gcc8-progbits-arm.patch
 
 # On ARM EABI systems, we do want -gnueabi to be part of the
 # target triple.
@@ -848,15 +851,20 @@ to NVidia PTX capable devices if available.
 %patch13 -p0 -b .rh1574936~
 %patch14 -p0 -b .libgcc-hardened~
 %endif
-%patch15 -p0 -b .rh1612514~
-%patch16 -p0 -b .pr60790~
-%patch17 -p1 -b .rh1652016~
+%patch15 -p0 -b .rh1670535~
+%patch16 -p0 -b .pr85400~
+%patch17 -p0 -b .libgomp-20190503~
+%patch18 -p0 -b .pr86747~
+%patch19 -p0 -b .libgomp-testsuite~
+%patch20 -p0 -b .rh1711346~
+%patch21 -p0 -b .rh1730380~
+%patch22 -p0 -b .pr86098~
+%patch23 -p0 -b .pr90139~
+%patch24 -p0 -b .pr90756~
 
-%patch21 -p1 -b .rh1652929-1~
-%patch22 -p1 -b .rh1652929-2~
-%patch23 -p1 -b .rh1652929-3~
-%patch24 -p1 -b .rh1652929-4~
-%patch25 -p1 -b .rh1652929-5~
+%patch30 -p0 -b .rh1668903-1~
+%patch31 -p0 -b .rh1668903-2~
+%patch32 -p0 -b .rh1668903-3~
 
 cd nvptx-tools-%{nvptx_tools_gitrev}
 %patch1000 -p1 -b .nvptx-tools-no-ptxas~
@@ -895,8 +903,6 @@ fi
 
 # This test causes fork failures, because it spawns way too many threads
 rm -f gcc/testsuite/go.test/test/chan/goroutines.go
-
-%patch10000 -p0 -b .arm-progbits~
 
 %build
 
@@ -1353,36 +1359,39 @@ mkdir -p %{buildroot}/%{_lib}
 mv -f %{buildroot}%{_prefix}/%{_lib}/libgcc_s.so.1 %{buildroot}/%{_lib}/libgcc_s-%{gcc_major}-%{DATE}.so.1
 chmod 755 %{buildroot}/%{_lib}/libgcc_s-%{gcc_major}-%{DATE}.so.1
 ln -sf libgcc_s-%{gcc_major}-%{DATE}.so.1 %{buildroot}/%{_lib}/libgcc_s.so.1
+%ifarch %{ix86} x86_64 ppc ppc64 ppc64p7 ppc64le %{arm}
+rm -f $FULLPATH/libgcc_s.so
+echo '/* GNU ld script
+   Use the shared library, but some functions are only in
+   the static library, so try that secondarily.  */
+OUTPUT_FORMAT('`gcc -Wl,--print-output-format -nostdlib -r -o /dev/null`')
+GROUP ( /%{_lib}/libgcc_s.so.1 libgcc.a )' > $FULLPATH/libgcc_s.so
+%else
 ln -sf /%{_lib}/libgcc_s.so.1 $FULLPATH/libgcc_s.so
+%endif
 %ifarch sparcv9 ppc
+%ifarch ppc
+rm -f $FULLPATH/64/libgcc_s.so
+echo '/* GNU ld script
+   Use the shared library, but some functions are only in
+   the static library, so try that secondarily.  */
+OUTPUT_FORMAT('`gcc -m64 -Wl,--print-output-format -nostdlib -r -o /dev/null`')
+GROUP ( /lib64/libgcc_s.so.1 libgcc.a )' > $FULLPATH/64/libgcc_s.so
+%else
 ln -sf /lib64/libgcc_s.so.1 $FULLPATH/64/libgcc_s.so
 %endif
+%endif
 %ifarch %{multilib_64_archs}
+%ifarch x86_64 ppc64 ppc64p7
+rm -f $FULLPATH/64/libgcc_s.so
+echo '/* GNU ld script
+   Use the shared library, but some functions are only in
+   the static library, so try that secondarily.  */
+OUTPUT_FORMAT('`gcc -m32 -Wl,--print-output-format -nostdlib -r -o /dev/null`')
+GROUP ( /lib/libgcc_s.so.1 libgcc.a )' > $FULLPATH/32/libgcc_s.so
+%else
 ln -sf /lib/libgcc_s.so.1 $FULLPATH/32/libgcc_s.so
 %endif
-%ifarch ppc
-rm -f $FULLPATH/libgcc_s.so
-echo '/* GNU ld script
-   Use the shared library, but some functions are only in
-   the static library, so try that secondarily.  */
-OUTPUT_FORMAT(elf32-powerpc)
-GROUP ( /lib/libgcc_s.so.1 libgcc.a )' > $FULLPATH/libgcc_s.so
-%endif
-%ifarch ppc64 ppc64p7
-rm -f $FULLPATH/32/libgcc_s.so
-echo '/* GNU ld script
-   Use the shared library, but some functions are only in
-   the static library, so try that secondarily.  */
-OUTPUT_FORMAT(elf32-powerpc)
-GROUP ( /lib/libgcc_s.so.1 libgcc.a )' > $FULLPATH/32/libgcc_s.so
-%endif
-%ifarch %{arm}
-rm -f $FULLPATH/libgcc_s.so
-echo '/* GNU ld script
-   Use the shared library, but some functions are only in
-   the static library, so try that secondarily.  */
-OUTPUT_FORMAT(elf32-littlearm)
-GROUP ( /lib/libgcc_s.so.1 libgcc.a )' > $FULLPATH/libgcc_s.so
 %endif
 
 mv -f %{buildroot}%{_prefix}/%{_lib}/libgomp.spec $FULLPATH/
@@ -2338,6 +2347,14 @@ fi
 %{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/vec_types.h
 %{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/htmintrin.h
 %{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/htmxlintrin.h
+%{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/bmi2intrin.h
+%{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/bmiintrin.h
+%{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/xmmintrin.h
+%{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/mm_malloc.h
+%{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/emmintrin.h
+%{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/mmintrin.h
+%{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/x86intrin.h
+%{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/amo.h
 %endif
 %ifarch %{arm}
 %{_prefix}/lib/gcc/%{gcc_target_platform}/%{gcc_major}/include/unwind-arm-common.h
@@ -3160,25 +3177,60 @@ fi
 %endif
 
 %changelog
-* Sat Jun 29 2019 Bjarne Saltbaek <bjarne@redsleeve.org> 8.2.1-3.5.redsleeve
-- Enabled gcc-go build on EL8
-- Added patch from gcc-go on arm
+* Tue Jul 16 2019 Marek Polacek <polacek@redhat.com> 8.3.1-4.5
+- fix shift count operand printing (#1730380)
+- fix tree-outof-ssa.c ICE with vector types (PR middle-end/90139, #1730454)
+- fix out-of-ssa with unsupported vector types (PR rtl-optimization/90756,
+  #1730454)
+- fix ICE with template placeholder for TTP (PR c++/86098, #1730454)
 
-* Mon Dec 10 2018 Marek Polacek <polacek@redhat.com 8.2.1-3.5
+* Mon Jun  3 2019 Marek Polacek <polacek@redhat.com> 8.3.1-4.4
+- backport workaround for broken C/C++ wrappers to LAPACK (#1711346)
+
+* Fri May 24 2019 Marek Polacek <polacek@redhat.com> 8.3.1-4.3
+- additional fix for the libgomp testsuite (#1707568)
+
+* Tue May 21 2019 Marek Polacek <polacek@redhat.com> 8.3.1-4.2
+- backport the -fuse-ld=lld option (#1670535)
+- TLS model fix (#1678555, PR c++/85400)
+- two small autoFDO fixes (#1686082)
+- libgomp update (#1707568)
+- member template redeclaration fix (#1652704, PR c++/86747)
+- turn libgcc_s.so into a linker script on i?86, x86_64, ppc64le and also on
+  ppc and ppc64 for 64-bit multilib (#1708309)
+- avoid using unaligned vsx or lxvd2x/stxvd2x for memcpy/memmove inline
+  expansion (#1666977)
+
+* Wed May  8 2019 Marek Polacek <polacek@redhat.com> 8.3.1-4.1
+- tweak gcc8-rh1668903-1.patch and gcc8-rh1668903-2.patch patches
+
+* Tue May  7 2019 Marek Polacek <polacek@redhat.com> 8.3.1-4
+- update from Fedora 8.3.1-4 (#1680182)
+- drop gcc8-pr60790.patch, gcc8-pr89629.patch, gcc8-rh1668903-4.patch
+
+* Tue May  7 2019 Marek Polacek <polacek@redhat.com> 8.3.1-3
+- update from Fedora 8.3.1-3 (#1680182)
+- remove load and test FP splitter (#1673116)
+- fix *movsi_from_df (#1677652)
+- add missing headers
+- add support for live patching (#1668903)
+- retire gcc8-rh1612514.patch, gcc8-rh1652016.patch, gcc8-rh1652929-?.patch
+
+* Mon Dec 10 2018 Marek Polacek <polacek@redhat.com> 8.2.1-3.5
 - remove python2 dependecy (#1595385)
 
-* Tue Nov 27 2018 Jeff Law <law@redhat.com 8.2.1-3.4
+* Tue Nov 27 2018 Jeff Law <law@redhat.com> 8.2.1-3.4
 - Backport PPC string inlines from trunk which allow for valgrind's
   memcheck to work properly (#1652929)
 - Backport bugfix for clz pattern on s390 affecting jemalloc (#1652016)
 
-* Mon Oct 15 2018 Marek Polacek <polacek@redhat.com 8.2.1-3.3
+* Mon Oct 15 2018 Marek Polacek <polacek@redhat.com> 8.2.1-3.3
 - avoid IFUNC resolver access to uninitialized data (#1559350, PR libgcc/60790)
 
-* Thu Oct 11 2018 Marek Polacek <polacek@redhat.com 8.2.1-3.2
+* Thu Oct 11 2018 Marek Polacek <polacek@redhat.com> 8.2.1-3.2
 - fix typos in manual (#1612514)
 
-* Mon Oct  8 2018 Marek Polacek <polacek@redhat.com 8.2.1-3.1
+* Mon Oct  8 2018 Marek Polacek <polacek@redhat.com> 8.2.1-3.1
 - enable hardening of binaries (#1624114)
 - disable libgccjit on RHEL
 

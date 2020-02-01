@@ -1,0 +1,41 @@
+--- libgomp/testsuite/libgomp-test-support.exp.in.jj	2018-04-25 09:40:31.323655308 +0200
++++ libgomp/testsuite/libgomp-test-support.exp.in	2019-04-25 20:01:50.028243827 +0200
+@@ -2,4 +2,5 @@ set cuda_driver_include "@CUDA_DRIVER_IN
+ set cuda_driver_lib "@CUDA_DRIVER_LIB@"
+ set hsa_runtime_lib "@HSA_RUNTIME_LIB@"
+ 
++set offload_plugins "@offload_plugins@"
+ set offload_targets "@offload_targets@"
+--- libgomp/testsuite/lib/libgomp.exp.jj	2018-04-25 09:40:31.584655429 +0200
++++ libgomp/testsuite/lib/libgomp.exp	2019-05-24 11:41:51.015822702 +0200
+@@ -40,7 +40,7 @@ load_file libgomp-test-support.exp
+ # Populate offload_targets_s (offloading targets separated by a space), and
+ # offload_targets_s_openacc (the same, but with OpenACC names; OpenACC spells
+ # some of them a little differently).
+-set offload_targets_s [split $offload_targets ","]
++set offload_targets_s [split $offload_plugins ","]
+ set offload_targets_s_openacc {}
+ foreach offload_target_openacc $offload_targets_s {
+     # Translate to OpenACC names, or skip if not yet supported.
+@@ -137,8 +137,8 @@ proc libgomp_init { args } {
+ 
+     # Add liboffloadmic build directory in LD_LIBRARY_PATH to support
+     # non-fallback testing for Intel MIC targets
+-    global offload_targets
+-    if { [string match "*,intelmic,*" ",$offload_targets,"] } {
++    global offload_plugins
++    if { [string match "*,intelmic,*" ",$offload_plugins,"] } {
+ 	append always_ld_library_path ":${blddir}/../liboffloadmic/.libs"
+ 	append always_ld_library_path ":${blddir}/../liboffloadmic/plugin/.libs"
+ 	# libstdc++ is required by liboffloadmic
+@@ -362,8 +362,8 @@ proc check_effective_target_offload_devi
+ # Return 1 if configured for nvptx offloading.
+ 
+ proc check_effective_target_openacc_nvidia_accel_configured { } {
+-    global offload_targets
+-    if { ![string match "*,nvptx,*" ",$offload_targets,"] } {
++    global offload_plugins
++    if { ![string match "*,nvptx,*" ",$offload_plugins,"] } {
+         return 0
+     }
+     # PR libgomp/65099: Currently, we only support offloading in 64-bit
