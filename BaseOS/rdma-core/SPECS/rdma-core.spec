@@ -1,7 +1,11 @@
 Name: rdma-core
-Version: 22
-Release: 2%{?dist}.redsleeve
+Version: 22.3
+Release: 1%{?dist}
 Summary: RDMA core userspace libraries and daemons
+
+%ifnarch %{arm}
+%define dma_coherent 1
+%endif
 
 # Almost everything is licensed under the OFA dual GPLv2, 2 Clause BSD license
 #  providers/ipathverbs/ Dual licensed using a BSD license with an extra patent clause
@@ -13,6 +17,9 @@ Source: https://github.com/linux-rdma/rdma-core/releases/download/v%{version}/%{
 Source1: ibdev2netdev
 Patch1: redhat-kernel-init-libi40iw-no-longer-tech-preview.patch
 Patch2: i40iw-autoload-breaks-suspend.patch
+Patch3: 0001-Update-kernel-headers.patch
+Patch4: 0002-bnxt_re-lib-Enable-Broadcom-s-57500-RoCE-adapter.patch
+Patch5: 0003-mlx5-Add-new-device-IDs.patch
 # Do not build static libs by default.
 %define with_static %{?_with_static: 1} %{?!_with_static: 0}
 
@@ -43,8 +50,6 @@ Obsoletes: rdma-ndd < %{version}-%{release}
 # the ndd utility moved from infiniband-diags to rdma-core
 Conflicts: infiniband-diags <= 1.6.7
 Requires: pciutils
-# 32-bit arm is missing required arch-specific memory barriers,
-#ExcludeArch: %{arm}
 
 # Since we recommend developers use Ninja, so should packagers, for consistency.
 %define CMAKE_FLAGS %{nil}
@@ -91,7 +96,7 @@ Provides: libcxgb4-static = %{version}-%{release}
 Obsoletes: libcxgb4-static < %{version}-%{release}
 Provides: libhfi1-static = %{version}-%{release}
 Obsoletes: libhfi1-static < %{version}-%{release}
-%ifnarch %{arm}
+%if 0%{?dma_coherent}
 Provides: libmlx4-static = %{version}-%{release}
 Obsoletes: libmlx4-static < %{version}-%{release}
 Provides: libmlx5-static = %{version}-%{release}
@@ -112,7 +117,7 @@ Provides: libhfi1 = %{version}-%{release}
 Obsoletes: libhfi1 < %{version}-%{release}
 Provides: libi40iw = %{version}-%{release}
 Obsoletes: libi40iw < %{version}-%{release}
-%ifnarch %{arm}
+%if 0%{?dma_coherent}
 Provides: libmlx4 = %{version}-%{release}
 Obsoletes: libmlx4 < %{version}-%{release}
 %ifnarch s390
@@ -222,6 +227,9 @@ discover and use SCSI devices via the SCSI RDMA Protocol over InfiniBand.
 %setup
 %patch1 -p1
 %patch2 -p1
+%patch3 -p1
+%patch4 -p1
+%patch5 -p1
 
 %build
 
@@ -272,14 +280,20 @@ mkdir -p %{buildroot}%{dracutlibdir}/modules.d/05rdma
 mkdir -p %{buildroot}%{sysmodprobedir}
 install -D -m0644 redhat/rdma.conf %{buildroot}/%{_sysconfdir}/rdma/rdma.conf
 install -D -m0644 redhat/rdma.sriov-vfs %{buildroot}/%{_sysconfdir}/rdma/sriov-vfs
+%if 0%{?dma_coherent}
 install -D -m0644 redhat/rdma.mlx4.conf %{buildroot}/%{_sysconfdir}/rdma/mlx4.conf
+%endif
 install -D -m0644 redhat/rdma.service %{buildroot}%{_unitdir}/rdma.service
 install -D -m0755 redhat/rdma.modules-setup.sh %{buildroot}%{dracutlibdir}/modules.d/05rdma/module-setup.sh
 install -D -m0644 redhat/rdma.udev-rules %{buildroot}%{_udevrulesdir}/98-rdma.rules
+%if 0%{?dma_coherent}
 install -D -m0644 redhat/rdma.mlx4.sys.modprobe %{buildroot}%{sysmodprobedir}/libmlx4.conf
+%endif
 install -D -m0755 redhat/rdma.kernel-init %{buildroot}%{_libexecdir}/rdma-init-kernel
 install -D -m0755 redhat/rdma.sriov-init %{buildroot}%{_libexecdir}/rdma-set-sriov-vf
+%if 0%{?dma_coherent}
 install -D -m0755 redhat/rdma.mlx4-setup.sh %{buildroot}%{_libexecdir}/mlx4-setup.sh
+%endif
 
 # ibdev2netdev helper script
 install -D -m0755 %{SOURCE1} %{buildroot}%{_bindir}/
@@ -343,8 +357,10 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %doc %{_docdir}/%{name}-%{version}/udev.md
 %config(noreplace) %{_sysconfdir}/rdma/*
 %config(noreplace) %{_sysconfdir}/udev/rules.d/*
-%ifnarch s390 %{arm}
+%if 0%{?dma_coherent}
+%ifnarch s390
 %config(noreplace) %{_sysconfdir}/modprobe.d/mlx4.conf
+%endif
 %endif
 %config(noreplace) %{_sysconfdir}/modprobe.d/truescale.conf
 %{_unitdir}/rdma-hw.target
@@ -353,10 +369,14 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %dir %{dracutlibdir}/modules.d/05rdma
 %{dracutlibdir}/modules.d/05rdma/module-setup.sh
 %{_udevrulesdir}/*
+%if 0%{?dma_coherent}
 %{sysmodprobedir}/libmlx4.conf
+%endif
 %{_libexecdir}/rdma-init-kernel
 %{_libexecdir}/rdma-set-sriov-vf
+%if 0%{?dma_coherent}
 %{_libexecdir}/mlx4-setup.sh
+%endif
 %{_libexecdir}/truescale-serdes.cmds
 %{_sbindir}/rdma-ndd
 %{_bindir}/ibdev2netdev
@@ -379,10 +399,12 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %{_mandir}/man3/rdma*
 %{_mandir}/man3/umad*
 %{_mandir}/man3/*_to_ibv_rate.*
-%ifnarch s390 %{arm}
+%if 0%{?dma_coherent}
+%ifnarch s390
 %{_mandir}/man3/mlx4dv*
 %{_mandir}/man3/mlx5dv*
 %{_mandir}/man7/mlx5dv*
+%endif
 %endif
 %{_mandir}/man7/rdma_cm.*
 
@@ -391,9 +413,11 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %dir %{_libdir}/libibverbs
 %{_libdir}/libibverbs*.so.*
 %{_libdir}/libibverbs/*.so
-%ifnarch s390 %{arm}
+%if 0%{?dma_coherent}
+%ifnarch s390
 %{_libdir}/libmlx4.so.*
 %{_libdir}/libmlx5.so.*
+%endif
 %endif
 %config(noreplace) %{_sysconfdir}/libibverbs.d/*.driver
 %doc %{_docdir}/%{name}-%{version}/libibverbs.md
@@ -401,9 +425,11 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %doc %{_docdir}/%{name}-%{version}/tag_matching.md
 %{_bindir}/rxe_cfg
 %{_mandir}/man7/rxe*
-%ifnarch s390 %{arm}
+%if 0%{?dma_coherent}
+%ifnarch s390
 %{_mandir}/man7/mlx4dv*
 %{_mandir}/man7/mlx5dv*
+%endif
 %endif
 %{_mandir}/man8/rxe*
 
@@ -486,8 +512,12 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %doc %{_docdir}/%{name}-%{version}/ibsrpdm.md
 
 %changelog
-* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 22-2.redsleeve
-- undo ExcludeArch
+* Mon Jun 24 2019 Jarod Wilson <jarod@redhat.com> - 22.3-1
+- Update to upstream v22.3 stable release for fixes
+- Enable support for Broadcom 57500 hardware
+- Enable support for Mellanox ConnectX-6 DX hardware
+- Resolves: rhbz#1678276
+- Resolves: rhbz#1687435
 
 * Thu Jan 10 2019 Jarod Wilson <jarod@redhat.com> - 22-2
 - Fix up covscan shellcheck warnings in ibdev2netdev
