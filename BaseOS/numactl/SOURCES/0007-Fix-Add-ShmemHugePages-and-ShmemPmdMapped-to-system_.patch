@@ -1,7 +1,7 @@
 From a8f5ed65b745f96f5e5af72bace8e7c63b96fd4e Mon Sep 17 00:00:00 2001
 From: Sanskriti Sharma <sansharm@redhat.com>
 Date: Thu, 13 Sep 2018 10:01:58 -0400
-Subject: [PATCH] Fix: Add ShmemHugePages and ShmemPmdMapped to
+Subject: [PATCH 7/7] Fix: Add ShmemHugePages and ShmemPmdMapped to
  system_meminfo[]
 
 ShmemHugePages and ShmemPmdMapped were recently added to

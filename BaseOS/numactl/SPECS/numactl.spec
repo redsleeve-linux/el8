@@ -1,7 +1,7 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
 Version:	2.0.12
-Release:	2%{dist}.redsleeve
+Release:	7%{?dist}
 # libnuma is LGPLv2 and GPLv2
 # numactl binaries are GPLv2 only
 License:	GPLv2
@@ -11,7 +11,7 @@ Source0:	https://github.com/numactl/numactl/releases/download/%{version}/numactl
 Buildroot:	%{_tmppath}/%{name}-buildroot
 BuildRequires:	libtool automake autoconf
 
-ExcludeArch: s390
+ExcludeArch: s390 %{arm}
 
 #START INSERT
 #
@@ -37,7 +37,14 @@ ExcludeArch: s390
 #
 # Patches 601 onward are generic patches
 #
-Patch601: 0001-Fix-Add-ShmemHugePages-and-ShmemPmdMapped-to-system_.patch
+Patch601 :0001-Fix-node_list-with-memory-less-nodes.patch
+Patch602 :0002-numademo-fix-wrong-node-input.patch
+Patch603 :0003-Fix-distance-test-to-include-all-existing-nodes.patch
+Patch604 :0004-Fix-regress-test-numastat-function-and-few-test-fixe.patch
+Patch605 :0005-Correct-calculation-of-nr_nodes-and-re-enable-move_p.patch
+Patch606 :0006-Fix-move_pages-test-for-non-contiguous-nodes.patch
+Patch607 :0007-Fix-Add-ShmemHugePages-and-ShmemPmdMapped-to-system_.patch
+
 
 
 %description
@@ -68,9 +75,16 @@ Provides development headers for numa library calls
 
 #patch
 %patch601 -p1
+%patch602 -p1
+%patch603 -p1
+%patch604 -p1
+%patch605 -p1
+%patch606 -p1
+%patch607 -p1
 
 
 %build
+aclocal && automake
 %configure --prefix=/usr --libdir=%{_libdir}
 make clean
 make CFLAGS="$RPM_OPT_FLAGS -I."
@@ -112,8 +126,8 @@ make DESTDIR=$RPM_BUILD_ROOT install
 %{_mandir}/man3/*.3*
 
 %changelog
-* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.0.12-2.redsleeve
-- Don't exclude arm architectures
+* Mon Apr  1 2019 Pingfan Liu <piliu@redhat.com> - 2.0.12-3
+- add gating test cases
 
 * Mon Nov 26 2018 Pingfan Liu <piliu@redhat.com> - 2.0.12-2
 - Fix: Add ShmemHugePages and ShmemPmdMapped to system_meminfo[]
