@@ -1,0 +1,61 @@
+From 73f05eb53f12197f081fd7ec75619c6ea3a39b2c Mon Sep 17 00:00:00 2001
+From: Ingo Franzki <ifranzki@linux.ibm.com>
+Date: Mon, 12 Aug 2019 10:54:27 +0200
+Subject: [opencryptoki PATCH 1/2] ICA: Refer libica by its so name
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Ingo Franzki <ifranzki@linux.ibm.com>
+Signed-off-by: Dan Horák <dan@danny.cz>
+---
+ usr/lib/ica_s390_stdll/ica_specific.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/usr/lib/ica_s390_stdll/ica_specific.c b/usr/lib/ica_s390_stdll/ica_specific.c
+index d5a6d554..a72ce774 100644
+--- a/usr/lib/ica_s390_stdll/ica_specific.c
++++ b/usr/lib/ica_s390_stdll/ica_specific.c
+@@ -61,7 +61,7 @@ const char label[] = "IBM ICA  PKCS #11";
+ 
+ static pthread_mutex_t rngmtx = PTHREAD_MUTEX_INITIALIZER;
+ 
+-#define LIBICA_SHARED_LIB "libica.so"
++#define LIBICA_SHARED_LIB "libica.so.3"
+ #define BIND(dso, sym)  (*(void **)(&p_##sym) = dlsym(dso, #sym))
+ 
+ #ifndef NO_EC
+-- 
+2.21.0
+
+
+From 7f4113ba8653b8b18a6f1af6ab1d8eb90987626d Mon Sep 17 00:00:00 2001
+From: Ingo Franzki <ifranzki@linux.ibm.com>
+Date: Mon, 12 Aug 2019 10:54:44 +0200
+Subject: [opencryptoki PATCH 2/2] EP11: Refer libica by its so name
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Ingo Franzki <ifranzki@linux.ibm.com>
+Signed-off-by: Dan Horák <dan@danny.cz>
+---
+ usr/lib/ep11_stdll/ep11_specific.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/usr/lib/ep11_stdll/ep11_specific.c b/usr/lib/ep11_stdll/ep11_specific.c
+index 231dd200..a3f14351 100644
+--- a/usr/lib/ep11_stdll/ep11_specific.c
++++ b/usr/lib/ep11_stdll/ep11_specific.c
+@@ -58,7 +58,7 @@
+ #include "ep11_specific.h"
+ 
+ #define EP11SHAREDLIB "libep11.so"
+-#define ICASHAREDLIB  "libica.so"
++#define ICASHAREDLIB  "libica.so.3"
+ 
+ CK_RV ep11tok_get_mechanism_list(STDLL_TokData_t * tokdata,
+                                  CK_MECHANISM_TYPE_PTR mlist,
+-- 
+2.21.0
+

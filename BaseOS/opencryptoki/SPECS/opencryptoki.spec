@@ -1,21 +1,21 @@
 Name:			opencryptoki
 Summary:		Implementation of the PKCS#11 (Cryptoki) specification v2.11
-Version:		3.10.0
-Release:		3%{?dist}.redsleeve
+Version:		3.11.1
+Release:		3%{?dist}
 License:		CPL
 Group:			System Environment/Base
-URL:			http://sourceforge.net/projects/opencryptoki
+URL:			https://github.com/opencryptoki/opencryptoki
 Source0:		https://github.com/opencryptoki/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
 # https://bugzilla.redhat.com/show_bug.cgi?id=732756
-Patch0:			%{name}-2.4-group.patch
-Patch1:			%{name}-3.10.0-coverity.patch
-# 1652856, EP11 token fails when using Strict-Session mode or VHSM-Mode
-Patch2:			%{name}-3.10.0-backport-1dae7c15e7bc3bb5b5aad72b851e0b9cd328bb0b.patch
-# 1657683, can't establish libica token in FIPS mode
-Patch3:			%{name}-227ffdba6b919e18b03fed59b07e2c0212b40303.patch
-
-# Use --no-undefined to debug missing symbols
-#Patch100:			%{name}-3.2-no-undefined.patch
+Patch0:			opencryptoki-3.11.0-group.patch
+# bz#1373833, change tmpfiles snippets from /var/lock/* to /run/lock/*
+Patch1:			opencryptoki-3.11.0-lockdir.patch
+# bz#1063763, inform the user that he is not in pkcs11 group
+Patch2:			opencryptoki-3.11.0-warn-user-not-in-pkcs11-group.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1739433
+Patch3:			opencryptoki-3.11.1-use-soname.patch
+# bz#1772108, Support tolerated new crypto cards
+Patch4:			opencryptoki-3.11.1-d6ba9ff61743ce869a5a677f6f77339642efef4b.patch
 
 Requires(pre):		coreutils
 BuildRequires:		gcc
@@ -185,7 +185,6 @@ configured with Enterprise PKCS#11 (EP11) firmware.
 
 
 %build
-export LIBS="-latomic "
 ./bootstrap.sh
 
 %configure --with-systemd=%{_unitdir}	\
@@ -232,6 +231,9 @@ exit 0
 
 %post
 %systemd_post pkcsslotd.service
+if test $1 -eq 1; then
+    %tmpfiles_create
+fi
 
 %preun
 %systemd_preun pkcsslotd.service
@@ -246,7 +248,7 @@ exit 0
 %doc doc/README.token_data
 %dir %{_sysconfdir}/%{name}
 %config(noreplace) %{_sysconfdir}/%{name}/%{name}.conf
-%{_prefix}/lib/tmpfiles.d/%{name}.conf
+%{_tmpfilesdir}/%{name}.conf
 %{_unitdir}/pkcsslotd.service
 %{_sbindir}/pkcsconf
 %{_sbindir}/pkcsslotd
@@ -257,8 +259,9 @@ exit 0
 %{_libdir}/opencryptoki/methods
 %{_libdir}/pkcs11/methods
 %dir %attr(770,root,pkcs11) %{_sharedstatedir}/%{name}
-%dir %attr(770,root,pkcs11) %{_localstatedir}/lock/%{name}
-%dir %attr(770,root,pkcs11) %{_localstatedir}/lock/%{name}/*
+%ghost %dir %attr(770,root,pkcs11) %{_rundir}/lock/%{name}
+%ghost %dir %attr(770,root,pkcs11) %{_rundir}/lock/%{name}/*
+%dir %attr(770,root,pkcs11) %{_localstatedir}/log/opencryptoki
 
 %files libs
 %license LICENSE
@@ -274,7 +277,6 @@ exit 0
 %{_libdir}/pkcs11/libopencryptoki.so
 %{_libdir}/pkcs11/PKCS11_API.so
 %{_libdir}/pkcs11/stdll
-%{_localstatedir}/log/opencryptoki
 
 %files devel
 %{_includedir}/%{name}/
@@ -331,8 +333,22 @@ exit 0
 
 
 %changelog
-* Tue May 21 2019 Jacco Ligthart <jacco@redsleeve.org> - 3.10.0-3.redsleeve
-- added atomic libs
+* Thu Nov 14 2019 Than Ngo <than@redhat.com> - 3.11.1-3
+- Resolves: #1772108, support tolerated new crypto cards
+
+* Mon Aug 26 2019 Dan Horák <dhorak@redhat.com> - 3.11.1-2
+- Resolves: #1739433, ICA HW token missing after the package update
+
+* Mon May 06 2019 Than Ngo <than@redhat.com> - 3.11.1-1
+- Resolves: #1706140, rebase to 3.11.1
+
+* Tue Mar 26 2019 Than Ngo <than@redhat.com> - 3.11.0-3
+- Resolves: #1667941, 3des tests failures due to FIPS incompatible test scenarios
+- Resolves: #1651731, ep11 token: enhanced IBM z14 functions
+- Resolves: #1651732, ep11 token: support m_*Single functions from ep11 lib
+- Resolves: #1525407, use CPACF hashes in ep11 token
+- Resolves: #1651238, rebase to 3.11.0
+- Resolves: #1682530, gating
 
 * Fri Dec 14 2018 Than Ngo <than@redhat.com> - 3.10.0-3
 - Resolves: #1657683, can't establish libica token in FIPS mode
