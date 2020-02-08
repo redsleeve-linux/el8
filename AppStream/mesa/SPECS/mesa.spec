@@ -1,23 +1,17 @@
 %global llvm_toolset %{nil}
 %global llvm_pkg_prefix %{nil}
 
-%ifarch s390x %{arm}
+%ifarch s390x
 %define with_hardware 0
-%define base_drivers swrast
 %else
 %define with_hardware 1
 %define with_vdpau 1
-# XXX maybe wrong...
-%define with_vaapi 0
-%define with_nine 0
-%define base_drivers swrast
 %endif
 
 %ifarch %{ix86} x86_64
 %define platform_drivers ,i965
 %define with_vmware 1
 %define with_xa     1
-%define with_omx    0
 %endif
 
 %ifarch %{ix86} x86_64
@@ -26,32 +20,28 @@
 %define with_vulkan 0
 %endif
 
-%ifarch aarch64 %{ix86} x86_64
-%define with_opencl 0
-%endif
-
 %ifarch %{arm} aarch64
-#define with_etnaviv   0
-#define with_freedreno 0
-%define with_omx       0
-#define with_vc4       0
 %define with_xa        1
 %endif
 
-%define dri_drivers --with-dri-drivers=%{?base_drivers}%{?platform_drivers}
+%ifnarch %{x86}
+%global with_asm 1
+%endif
+
+%global dri_drivers %{?platform_drivers}
 
 %if 0%{?with_vulkan}
-%define vulkan_drivers --with-vulkan-drivers=intel,radeon
+%define vulkan_drivers intel,amd
 %endif
 
 %global sanitize 0
 
-#global rctag rc2
+#global rctag rc5
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-Version:        18.3.1
-Release:        5%{?rctag:.%{rctag}}%{?dist}.redsleeve
+Version:        19.1.4
+Release:        3%{?rctag:.%{rctag}}%{?dist}
 
 License:        MIT
 URL:            http://www.mesa3d.org
@@ -65,20 +55,14 @@ Source3:        Makefile
 # Fedora opts to ignore the optional part of clause 2 and treat that code as 2 clause BSD.
 Source4:        Mesa-MLAA-License-Clarification-Email.txt
 
-Patch1:         0001-llvm-SONAME-without-version.patch
-Patch3:         0003-evergreen-big-endian.patch
-Patch10:        glvnd-fix-gl-dot-pc.patch
-Patch21:        mesa-18.0.2-gallium-osmesa.patch
-Patch30:        shmfix.patch
-Patch31:        0001-glx-fix-shared-memory-leak-in-X11.patch
-Patch32:        fix-llvmpipe-remote-shm.patch
+Source5:	glesv2.pc
 
+Patch0:		0001-mesa-add-support-for-CET-to-x86-x86-64-asm-files.patch
+Patch1:		0001-llvmpipe-use-ppc64le-ppc64-Large-code-model-for-JIT-.patch
 BuildRequires:  gcc
 BuildRequires:  gcc-c++
-BuildRequires:  automake
-BuildRequires:  autoconf
-BuildRequires:  libtool
 
+BuildRequires:  meson >= 0.45
 %if %{with_hardware}
 BuildRequires:  kernel-headers
 %endif
@@ -119,9 +103,6 @@ BuildRequires: libomxil-bellagio-devel
 %endif
 %if 0%{?with_opencl}
 BuildRequires: libclc-devel opencl-filesystem
-%endif
-%if 0%{?with_vulkan}
-BuildRequires: vulkan-devel
 %endif
 BuildRequires: python3-mako
 %ifarch %{valgrind_arches}
@@ -357,6 +338,7 @@ Headers for development with the Vulkan API.
 %endif
 
 cp %{SOURCE4} docs/
+cp %{SOURCE5} .
 
 pathfix.py -i %{__python3} -pn bin/*.py src/egl/generate/*.py \
                                src/gallium/tools/trace/*.py \
@@ -364,50 +346,48 @@ pathfix.py -i %{__python3} -pn bin/*.py src/egl/generate/*.py \
                                src/compiler/glsl/glcpp/tests/*.py
 
 %build
-autoreconf -vfi
 
-%ifarch %{ix86}
-%global asm_flags --disable-asm
-%endif
 export ASFLAGS="--generate-missing-build-notes=yes"
-%configure \
-    %{?asm_flags} \
-    --enable-libglvnd \
-    --enable-selinux \
-    --enable-gallium-osmesa \
-    --with-dri-driverdir=%{_libdir}/dri \
-    --enable-egl \
-    --disable-gles1 \
-    --enable-gles2 \
-    --disable-xvmc \
-    %{?with_vdpau:--enable-vdpau} \
-    --disable-va \
-    --with-platforms=x11,drm,surfaceless,wayland \
-    --enable-shared-glapi \
-    --enable-gbm \
-    --disable-omx-bellagio \
-    --disable-opencl \
-    --enable-glx-tls \
-    --enable-texture-float=yes \
-%if %{with_vulkan}
-    %{?vulkan_drivers} \
-%endif
-    --enable-llvm \
-    --enable-llvm-shared-libs \
-    --enable-dri \
-%if %{with_hardware}
-    %{?with_xa:--enable-xa} \
-    --disable-nine \
-    --with-gallium-drivers=%{?with_vmware:svga,}radeonsi,swrast,r600,%{?with_freedreno:freedreno,}%{?with_etnaviv:etnaviv,imx,}%{?with_vc4:vc4,}virgl,nouveau \
+%meson -Dcpp_std=gnu++11 \
+  -Db_ndebug=true \
+  -Dplatforms=x11,wayland,drm,surfaceless \
+  -Ddri3=true \
+  -Ddri-drivers=%{?dri_drivers} \
+%if 0%{?with_hardware}
+  -Dgallium-drivers=swrast,virgl,nouveau%{?with_vmware:,svga},radeonsi,r600%{?with_freedreno:,freedreno}%{?with_etnaviv:,etnaviv}%{?with_tegra:,tegra}%{?with_vc4:,vc4}%{?with_kmsro:,kmsro} \
 %else
-    --with-gallium-drivers=swrast,virgl \
+  -Dgallium-drivers=swrast,virgl \
 %endif
-    %{?dri_drivers}
-
-%make_build MKDEP=/bin/true V=1
+  -Dgallium-vdpau=%{?with_vdpau:true}%{!?with_vdpau:false} \
+  -Dgallium-xvmc=false \
+  -Dgallium-omx=%{?with_omx:bellagio}%{!?with_omx:disabled} \
+  -Dgallium-va=%{?with_vaapi:true}%{!?with_vaapi:false} \
+  -Dgallium-xa=%{?with_xa:true}%{!?with_xa:false} \
+  -Dgallium-nine=%{?with_nine:true}%{!?with_nine:false} \
+  -Dgallium-opencl=%{?with_opencl:icd}%{!?with_opencl:disabled} \
+  -Dvulkan-drivers=%{?vulkan_drivers} \
+  -Dshared-glapi=true \
+  -Dgles1=false \
+  -Dgles2=true \
+  -Dopengl=true \
+  -Dgbm=true \
+  -Dglx=dri \
+  -Degl=true \
+  -Dglvnd=true \
+  -Dasm=%{?with_asm:true}%{!?with_asm:false} \
+  -Dllvm=true \
+  -Dshared-llvm=true \
+  -Dvalgrind=%{?with_valgrind:true}%{!?with_valgrind:false} \
+  -Dbuild-tests=false \
+  -Dselinux=true \
+  -Dosmesa=gallium \
+  %{nil}
+%meson_build
 
 %install
-%make_install
+%meson_install
+
+install glesv2.pc %{buildroot}%{_libdir}/pkgconfig/
 
 # libvdpau opens the versioned name, don't bother including the unversioned
 rm -f %{buildroot}%{_libdir}/vdpau/*.so
@@ -622,8 +602,31 @@ done
 %endif
 
 %changelog
-* Tue May 21 2019 Jacco Ligthart <jacco@redsleeve.org> - 18.3.1-5.redsleeve
-- added %{arm} to the no hardware architectures
+* Mon Nov 25 2019 Ben Crocker <bcrocker@redhat.com> - 19.1.4-3
+- Patch to require Large CodeModel for llvmpipe on ppc64
+
+* Fri Aug 09 2019 Dave Airlie <airlied@redhat.com> - 19.1.4-2
+- Add CET support to asm files
+
+* Mon Aug 05 2019 Dave Airlie <airlied@redhat.com> - 19.1.4-1
+- mesa-19.1.4
+
+* Thu Jun 06 2019 Dave Airlie <airlied@redhat.com> - 19.1.0-0.5
+- mesa-19.1.0-rc5
+
+* Thu May 30 2019 Dave Airlie <airlied@redhat.com> - 19.1.0-0.4
+- mesa-19.1.0-rc4
+
+* Wed May 22 2019 Dave Airlie <airlied@redhat.com> - 19.1.0-0.3
+- mesa-19.1.0-rc3
+- disable asserts explicitly
+
+* Thu May 16 2019 Dave Airlie <airlied@redhat.com> - 19.1.0-0.2
+- mesa 19.1.0-rc2
+- bring back glesv2.pc
+
+* Fri May 10 2019 Dave Airlie <airlied@redhat.com> - 19.1.0-0.1
+- mesa 19.1.0-rc1
 
 * Thu Apr 04 2019 Dave Airlie <airlied@redhat.com> - 18.3.1-5
 - Fix remote shm detection again
