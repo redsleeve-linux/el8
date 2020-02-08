@@ -76,13 +76,6 @@
 %global include_debug_build 0
 %endif
 
-# Shenandoah HotSpot used everywhere, but built only on x86_64 and AArch64
-%ifarch x86_64 %{aarch64}
-%global use_shenandoah_hotspot 1
-%else
-%global use_shenandoah_hotspot 0
-%endif
-
 %if %{include_debug_build}
 %global build_loop2 %{debug_suffix}
 %else
@@ -102,11 +95,12 @@
 %endif
 
 %if %{bootstrap_build}
-%global targets bootcycle-images docs
+%global release_targets bootcycle-images zip-docs
 %else
-%global targets all
+%global release_targets images zip-docs
 %endif
-
+# No docs nor bootcycle for debug builds
+%global debug_targets images
 
 # Filter out flags from the optflags macro that cause problems with the OpenJDK build
 # We filter out -Wall which will otherwise cause HotSpot to produce hundreds of thousands of warnings (100+mb logs)
@@ -188,8 +182,6 @@
 %global archinstall %{_arch}
 %endif
 
-
-
 %ifarch %{jit_arches}
 %global with_systemtap 1
 %else
@@ -206,18 +198,37 @@
 # note, following three variables are sedded from update_sources if used correctly. Hardcode them rather there.
 %global shenandoah_project	aarch64-port
 %global shenandoah_repo		jdk8u-shenandoah
-%global shenandoah_revision    	aarch64-shenandoah-jdk8u201-b09
+%global shenandoah_revision    	aarch64-shenandoah-jdk8u232-b09
 # Define old aarch64/jdk8u tree variables for compatibility
 %global project         %{shenandoah_project}
 %global repo            %{shenandoah_repo}
 %global revision        %{shenandoah_revision}
 
+# e.g. aarch64-shenandoah-jdk8u212-b04-shenandoah-merge-2019-04-30 -> aarch64-shenandoah-jdk8u212-b04
+%global version_tag     %(VERSION=%{revision}; echo ${VERSION%%-shenandoah-merge*})
 # eg # jdk8u60-b27 -> jdk8u60 or # aarch64-jdk8u60-b27 -> aarch64-jdk8u60  (dont forget spec escape % by %%)
-%global whole_update    %(VERSION=%{revision}; echo ${VERSION%%-*})
+%global whole_update    %(VERSION=%{version_tag}; echo ${VERSION%%-*})
 # eg  jdk8u60 -> 60 or aarch64-jdk8u60 -> 60
 %global updatever       %(VERSION=%{whole_update}; echo ${VERSION##*u})
 # eg jdk8u60-b27 -> b27
-%global buildver        %(VERSION=%{revision}; echo ${VERSION##*-})
+%global buildver        %(VERSION=%{version_tag}; echo ${VERSION##*-})
+%global rpmrelease      2
+# Define milestone (EA for pre-releases, GA ("fcs") for releases)
+# Release will be (where N is usually a number starting at 1):
+# - 0.N%%{?extraver}%%{?dist} for EA releases,
+# - N%%{?extraver}{?dist} for GA releases
+%global is_ga           1
+%if %{is_ga}
+%global milestone          fcs
+%global milestone_version  %{nil}
+%global extraver %{nil}
+%global eaprefix %{nil}
+%else
+%global milestone          ea
+%global milestone_version  "-ea"
+%global extraver .%{milestone}
+%global eaprefix 0.
+%endif
 # priority must be 7 digits in total. The expression is workarounding tip
 %global priority        %(TIP=1800%{updatever};  echo ${TIP/tip/999})
 
@@ -377,7 +388,9 @@ alternatives \\
   --install %{_bindir}/javac javac %{sdkbindir -- %{?1}}/javac $PRIORITY  --family %{name}.%{_arch} \\
   --slave %{_jvmdir}/java java_sdk %{_jvmdir}/%{sdkdir -- %{?1}} \\
   --slave %{_bindir}/appletviewer appletviewer %{sdkbindir -- %{?1}}/appletviewer \\
+  --slave %{_bindir}/clhsdb clhsdb %{sdkbindir -- %{?1}}/clhsdb \\
   --slave %{_bindir}/extcheck extcheck %{sdkbindir -- %{?1}}/extcheck \\
+  --slave %{_bindir}/hsdb hsdb %{sdkbindir -- %{?1}}/hsdb \\
   --slave %{_bindir}/idlj idlj %{sdkbindir -- %{?1}}/idlj \\
   --slave %{_bindir}/jar jar %{sdkbindir -- %{?1}}/jar \\
   --slave %{_bindir}/jarsigner jarsigner %{sdkbindir -- %{?1}}/jarsigner \\
@@ -578,15 +591,15 @@ exit 0
 %config(noreplace) %{etcjavadir -- %{?1}}/lib/security/blacklisted.certs
 %config(noreplace) %{etcjavadir -- %{?1}}/lib/logging.properties
 %config(noreplace) %{etcjavadir -- %{?1}}/lib/calendars.properties
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/security/policy/unlimited/US_export_policy.jar
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/security/policy/unlimited/local_policy.jar
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/security/policy/limited/US_export_policy.jar
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/security/policy/limited/local_policy.jar
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/security/java.policy
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/security/java.security
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/security/blacklisted.certs
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/logging.properties
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/calendars.properties
+%{_jvmdir}/%{jredir -- %{?1}}/lib/security/policy/unlimited/US_export_policy.jar
+%{_jvmdir}/%{jredir -- %{?1}}/lib/security/policy/unlimited/local_policy.jar
+%{_jvmdir}/%{jredir -- %{?1}}/lib/security/policy/limited/US_export_policy.jar
+%{_jvmdir}/%{jredir -- %{?1}}/lib/security/policy/limited/local_policy.jar
+%{_jvmdir}/%{jredir -- %{?1}}/lib/security/java.policy
+%{_jvmdir}/%{jredir -- %{?1}}/lib/security/java.security
+%{_jvmdir}/%{jredir -- %{?1}}/lib/security/blacklisted.certs
+%{_jvmdir}/%{jredir -- %{?1}}/lib/logging.properties
+%{_jvmdir}/%{jredir -- %{?1}}/lib/calendars.properties
 %{_mandir}/man1/java-%{uniquesuffix -- %{?1}}.1*
 %{_mandir}/man1/jjs-%{uniquesuffix -- %{?1}}.1*
 %{_mandir}/man1/keytool-%{uniquesuffix -- %{?1}}.1*
@@ -598,8 +611,10 @@ exit 0
 %{_mandir}/man1/tnameserv-%{uniquesuffix -- %{?1}}.1*
 %{_mandir}/man1/unpack200-%{uniquesuffix -- %{?1}}.1*
 %{_mandir}/man1/policytool-%{uniquesuffix -- %{?1}}.1*
-%config(noreplace) %{_jvmdir}/%{jredir -- %{?1}}/lib/security/nss.cfg
+%{_jvmdir}/%{jredir -- %{?1}}/lib/security/nss.cfg
+%{_jvmdir}/%{jredir -- %{?1}}/lib/security/nss.fips.cfg
 %config(noreplace) %{etcjavadir -- %{?1}}/lib/security/nss.cfg
+%config(noreplace) %{etcjavadir -- %{?1}}/lib/security/nss.fips.cfg
 %ifarch %{jit_arches}
 %ifnarch %{power64}
 %attr(444, root, root) %ghost %{_jvmdir}/%{jredir -- %{?1}}/lib/%{archinstall}/server/classes.jsa
@@ -701,7 +716,9 @@ exit 0
 %dir %{_jvmdir}/%{sdkdir -- %{?1}}/include
 %dir %{_jvmdir}/%{sdkdir -- %{?1}}/lib
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/appletviewer
+%{_jvmdir}/%{sdkdir -- %{?1}}/bin/clhsdb
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/extcheck
+%{_jvmdir}/%{sdkdir -- %{?1}}/bin/hsdb
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/idlj
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/jar
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/jarsigner
@@ -834,7 +851,9 @@ Requires: libXcomposite%{?_isa}
 Requires: %{name}-headless%{?1}%{?_isa} = %{epoch}:%{version}-%{release}
 OrderWithRequires: %{name}-headless%{?1}%{?_isa} = %{epoch}:%{version}-%{release}
 # for java-X-openjdk package's desktop binding
+%if 0%{?fedora} || 0%{?rhel} >= 8
 Recommends: gtk2%{?_isa}
+%endif
 
 Provides: java-%{javaver}-%{origin} = %{epoch}:%{version}-%{release}
 
@@ -857,9 +876,6 @@ Requires: javapackages-filesystem
 Requires: tzdata-java >= 2015d
 # libsctp.so.1 is being `dlopen`ed on demand
 Requires: lksctp-tools%{?_isa}
-# there is a need to depend on the exact version of NSS
-Requires: nss%{?_isa} %{NSS_BUILDTIME_VERSION}
-Requires: nss-softokn%{?_isa} %{NSSSOFTOKN_BUILDTIME_VERSION}
 # tool to copy jdk's configs - should be Recommends only, but then only dnf/yum enforce it,
 # not rpm transaction and so no configs are persisted when pure rpm -u is run. It may be
 # considered as regression
@@ -876,7 +892,9 @@ Requires(postun): %{_sbindir}/alternatives
 # in version 1.7 and higher for --family switch
 Requires(postun):   chkconfig >= 1.7
 # for optional support of kernel stream control, card reader and printing bindings
+%if 0%{?fedora} || 0%{?rhel} >= 8
 Suggests: lksctp-tools%{?_isa}, pcsc-lite-devel%{?_isa}
+%endif
 
 # Standard JPackage base provides
 Provides: jre-headless%{?1} = %{epoch}:%{javaver}
@@ -971,7 +989,7 @@ Provides: java-%{javaver}-%{origin}-accessibility = %{epoch}:%{version}-%{releas
 
 Name:    java-%{javaver}-%{origin}
 Version: %{javaver}.%{updatever}.%{buildver}
-Release: 2%{?dist}.redsleeve
+Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}
 # java-1.5.0-ibm from jpackage.org set Epoch to 1 for unknown reasons
 # and this change was brought into RHEL-4. java-1.5.0-ibm packages
 # also included the epoch in their virtual provides. This created a
@@ -1033,6 +1051,9 @@ Source13: TestCryptoLevel.java
 # Ensure ECDSA is working
 Source14: TestECDSA.java
 
+# nss fips configuration file
+Source15: nss.fips.cfg.in
+
 Source20: repackReproduciblePolycies.sh
 
 # New versions of config files with aarch64 support. This is not upstream yet.
@@ -1053,12 +1074,12 @@ Source101: config.sub
 Patch1:   rh1648242-accessible_toolkit_crash_do_not_break_jvm.patch
 # Restrict access to java-atk-wrapper classes
 Patch3:   rh1648644-java_access_bridge_privileged_security.patch
-# PR1834, RH1022017: Reduce curves reported by SSL to those in NSS
-# Not currently suitable to go upstream as it disables curves
-# for all providers unconditionally
-Patch525: pr1834-rh1022017-reduce_ellipticcurvesextension_to_provide_only_three_nss_supported_nist_curves_23_24_25.patch
 # Turn on AssumeMP by default on RHEL systems
 Patch534: rh1648246-always_instruct_vm_to_assume_multiple_processors_are_available.patch
+# RH1648249: Add PKCS11 provider to java.security
+Patch1000: rh1648249-add_commented_out_nss_cfg_provider_to_java_security.patch
+# RH1655466: Support RHEL FIPS mode using SunPKCS11 provider
+Patch1001: rh1655466-global_crypto_and_fips.patch
 
 #############################################
 #
@@ -1079,27 +1100,13 @@ Patch523: pr2974-rh1337583-add_systemlineendings_option_to_keytool_and_use_line_
 # PR3083, RH1346460: Regression in SSL debug output without an ECC provider
 Patch528: pr3083-rh1346460-for_ssl_debug_return_null_instead_of_exception_when_theres_no_ecc_provider.patch
 # RH1566890: CVE-2018-3639
-Patch529: rh1566890_speculative_store_bypass_so_added_more_per_task_speculation_control_CVE_2018_3639.patch
+Patch529: rh1566890-CVE_2018_3639-speculative_store_bypass.patch
+Patch531: rh1566890-CVE_2018_3639-speculative_store_bypass_toggle.patch
 # PR3601: Fix additional -Wreturn-type issues introduced by 8061651
 Patch530: pr3601-fix_additional_Wreturn_type_issues_introduced_by_8061651_for_prims_jvm_cpp.patch
-# Support for building the SunEC provider with the system NSS installation
-# PR1983: Support using the system installation of NSS with the SunEC provider
-# PR2127: SunEC provider crashes when built using system NSS
-# PR2815: Race condition in SunEC provider with system NSS
-# PR2899: Don't use WithSeed versions of NSS functions as they don't fully process the seed
-# PR2934: SunEC provider throwing KeyException with current NSS
-# PR3479, RH1486025: ECC and NSS JVM crash
-Patch513: pr1983-rh1565658-support_using_the_system_installation_of_nss_with_the_sunec_provider_jdk8.patch
-Patch514: pr1983-rh1565658-support_using_the_system_installation_of_nss_with_the_sunec_provider_root8.patch
-Patch515: pr2127-sunec_provider_crashes_when_built_using_system_nss_thus_use_of_nss_memory_management_functions.patch
-Patch516: pr2815-race_condition_in_sunec_provider_with_system_nss_fix.patch
-Patch517: pr2899-dont_use_withseed_versions_of_nss_functions_as_they_dont_fully_process_the_seed.patch
-Patch518: pr2934-sunec_provider_throwing_keyexception_withine.separator_current_nss_thus_initialise_the_random_number_generator_and_feed_the_seed_to_it.patch
-Patch519: pr3479-rh1486025-sunec_provider_can_have_multiple_instances_leading_to_premature_nss_shutdown.patch
 # PR2888: OpenJDK should check for system cacerts database (e.g. /etc/pki/java/cacerts)
-Patch539: pr2888-openjdk_should_check_for_system_cacerts_database_eg_etc_pki_java_cacerts.patch
 # PR3575, RH1567204: System cacerts database handling should not affect jssecacerts
-Patch540: pr3575-rh1567204-system_cacerts_database_handling_no_longer_affect_jssecacerts.patch
+Patch539: pr2888-openjdk_should_check_for_system_cacerts_database_eg_etc_pki_java_cacerts.patch
 # PR3183, RH1340845: Support Fedora/RHEL8 system crypto policy
 Patch300: pr3183-rh1340845-support_fedora_rhel_system_crypto_policy.patch
 # PR3655: Allow use of system crypto policy to be disabled by the user
@@ -1122,10 +1129,8 @@ Patch103: pr3593-s390_use_z_format_specifier_for_size_t_arguments_as_size_t_not_
 Patch105: jdk8199936-pr3533-enable_mstackrealign_on_x86_linux_as_well_as_x86_mac_os_x.patch
 # AArch64: PR3519: Fix further functions with a missing return value (AArch64)
 Patch106: pr3519-fix_further_functions_with_a_missing_return_value.patch
-# AArch64: JDK-8160748: [AArch64] Inconsistent types for ideal_reg
-Patch107: jdk8160748-aarch64_ideal_reg.patch
-# AArch64: JDK-8189170: [AArch64] Add option to disable stack overflow checking in primordial thread for use with JNI_CreateJavaJVM
-Patch108: jdk8189170-aarch64_primordial_thread.patch
+# S390 ambiguous log2_intptr calls
+Patch107: s390-8214206_fix.patch
 
 #############################################
 #
@@ -1141,26 +1146,12 @@ Patch108: jdk8189170-aarch64_primordial_thread.patch
 Patch502: pr2462-resolve_disabled_warnings_for_libunpack_and_the_unpack200_binary.patch
 # S8154313: Generated javadoc scattered all over the place
 Patch400: jdk8154313-generated_javadoc_scattered_all_over_the_place.patch
-# 8197429, PR3546, RH153662{2,3}: 32 bit java app started via JNI crashes with larger stack sizes
-Patch561: jdk8197429-pr3546-rh1536622-increased_stack_guard_causes_segfaults_on_x86_32.patch
-# 8171000, PR3542, RH1402819: Robot.createScreenCapture() crashes in wayland mode
-Patch563: jdk8171000-pr3542-rh1402819-robot_createScreenCapture_crashes_in_wayland_mode.patch
-# 8197546, PR3542, RH1402819: Fix for 8171000 breaks Solaris + Linux builds
-Patch564: jdk8197546-pr3542-rh1402819-fix_for_8171000_breaks_solaris_linux_builds.patch
-# PR3559: Use ldrexd for atomic reads on ARMv7.
-Patch567: pr3559-use_ldrexd_for_atomic_reads_on_armv7_zero.patch
 # PR3591: Fix for bug 3533 doesn't add -mstackrealign to JDK code
 Patch571: jdk8199936-pr3591-enable_mstackrealign_on_x86_linux_as_well_as_x86_mac_os_x_jdk.patch
-# 8184309, PR3596: Build warnings from GCC 7.1 on Fedora 26
-Patch572: jdk8184309-pr3596-build_warnings_from_gcc_7_1_on_fedora_26.patch
-# 8141570, PR3548: Fix Zero interpreter build for --disable-precompiled-headers
-Patch573: jdk8141570-pr3548-fix_zero_interpreter_build_for_disable_precompiled_headers.patch
 # 8143245, PR3548: Zero build requires disabled warnings
 Patch574: jdk8143245-pr3548-zero_build_requires_disabled_warnings.patch
 # 8197981, PR3548: Missing return statement in __sync_val_compare_and_swap_8
 Patch575: jdk8197981-pr3548-missing_return_statement_in_sync_val_compare_and_swap_8.patch
-# 8064786, PR3599: Fix debug build after 8062808: Turn on the -Wreturn-type warning
-Patch576: jdk8064786-pr3599-fix_debug_build_after_8062808_Turn_on_the_wreturn_type_warning.patch
 # 8062808, PR3548: Turn on the -Wreturn-type warning
 Patch577: jdk8062808-pr3548-turn_on_the_wreturn_type_warning.patch
 # s390: JDK-8203030, Type fixing for s390
@@ -1169,64 +1160,16 @@ Patch102: jdk8203030-zero_s390_31_bit_size_t_type_conflicts_in_shared_code.patch
 Patch202: jdk8035341-allow_using_system_installed_libpng.patch
 # 8042159: Allow using a system-installed lcms2
 Patch203: jdk8042159-allow_using_system_installed_lcms2.patch
-# 8210761: libjsig is being compiled without optimization
-Patch620: jdk8210761-rh1632174-libjsig_is_being_compiled_without_optimization.patch
-# 8210647: libsaproc is being compiled without optimization
-Patch621: jdk8210647-rh1632174-libsaproc_is_being_compiled_without_optimization.patch
-# 8210416: [linux] Poor StrictMath performance due to non-optimized compilation
-Patch622: jdk8210416-rh1632174-compile_fdlibm_with_o2_ffp_contract_off_on_gcc_clang_arches.patch
-# 8210425: [x86] sharedRuntimeTrig/sharedRuntimeTrans compiled without optimization
-#          Upstream 8u part.
-Patch623: jdk8210425-rh1632174-01-compile_with_o2_and_ffp_contract_off_as_for_fdlibm.patch
-# 8210425: [x86] sharedRuntimeTrig/sharedRuntimeTrans compiled without optimization
-#          Aarch64-port 8u local part
-Patch624: jdk8210425-rh1632174-02-compile_with_o2_and_ffp_contract_off_as_for_fdlibm_aarch64.patch
-# 8210425: [x86] sharedRuntimeTrig/sharedRuntimeTrans compiled without optimization
-#          Zero part of the fix for (arm/s390 arches)
-Patch625: jdk8210425-rh1632174-03-compile_with_o2_and_ffp_contract_off_as_for_fdlibm_zero.patch
 
 #############################################
 #
-# Patches appearing in 8u202
+# Patches appearing in 8u222
 #
 # This section includes patches which are present
 # in the listed OpenJDK 8u release and should be
 # able to be removed once that release is out
 # and used by this RPM.
 #############################################
-# 8207057, PR3613: Enable debug information for assembly code files
-Patch206: jdk8207057-pr3613-no_debug_info_for_assembler_files_hotspot.patch
-Patch207: jdk8207057-pr3613-no_debug_info_for_assembler_files_root.patch
-# 8165852, PR3468: (fs) Mount point not found for a file which is present in overlayfs
-Patch210: jdk8165852-pr3468-mount_point_not_found_for_a_file_which_is_present_in_overlayfs.patch
-# S8073139, RH1191652; fix name of ppc64le architecture
-Patch601: jdk8073139-pr1758-rh1191652-ppc64_le_says_its_arch_is_ppc64_not_ppc64le_root.patch
-Patch602: jdk8073139-pr1758-rh1191652-ppc64_le_says_its_arch_is_ppc64_not_ppc64le_jdk.patch
-Patch603: jdk8073139-pr2236-rh1191652--use_ppc64le_as_the_arch_directory_on_that_platform_and_report_it_in_os_arch_aarch64_forest.patch
-# 8044235: src.zip should include all sources
-Patch7:   jdk8044235-src_zip_should_include_all_sources.patch
-# JDK-8172850, RH1640127: Anti-dependency on membar causes crash in register allocator due to invalid instruction scheduling
-Patch583: jdk8172850-rh1640127-01-register_allocator_crash.patch
-# JDK-8209639, RH1640127: assert failure in coalesce.cpp: attempted to spill a non-spillable item
-Patch584: jdk8209639-rh1640127-02-coalesce_attempted_spill_non_spillable.patch
-# JDK-8131048, PR3574, RH1498936: ppc implement CRC32 intrinsic
-Patch586: jdk8131048-pr3574-rh1498936-ppc_crc32.patch
-# JDK-8164920, PR3574, RH1498936: ppc: enhancement of CRC32 intrinsic
-Patch587: jdk8164920-pr3574-rh1498936-ppc_crc32_enhancement.patch
-
-#############################################
-#
-# Patches appearing in 8u211
-#
-# This section includes patches which are present
-# in the listed OpenJDK 8u release and should be
-# able to be removed once that release is out
-# and used by this RPM.
-#############################################
-# JDK-8029661, PR3642, RH1477159: Support TLS v1.2 algorithm in SunPKCS11 provider
-Patch585: jdk8029661-pr3642-rh1477159-add_tlsv1_2_support_to_pkcs11_provider.patch
-# JDK-8145096, PR3693: Undefined behaviour in HotSpot
-Patch588: jdk8145096-pr3693-undefined_behaviour.patch
 
 #############################################
 #
@@ -1247,8 +1190,6 @@ Patch201: jdk8043805-allow_using_system_installed_libjpeg.patch
 # and should be upstreamed to the appropriate
 # trees.
 #############################################
-# PR3634: Shenandoah still broken on s390 with aarch64-shenandoah-jdk8u181-b16
-Patch582: pr3634-fix_shenandoah_for_size_t_on_s390.patch
 
 #############################################
 #
@@ -1257,7 +1198,6 @@ Patch582: pr3634-fix_shenandoah_for_size_t_on_s390.patch
 # This section includes patches to code other
 # that from OpenJDK.
 #############################################
-Patch1000: rh1648249-add_commented_out_nss_cfg_provider_to_java_security.patch
 
 #############################################
 #
@@ -1272,19 +1212,20 @@ BuildRequires: cups-devel
 BuildRequires: desktop-file-utils
 # elfutils only are OK for build without AOT
 BuildRequires: elfutils-devel
-BuildRequires: fontconfig
+BuildRequires: fontconfig-devel
 BuildRequires: freetype-devel
 BuildRequires: giflib-devel
 BuildRequires: gcc-c++
 BuildRequires: gdb
-BuildRequires: gtk2-devel
 BuildRequires: lcms2-devel
 BuildRequires: libjpeg-devel
 BuildRequires: libpng-devel
 BuildRequires: libxslt
 BuildRequires: libX11-devel
+BuildRequires: libXext-devel
 BuildRequires: libXi-devel
 BuildRequires: libXinerama-devel
+BuildRequires: libXrender-devel
 BuildRequires: libXt-devel
 BuildRequires: libXtst-devel
 # Requirements for setting up the nss.cfg
@@ -1308,8 +1249,6 @@ BuildRequires: libffi-devel
 BuildRequires: tzdata-java >= 2015d
 # Earlier versions have a bug in tree vectorization on PPC
 BuildRequires: gcc >= 4.8.3-8
-# Build requirements for SunEC system NSS support
-BuildRequires: nss-softokn-freebl-devel >= 3.16.1
 
 %if %{with_systemtap}
 BuildRequires: systemtap-sdt-devel
@@ -1431,6 +1370,7 @@ The java-%{origin}-src-slowdebug sub-package contains the complete %{origin_nice
 Summary: %{origin_nice} %{majorver} API documentation
 Group:   Documentation
 Requires: javapackages-filesystem
+Obsoletes: javadoc-debug
 BuildArch: noarch
 
 %{java_javadoc_rpo %{nil}}
@@ -1444,6 +1384,7 @@ The %{origin_nice} %{majorver} API documentation.
 Summary: %{origin_nice} %{majorver} API documentation compressed in single archive
 Group:   Documentation
 Requires: javapackages-filesystem
+Obsoletes: javadoc-zip-debug
 BuildArch: noarch
 
 %{java_javadoc_rpo %{nil}}
@@ -1451,33 +1392,6 @@ BuildArch: noarch
 %description javadoc-zip
 The %{origin_nice} %{majorver} API documentation compressed in single archive.
 %endif
-
-%if %{include_debug_build}
-%package javadoc-slowdebug
-Summary: %{origin_nice} %{majorver} API documentation %{for_debug}
-Group:   Documentation
-Requires: javapackages-filesystem
-BuildArch: noarch
-
-%{java_javadoc_rpo -- %{debug_suffix_unquoted}}
-
-%description javadoc-slowdebug
-The %{origin_nice} %{majorver} API documentation %{for_debug}.
-%endif
-
-%if %{include_debug_build}
-%package javadoc-zip-slowdebug
-Summary: %{origin_nice} %{majorver} API documentation compressed in single archive %{for_debug}
-Group:   Documentation
-Requires: javapackages-filesystem
-BuildArch: noarch
-
-%{java_javadoc_rpo -- %{debug_suffix_unquoted}}
-
-%description javadoc-zip-slowdebug
-The %{origin_nice} %{majorver} API documentation compressed in single archive %{for_debug}.
-%endif
-
 
 %if %{include_normal_build}
 %package accessibility
@@ -1523,6 +1437,10 @@ if [ %{include_debug_build} -eq 0 -a  %{include_normal_build} -eq 0 ] ; then
   echo "You have disabled both include_debug_build and include_normal_build. That is a no go."
   exit 13
 fi
+
+echo "Update version: %{updatever}"
+echo "Build number: %{buildver}"
+echo "Milestone: %{milestone}"
 %setup -q -c -n %{uniquesuffix ""} -T -a 0
 # https://bugzilla.redhat.com/show_bug.cgi?id=1189084
 prioritylength=`expr length %{priority}`
@@ -1552,80 +1470,44 @@ sh %{SOURCE12}
 %patch202
 %patch203
 
-# Debugging fixes
-%patch206
-%patch207
-%patch210
-
+# System security policy fixes
 %patch300
 %patch301
 
 %patch1
 %patch3
 %patch5
-%patch7
 
 # s390 build fixes
 %patch102
 %patch103
+%patch107
 
 # AArch64 fixes
 %patch106
-%patch107
-%patch108
 
 # x86 fixes
 %patch105
-
-# ppc64le fixes
-%patch603
-%patch601
-%patch602
 
 # Upstreamable fixes
 %patch502
 %patch504
 %patch512
-%patch513
-%patch514
-%patch515
-%patch516
-%patch517
-%patch518
-%patch519
 %patch400
 %patch523
 %patch528
 %patch529
+%patch531
 %patch530
-%patch561
-%patch563
-%patch564
-%patch567
 %patch571
-%patch572
-%patch573
 %patch574
 %patch575
-%patch576
 %patch577
-%patch620
-%patch621
-%patch622
-%patch623
-%patch624
-%patch625
-%patch583
-%patch584
-%patch585
-%patch586
-%patch587
-%patch588
 
 # RPM-only fixes
-%patch525
 %patch539
-%patch540
+%patch1000
+%patch1001
 
 # RHEL-only patches
 %if ! 0%{?fedora} && 0%{?rhel} <= 7
@@ -1633,9 +1515,6 @@ sh %{SOURCE12}
 %endif
 
 # Shenandoah patches
-%patch582
-
-%patch1000
 
 # Extract systemtap tapsets
 %if %{with_systemtap}
@@ -1681,6 +1560,9 @@ done
 # Setup nss.cfg
 sed -e "s:@NSS_LIBDIR@:%{NSS_LIBDIR}:g" %{SOURCE11} > nss.cfg
 
+# Setup nss.fips.cfg
+sed -e "s:@NSS_LIBDIR@:%{NSS_LIBDIR}:g" %{SOURCE15} > nss.fips.cfg
+sed -i -e "s:@NSS_SECMOD@:/etc/pki/nssdb:g" nss.fips.cfg
 
 %build
 # How many CPU's do we have?
@@ -1701,8 +1583,8 @@ export CFLAGS="$CFLAGS -mieee"
 # We use ourcppflags because the OpenJDK build seems to
 # pass EXTRA_CFLAGS to the HotSpot C++ compiler...
 # Explicitly set the C++ standard as the default has changed on GCC >= 6
-EXTRA_CFLAGS="%ourcppflags -std=gnu++98 -Wno-error -fno-delete-null-pointer-checks -fno-lifetime-dse"
-EXTRA_CPP_FLAGS="%ourcppflags -std=gnu++98 -fno-delete-null-pointer-checks -fno-lifetime-dse"
+EXTRA_CFLAGS="%ourcppflags -Wno-error"
+EXTRA_CPP_FLAGS="%ourcppflags"
 
 %ifarch %{power64} ppc
 # fix rpmlint warnings
@@ -1728,20 +1610,17 @@ top_dir_abs_path=$(pwd)/%{top_level_dir_name}
 mkdir -p %{buildoutputdir -- $suffix}
 pushd %{buildoutputdir -- $suffix}
 
-NSS_LIBS="%{NSS_LIBS} -lfreebl" \
-NSS_CFLAGS="%{NSS_CFLAGS}" \
 bash ../../configure \
 %ifnarch %{jit_arches}
     --with-jvm-variants=zero \
 %endif
     --with-native-debug-symbols=internal \
-    --with-milestone="fcs" \
+    --with-milestone=%{milestone} \
     --with-update-version=%{updatever} \
     --with-build-number=%{buildver} \
     --with-boot-jdk=/usr/lib/jvm/java-openjdk \
     --with-debug-level=$debugbuild \
     --enable-unlimited-crypto \
-    --enable-system-nss \
     --with-zlib=system \
     --with-libjpeg=system \
     --with-giflib=system \
@@ -1756,13 +1635,17 @@ bash ../../configure \
 cat spec.gmk
 cat hotspot-spec.gmk
 
+# Debug builds don't need same targets as release for
+# build speed-up
+maketargets="%{release_targets}"
+if echo $debugbuild | grep -q "debug" ; then
+  maketargets="%{debug_targets}"
+fi
 make \
     JAVAC_FLAGS=-g \
     LOG=trace \
     SCTP_WERROR= \
-    %{targets} || ( pwd; find $top_dir_abs_path -name "hs_err_pid*.log" | xargs cat && false )
-
-make zip-docs
+    $maketargets || ( pwd; find $top_dir_abs_path -name "hs_err_pid*.log" | xargs cat && false )
 
 # the build (erroneously) removes read permissions from some jars
 # this is a regression in OpenJDK 7 (our compiler):
@@ -1786,6 +1669,9 @@ export JAVA_HOME=$(pwd)/%{buildoutputdir -- $suffix}/images/%{jdkimage}
 
 # Install nss.cfg right away as we will be using the JRE above
 install -m 644 nss.cfg $JAVA_HOME/jre/lib/security/
+
+# Install nss.fips.cfg: NSS configuration for global FIPS mode (crypto-policies)
+install -m 644 nss.fips.cfg $JAVA_HOME/jre/lib/security/
 
 # Use system-wide tzdata
 rm $JAVA_HOME/jre/lib/tzdb.dat
@@ -1859,18 +1745,18 @@ done
 # Using line number 1 might cause build problems. See:
 # https://bugzilla.redhat.com/show_bug.cgi?id=1539664
 # https://bugzilla.redhat.com/show_bug.cgi?id=1538767
-#gdb -q "$JAVA_HOME/bin/java" <<EOF | tee gdb.out
-#handle SIGSEGV pass nostop noprint
-#handle SIGILL pass nostop noprint
-#set breakpoint pending on
-#break javaCalls.cpp:58
-#commands 1
-#backtrace
-#quit
-#end
-#run -version
-#EOF
-#grep 'JavaCallWrapper::JavaCallWrapper' gdb.out
+gdb -q "$JAVA_HOME/bin/java" <<EOF | tee gdb.out
+handle SIGSEGV pass nostop noprint
+handle SIGILL pass nostop noprint
+set breakpoint pending on
+break javaCalls.cpp:58
+commands 1
+backtrace
+quit
+end
+run -version
+EOF
+grep 'JavaCallWrapper::JavaCallWrapper' gdb.out
 
 # Check src.zip has all sources. See RHBZ#1130490
 jar -tf $JAVA_HOME/src.zip | grep 'sun.misc.Unsafe'
@@ -1958,12 +1844,13 @@ mkdir -p $RPM_BUILD_ROOT%{_jvmdir}/%{jredir -- $suffix}/lib/%{archinstall}/clien
 
 popd
 
-
-# Install Javadoc documentation
-install -d -m 755 $RPM_BUILD_ROOT%{_javadocdir}
-cp -a %{buildoutputdir -- $suffix}/docs $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir -- $suffix}
-built_doc_archive=`echo "jdk-%{javaver}_%{updatever}$suffix-%{buildver}-docs.zip" | sed  s/slowdebug/debug/`
-cp -a %{buildoutputdir -- $suffix}/bundles/$built_doc_archive  $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir -- $suffix}.zip
+if ! echo $suffix | grep -q "debug" ; then
+  # Install Javadoc documentation
+  install -d -m 755 $RPM_BUILD_ROOT%{_javadocdir}
+  cp -a %{buildoutputdir -- $suffix}/docs $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir -- $suffix}
+  built_doc_archive=`echo "jdk-%{javaver}_%{updatever}%{milestone_version}$suffix-%{buildver}-docs.zip" | sed  s/slowdebug/debug/`
+  cp -a %{buildoutputdir -- $suffix}/bundles/$built_doc_archive  $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir -- $suffix}.zip
+fi
 
 # Install icons and menu entries
 for s in 16 24 32 48 ; do
@@ -2025,7 +1912,7 @@ touch -t 201401010000 $RPM_BUILD_ROOT/%{_jvmdir}/%{jredir -- $suffix}/lib/securi
 # moving config files to /etc
 mkdir -p $RPM_BUILD_ROOT/%{etcjavadir -- $suffix}/lib/security/policy/unlimited/
 mkdir -p $RPM_BUILD_ROOT/%{etcjavadir -- $suffix}/lib/security/policy/limited/
-for file in lib/security/cacerts lib/security/policy/unlimited/US_export_policy.jar lib/security/policy/unlimited/local_policy.jar lib/security/policy/limited/US_export_policy.jar lib/security/policy/limited/local_policy.jar lib/security/java.policy lib/security/java.security lib/security/blacklisted.certs lib/logging.properties lib/calendars.properties lib/security/nss.cfg ; do
+for file in lib/security/cacerts lib/security/policy/unlimited/US_export_policy.jar lib/security/policy/unlimited/local_policy.jar lib/security/policy/limited/US_export_policy.jar lib/security/policy/limited/local_policy.jar lib/security/java.policy lib/security/java.security lib/security/blacklisted.certs lib/logging.properties lib/calendars.properties lib/security/nss.cfg lib/security/nss.fips.cfg ; do
   mv      $RPM_BUILD_ROOT/%{_jvmdir}/%{jredir -- $suffix}/$file   $RPM_BUILD_ROOT/%{etcjavadir -- $suffix}/$file
   ln -sf  %{etcjavadir -- $suffix}/$file                          $RPM_BUILD_ROOT/%{_jvmdir}/%{jredir -- $suffix}/$file
 done
@@ -2145,17 +2032,6 @@ require "copy_jdk_configs.lua"
 %posttrans  devel-slowdebug
 %{posttrans_devel -- %{debug_suffix_unquoted}}
 
-%post javadoc-slowdebug
-%{post_javadoc -- %{debug_suffix_unquoted}}
-
-%postun javadoc-slowdebug
-%{postun_javadoc -- %{debug_suffix_unquoted}}
-
-%post javadoc-zip-slowdebug
-%{post_javadoc_zip -- %{debug_suffix_unquoted}}
-
-%postun javadoc-zip-slowdebug
-%{postun_javadoc_zip -- %{debug_suffix_unquoted}}
 %endif
 
 %if %{include_normal_build}
@@ -2213,19 +2089,236 @@ require "copy_jdk_configs.lua"
 %files src-slowdebug
 %{files_src -- %{debug_suffix_unquoted}}
 
-%files javadoc-slowdebug
-%{files_javadoc -- %{debug_suffix_unquoted}}
-
-%files javadoc-zip-slowdebug
-%{files_javadoc_zip -- %{debug_suffix_unquoted}}
-
 %files accessibility-slowdebug
 %{files_accessibility -- %{debug_suffix_unquoted}}
 %endif
 
 %changelog
-* Sat May 25 2019 Jacco Ligthart <jacco@redsleeve.org> - 1:1.8.0.201.b09-2.redsleeve
-- removed the gdb section of the SPEC file
+* Fri Oct 25 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b09-2
+- Disable FIPS mode support unless com.redhat.fips is set to "true".
+- Resolves: rhbz#1655466
+
+* Fri Oct 11 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b09-1
+- Update to aarch64-shenandoah-jdk8u232-b09.
+- Switch to GA mode for final release.
+- Remove PR1834/RH1022017 which is now handled by JDK-8228825 upstream.
+- Resolves: rhbz#1753423
+
+* Fri Oct 11 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b08-0.1.ea
+- Update to aarch64-shenandoah-jdk8u232-b08.
+- Resolves: rhbz#1753423
+
+* Fri Oct 11 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b05-0.2.ea
+- Update to aarch64-shenandoah-jdk8u232-b05-shenandoah-merge-2019-09-09.
+- Resolves: rhbz#1753423
+
+* Thu Oct 10 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b05-0.1.ea
+- Update to aarch64-shenandoah-jdk8u232-b05.
+- Drop upstreamed patch JDK-8141570/PR3548.
+- Adjust context of JDK-8143245/PR3548 to apply against upstream JDK-8141570.
+- Resolves: rhbz#1753423
+
+* Mon Oct 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b01-0.1.ea
+- Update to aarch64-shenandoah-jdk8u232-b01.
+- Switch to EA mode.
+- Drop JDK-8210761/RH1632174 as now upstream.
+- Drop JDK-8223219 as now upstream.
+- JDK-8226870 removed clhsdb and hdsdb from the JRE bin directory, so we should do likewise.
+- Add alternatives support for these two new SDK binaries.
+- Resolves: rhbz#1753423
+
+* Fri Sep 27 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b10-3
+- SunPKCS11 runtime provider name is a concatenation of "SunPKCS11-" and the name in the config file.
+- Change nss.fips.cfg config name to "NSS-FIPS" to avoid confusion with nss.cfg.
+- Resolves: rhbz#1750752
+
+* Wed Aug 21 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b10-2
+- nss.fips.cfg needs to be moved to %%{etcjavadir} and symlinked into the JDK, like nss.cfg
+- Resolves: rhbz#1655466
+
+* Thu Aug 15 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b10-2
+- Backport FIPS mode patch to java-1.8.0-openjdk, simplifying provider removal.
+- Resolves: rhbz#1655466
+
+* Thu Aug 15 2019 Martin Balao <mbalao@redhat.com> - 1:1.8.0.222.b10-2
+- Support the FIPS mode crypto policy on RHEL 8.
+- Resolves: rhbz#1655466
+
+* Thu Jul 11 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b10-1
+- Update to aarch64-shenandoah-jdk8u222-b10.
+- Resolves: rhbz#1724452
+
+* Tue Jul 09 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b09-2
+- Drop NSS runtime dependencies and patches to link against it.
+- Resolves: rhbz#1678557
+
+* Tue Jul 09 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b09-1
+- Update to aarch64-shenandoah-jdk8u222-b09.
+- Switch to GA mode for final release.
+- Resolves: rhbz#1724452
+
+* Tue Jul 09 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b08-0.1.ea
+- Update to aarch64-shenandoah-jdk8u222-b08.
+- Adjust PR3083/RH134640 to apply after JDK-8182999
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b07-0.1.ea
+- Update to aarch64-shenandoah-jdk8u222-b07 and Shenandoah merge 2019-06-13.
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b06-0.1.ea
+- Update to aarch64-shenandoah-jdk8u222-b06.
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b05-0.1.ea
+- Update to aarch64-shenandoah-jdk8u222-b05.
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b04-0.1.ea
+- Update to aarch64-shenandoah-jdk8u222-b04.
+- Drop remaining JDK-8210425/RH1632174 patch now AArch64 part is upstream.
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b03-0.1.ea
+- Update to aarch64-shenandoah-jdk8u222-b03.
+- Drop 8210425 patches applied upstream. Still need to add AArch64 version in aarch64/shenandoah-jdk8u.
+- Re-generate JDK-8141570 & JDK-8143245 patches due to 8210425 zeroshark.make changes.
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b02-0.1.ea
+- Update to aarch64-shenandoah-jdk8u222-b02.
+- Drop 8064786/PR3599 & 8210416/RH1632174 as applied upstream (8064786 silently in 8176100).
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b01-2
+- Switch to EA mode
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b01-1
+- fontconfig build requirement should be fontconfig-devel, previously masked by Gtk2+ dependency
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b01-1
+- Allow Recommends and Suggests on Fedora platforms too.
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b01-1
+- Add missing build requirements for libXext-devel and libXrender-devel, previously masked by Gtk2+ dependency.
+- Resolves: rhbz#1724452
+
+* Sun Jul 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b01-1
+- Add new tarball to new format sources file.
+- Resolves: rhbz#1724452
+
+* Sun Jul 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b01-1
+- Drop unnecessary build requirement on gtk2-devel, as OpenJDK searches for Gtk+ at runtime.
+- Resolves: rhbz#1724452
+
+* Sun Jul 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b01-1
+- Make use of Recommends and Suggests dependent on RHEL 8+ environment.
+- Resolves: rhbz#1724452
+
+* Sun Jul 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.222.b01-1
+- Update to aarch64-shenandoah-jdk8u222-b01.
+- Refactor PR2888 after inclusion of 8129988 upstream. Now includes PR3575.
+- Drop 8171000 & 8197546 as applied upstream.
+- Resolves: rhbz#1724452
+
+* Wed Jul 03 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.212.b04-5
+- Obsolete javadoc-debug and javadoc-debug-zip packages via javadoc and javadoc-zip respectively.
+- Resolves: rhbz#1724452
+
+* Wed Jul 03 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:1.8.0.212.b04-5
+- Include 'ea' designator in Release when appropriate.
+- Resolves: rhbz#1724452
+
+* Wed Jul 03 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:1.8.0.212.b04-5
+- Don't produce javadoc/javadoc-zip sub packages for the debug variant build.
+- Don't perform a bootcycle build for the debug variant build.
+- Resolves: rhbz#1724452
+
+* Wed Jul 03 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.212.b04-5
+- Handle milestone as variables so we can alter it easily and set the docs zip filename appropriately.
+- Drop unused use_shenandoah_hotspot variable.
+- Resolves: rhbz#1724452
+
+* Fri Jun 14 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.212.b04-4
+- Update to aarch64-shenandoah-jdk8u212-b04-shenandoah-merge-2019-04-30.
+- Update version logic to handle -shenandoah* tag suffix.
+- Drop PR3634 as applied upstream.
+- Adjust 8214206 fix for S390 as BinaryMagnitudeSeq moved to shenandoahNumberSeq.cpp
+- Update 8214206 to use log2_long rather than casting to intptr_t, which may be smaller than size_t.
+- Resolves: rhbz#1688365
+- Resolves: rhbz#1688382
+
+* Thu May 02 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.212.b04-3
+- Remove additions to EXTRA_CFLAGS and EXTRA_CPP_FLAGS which are now made by upstream.
+- Resolves: rhbz#1693468
+
+* Thu May 02 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.212.b04-2
+- Add JDK-8223219 to avoid -fstack-protector overriding -fstack-protector-strong
+- Resolves: rhbz#1693468
+
+* Thu Apr 11 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.212.b04-1
+- Update to aarch64-shenandoah-jdk8u212-b04.
+- Resolves: rhbz#1693468
+
+* Thu Apr 11 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.212.b03-1
+- Update to aarch64-shenandoah-jdk8u212-b03.
+- Resolves: rhbz#1693468
+
+* Thu Apr 11 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.212.b02-1
+- Add new clhsdb and hsdb binaries.
+- Resolves: rhbz#1693468
+
+* Tue Apr 09 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.212.b02-1
+- Update to aarch64-shenandoah-jdk8u212-b02.
+- Remove patches included upstream
+  - JDK-8197429/PR3546/RH153662{2,3}
+  - JDK-8184309/PR3596
+  - JDK-8210647/RH1632174
+  - JDK-8029661/PR3642/RH1477159
+  - JDK-8145096/PR3693
+- Re-generate patches
+  - JDK-8203030
+- Add casts to resolve s390 ambiguity in calls to log2_intptr
+- Resolves: rhbz#1693468
+
+* Sun Apr 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.202.b08-1
+- Update to aarch64-shenandoah-jdk8u202-b08.
+- Remove patches included upstream
+  - JDK-8211387/PR3559
+  - JDK-8207057/PR3613
+  - JDK-8165852/PR3468
+  - JDK-8073139/PR1758/RH1191652
+  - JDK-8044235
+  - JDK-8172850/RH1640127
+  - JDK-8209639/RH1640127
+  - JDK-8131048/PR3574/RH1498936
+  - JDK-8164920/PR3574/RH1498936
+- Re-generate patches
+  - JDK-8210647/RH1632174
+- Resolves: rhbz#1693468
+
+* Thu Apr 04 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.201.b13-1
+- Update to aarch64-shenandoah-jdk8u201-b13.
+- Drop JDK-8160748 & JDK-8189170 AArch64 patches now applied upstream.
+- Resolves: rhbz#1693468
+
+* Tue Apr 02 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:1.8.0.201.b09-5
+- Update patch for RH1566890.
+  - Renamed rh1566890_speculative_store_bypass_so_added_more_per_task_speculation_control_CVE_2018_3639 to
+    rh1566890-CVE_2018_3639-speculative_store_bypass.patch
+  - Added dependent patch,
+    rh1566890-CVE_2018_3639-speculative_store_bypass_toggle.patch
+- Resolves: rhbz#1693468
+
+* Tue Mar 26 2019 Jiri Vanek <jvanek@redhat.com> - 1:1.8.0.201.b09-4
+- added gating
+
+* Mon Feb 11 2019 Jiri Vanek <jvanek@redhat.com> - 1:1.8.0.201.b09-3
+- removed config declaration from links to config files
+- Resolves: rhbz#1661577
 
 * Thu Feb 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.201.b09-2
 - Fix invalid dates earlier in the ChangeLog.
