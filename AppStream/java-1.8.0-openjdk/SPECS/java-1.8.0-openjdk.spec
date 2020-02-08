@@ -989,7 +989,7 @@ Provides: java-%{javaver}-%{origin}-accessibility = %{epoch}:%{version}-%{releas
 
 Name:    java-%{javaver}-%{origin}
 Version: %{javaver}.%{updatever}.%{buildver}
-Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}
+Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}.redsleeve
 # java-1.5.0-ibm from jpackage.org set Epoch to 1 for unknown reasons
 # and this change was brought into RHEL-4. java-1.5.0-ibm packages
 # also included the epoch in their virtual provides. This created a
@@ -1745,18 +1745,18 @@ done
 # Using line number 1 might cause build problems. See:
 # https://bugzilla.redhat.com/show_bug.cgi?id=1539664
 # https://bugzilla.redhat.com/show_bug.cgi?id=1538767
-gdb -q "$JAVA_HOME/bin/java" <<EOF | tee gdb.out
-handle SIGSEGV pass nostop noprint
-handle SIGILL pass nostop noprint
-set breakpoint pending on
-break javaCalls.cpp:58
-commands 1
-backtrace
-quit
-end
-run -version
-EOF
-grep 'JavaCallWrapper::JavaCallWrapper' gdb.out
+#gdb -q "$JAVA_HOME/bin/java" <<EOF | tee gdb.out
+#handle SIGSEGV pass nostop noprint
+#handle SIGILL pass nostop noprint
+#set breakpoint pending on
+#break javaCalls.cpp:58
+#commands 1
+#backtrace
+#quit
+#end
+#run -version
+#EOF
+#grep 'JavaCallWrapper::JavaCallWrapper' gdb.out
 
 # Check src.zip has all sources. See RHBZ#1130490
 jar -tf $JAVA_HOME/src.zip | grep 'sun.misc.Unsafe'
@@ -2094,6 +2094,9 @@ require "copy_jdk_configs.lua"
 %endif
 
 %changelog
+* Sun Nov 17 2019 Jacco Ligthart <jacco@redsleeve.org> - 1:1.8.0.232.b09-2.redsleeve
+- removed the gdb section of the SPEC file
+
 * Fri Oct 25 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b09-2
 - Disable FIPS mode support unless com.redhat.fips is set to "true".
 - Resolves: rhbz#1655466
