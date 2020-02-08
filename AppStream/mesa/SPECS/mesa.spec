@@ -1,7 +1,7 @@
 %global llvm_toolset %{nil}
 %global llvm_pkg_prefix %{nil}
 
-%ifarch s390x
+%ifarch s390x %{arm}
 %define with_hardware 0
 %else
 %define with_hardware 1
@@ -20,7 +20,7 @@
 %define with_vulkan 0
 %endif
 
-%ifarch %{arm} aarch64
+%ifarch aarch64
 %define with_xa        1
 %endif
 
@@ -41,7 +41,7 @@
 Name:           mesa
 Summary:        Mesa graphics libraries
 Version:        19.1.4
-Release:        3%{?rctag:.%{rctag}}%{?dist}
+Release:        3%{?rctag:.%{rctag}}%{?dist}.redsleeve
 
 License:        MIT
 URL:            http://www.mesa3d.org
@@ -602,6 +602,9 @@ done
 %endif
 
 %changelog
+* Fri Feb 07 2020 Jacco Ligthart <jacco@redsleeve.org> - 19.1.4-3.redsleeve
+- added %{arm} to the no hardware architectures
+
 * Mon Nov 25 2019 Ben Crocker <bcrocker@redhat.com> - 19.1.4-3
 - Patch to require Large CodeModel for llvmpipe on ppc64
 
