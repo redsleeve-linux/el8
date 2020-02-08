@@ -77,7 +77,7 @@
 %global ppc64le         ppc64le
 %global ppc64be         ppc64 ppc64p7
 %global multilib_arches %{power64} sparc64 x86_64
-%global jit_arches      %{ix86} x86_64 sparcv9 sparc64 %{aarch64} %{power64} s390x
+%global jit_arches      %{ix86} x86_64 sparcv9 sparc64 %{aarch64} %{power64} %{arm} s390x
 %global aot_arches      x86_64 %{aarch64}
 
 # By default, we build a debug build during main build on JIT architectures
@@ -121,10 +121,12 @@
 %endif
 
 %if %{bootstrap_build}
-%global targets bootcycle-images all docs
+%global release_targets bootcycle-images docs-zip
 %else
-%global targets all docs
+%global release_targets images docs-zip
 %endif
+# No docs nor bootcycle for debug builds
+%global debug_targets images
 
 
 # Filter out flags from the optflags macro that cause problems with the OpenJDK build
@@ -141,14 +143,6 @@
 # looks like openjdk RPM specific bug
 # Always set this so the nss.cfg file is not broken
 %global NSS_LIBDIR %(pkg-config --variable=libdir nss)
-%global NSS_LIBS %(pkg-config --libs nss)
-%global NSS_CFLAGS %(pkg-config --cflags nss-softokn)
-# see https://bugzilla.redhat.com/show_bug.cgi?id=1332456
-%global NSSSOFTOKN_BUILDTIME_NUMBER %(pkg-config --modversion nss-softokn || : )
-%global NSS_BUILDTIME_NUMBER %(pkg-config --modversion nss || : )
-# this is workaround for processing of requires during srpm creation
-%global NSSSOFTOKN_BUILDTIME_VERSION %(if [ "x%{NSSSOFTOKN_BUILDTIME_NUMBER}" == "x" ] ; then echo "" ;else echo ">= %{NSSSOFTOKN_BUILDTIME_NUMBER}" ;fi)
-%global NSS_BUILDTIME_VERSION %(if [ "x%{NSS_BUILDTIME_NUMBER}" == "x" ] ; then echo "" ;else echo ">= %{NSS_BUILDTIME_NUMBER}" ;fi)
 
 # In some cases, the arch used by the JDK does
 # not match _arch.
@@ -206,7 +200,7 @@
 
 # New Version-String scheme-style defines
 %global majorver 11
-%global securityver 2
+%global securityver 5
 # buildjdkver is usually same as %%{majorver},
 # but in time of bootstrap of next jdk, it is majorver-1, 
 # and this it is better to change it here, on single place
@@ -228,7 +222,8 @@
 %global origin_nice     OpenJDK
 %global top_level_dir_name   %{origin}
 %global minorver        0
-%global buildver        7
+%global buildver        10
+%global rpmrelease      2
 #%%global tagsuffix      ""
 # priority must be 8 digits in total; untill openjdk 1.8 we were using 18..... so when moving to 11 we had to add another digit
 %if %is_system_jdk
@@ -240,6 +235,23 @@
 %global newjavaver      %{majorver}.%{minorver}.%{securityver}
 
 %global javaver         %{majorver}
+
+# Define milestone (EA for pre-releases, GA for releases)
+# Release will be (where N is usually a number starting at 1):
+# - 0.N%%{?extraver}%%{?dist} for EA releases,
+# - N%%{?extraver}{?dist} for GA releases
+%global is_ga           1
+%if %{is_ga}
+%global ea_designator ""
+%global ea_designator_zip ""
+%global extraver %{nil}
+%global eaprefix %{nil}
+%else
+%global ea_designator ea
+%global ea_designator_zip -%{ea_designator}
+%global extraver .%{ea_designator}
+%global eaprefix 0.
+%endif
 
 # parametrized macros are order-sensitive
 %global compatiblename  java-%{majorver}-%{origin}
@@ -253,17 +265,22 @@
 # main id and dir of this jdk
 %define uniquesuffix()        %{expand:%{fullversion}.%{_arch}%{?1}}
 
+#################################################################
 # fix for https://bugzilla.redhat.com/show_bug.cgi?id=1111349
 #         https://bugzilla.redhat.com/show_bug.cgi?id=1590796#c14
 #         https://bugzilla.redhat.com/show_bug.cgi?id=1655938
-%if %is_system_jdk
 %global _privatelibs libsplashscreen[.]so.*|libawt_xawt[.]so.*|libjli[.]so.*|libattach[.]so.*|libawt[.]so.*|libextnet[.]so.*|libawt_headless[.]so.*|libdt_socket[.]so.*|libfontmanager[.]so.*|libinstrument[.]so.*|libj2gss[.]so.*|libj2pcsc[.]so.*|libj2pkcs11[.]so.*|libjaas[.]so.*|libjavajpeg[.]so.*|libjdwp[.]so.*|libjimage[.]so.*|libjsound[.]so.*|liblcms[.]so.*|libmanagement[.]so.*|libmanagement_agent[.]so.*|libmanagement_ext[.]so.*|libmlib_image[.]so.*|libnet[.]so.*|libnio[.]so.*|libprefs[.]so.*|librmi[.]so.*|libsaproc[.]so.*|libsctp[.]so.*|libsunec[.]so.*|libunpack[.]so.*|libzip[.]so.*
+%global _publiclibs libjawt[.]so.*|libjava[.]so.*|libjvm[.]so.*|libverify[.]so.*|libjsig[.]so.*
+%if %is_system_jdk
 %global __provides_exclude ^(%{_privatelibs})$
 %global __requires_exclude ^(%{_privatelibs})$
+# Never generate lib-style provides/requires for slowdebug packages
 %global __provides_exclude_from ^.*/%{uniquesuffix -- %{debug_suffix_unquoted}}/.*$
+%global __requires_exclude_from ^.*/%{uniquesuffix -- %{debug_suffix_unquoted}}/.*$
 %else
-%global __provides_exclude lib.*[.]so.*
-%global __requires_exclude lib.*[.]so.*
+# Don't generate provides/requires for JDK provided shared libraries at all.
+%global __provides_exclude ^(%{_privatelibs}|%{_publiclibs})$
+%global __requires_exclude ^(%{_privatelibs}|%{_publiclibs})$
 %endif
 
 
@@ -558,6 +575,7 @@ exit 0
 %{_jvmdir}/%{sdkdir -- %{?1}}/lib/classlist
 %endif
 %{_jvmdir}/%{sdkdir -- %{?1}}/lib/jexec
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/jspawnhelper
 %{_jvmdir}/%{sdkdir -- %{?1}}/lib/jrt-fs.jar
 %{_jvmdir}/%{sdkdir -- %{?1}}/lib/modules
 %{_jvmdir}/%{sdkdir -- %{?1}}/lib/psfont.properties.ja
@@ -614,11 +632,9 @@ exit 0
 %{_mandir}/man1/rmiregistry-%{uniquesuffix -- %{?1}}.1*
 %{_mandir}/man1/unpack200-%{uniquesuffix -- %{?1}}.1*
 %{_jvmdir}/%{sdkdir -- %{?1}}/lib/server/
-%{_jvmdir}/%{sdkdir -- %{?1}}/lib/client/
 %ifarch %{jit_arches}
 %ifnarch %{power64}
 %attr(444, root, root) %ghost %{_jvmdir}/%{sdkdir -- %{?1}}/lib/server/classes.jsa
-%attr(444, root, root) %ghost %{_jvmdir}/%{sdkdir -- %{?1}}/lib/client/classes.jsa
 %endif
 %endif
 %dir %{etcjavasubdir}
@@ -645,6 +661,7 @@ exit 0
 %config(noreplace) %{etcjavadir -- %{?1}}/conf/security/java.security
 %config(noreplace) %{etcjavadir -- %{?1}}/conf/logging.properties
 %config(noreplace) %{etcjavadir -- %{?1}}/conf/security/nss.cfg
+%config(noreplace) %{etcjavadir -- %{?1}}/conf/security/nss.fips.cfg
 %config(noreplace) %{etcjavadir -- %{?1}}/conf/management/jmxremote.access
 # this is conifg template, thus not config-noreplace
 %config  %{etcjavadir -- %{?1}}/conf/management/jmxremote.password.template
@@ -816,7 +833,9 @@ Requires: libXcomposite%{?_isa}
 Requires: %{name}-headless%{?1}%{?_isa} = %{epoch}:%{version}-%{release}
 OrderWithRequires: %{name}-headless%{?1}%{?_isa} = %{epoch}:%{version}-%{release}
 # for java-X-openjdk package's desktop binding
+%if 0%{?rhel} >= 8
 Recommends: gtk3%{?_isa}
+%endif
 
 Provides: java-%{javaver}-%{origin}%{?1} = %{epoch}:%{version}-%{release}
 
@@ -841,9 +860,6 @@ Requires: javapackages-filesystem
 Requires: tzdata-java >= 2015d
 # libsctp.so.1 is being `dlopen`ed on demand
 Requires: lksctp-tools%{?_isa}
-# there is a need to depend on the exact version of NSS
-Requires: nss%{?_isa} %{NSS_BUILDTIME_VERSION}
-Requires: nss-softokn%{?_isa} %{NSSSOFTOKN_BUILDTIME_VERSION}
 # tool to copy jdk's configs - should be Recommends only, but then only dnf/yum enforce it,
 # not rpm transaction and so no configs are persisted when pure rpm -u is run. It may be
 # considered as regression
@@ -860,7 +876,9 @@ Requires(postun): %{_sbindir}/alternatives
 # in version 1.7 and higher for --family switch
 Requires(postun):   chkconfig >= 1.7
 # for optional support of kernel stream control, card reader and printing bindings
+%if 0%{?rhel} >= 8
 Suggests: lksctp-tools%{?_isa}, pcsc-lite-devel%{?_isa}
+%endif
 
 # Standard JPackage base provides
 Provides: jre-%{javaver}-%{origin}-headless%{?1} = %{epoch}:%{version}-%{release}
@@ -960,7 +978,7 @@ Provides: java-src%{?1} = %{epoch}:%{version}-%{release}
 
 Name:    java-%{javaver}-%{origin}
 Version: %{newjavaver}.%{buildver}
-Release: 2%{?dist}.redsleeve
+Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}
 # java-1.5.0-ibm from jpackage.org set Epoch to 1 for unknown reasons
 # and this change was brought into RHEL-4. java-1.5.0-ibm packages
 # also included the epoch in their virtual provides. This created a
@@ -1013,35 +1031,27 @@ Source13: TestCryptoLevel.java
 # Ensure ECDSA is working
 Source14: TestECDSA.java
 
+# nss fips configuration file
+Source15: nss.fips.cfg.in
+
 ############################################
 #
 # RPM/distribution specific patches
 #
 ############################################
 
-# NSS via SunPKCS11 Provider (disabled comment
-# due to memory leak).
-Patch1000: rh1648249-add_commented_out_nss_cfg_provider_to_java_security.patch
-
 # Ignore AWTError when assistive technologies are loaded
 Patch1:    rh1648242-accessible_toolkit_crash_do_not_break_jvm.patch
 # Restrict access to java-atk-wrapper classes
 Patch2:    rh1648644-java_access_bridge_privileged_security.patch
-# PR1834, RH1022017: Reduce curves reported by SSL to those in NSS
-# Not currently suitable to go upstream as it disables curves
-# for all providers unconditionally
-Patch525: rh1022017-reduce_ssl_curves.patch
-Patch3:    rh649512-remove_uses_of_far_in_jpeg_libjpeg_turbo_1_4_compat_for_jdk10_and_up.patch
-# PR3694, RH1340845: Add security.useSystemPropertiesFile option to java.security to use system crypto policy
-Patch4: pr3694-rh1340845-support_fedora_rhel_system_crypto_policy.patch
-# System NSS via SunEC Provider
-Patch5: pr1983-rh1565658-support_using_the_system_installation_of_nss_with_the_sunec_provider_jdk11.patch
-# PR3695: Allow use of system crypto policy to be disabled by the user
-Patch6: pr3695-toggle_system_crypto_policy.patch
+# NSS via SunPKCS11 Provider (disabled due to memory leak).
+Patch1000: rh1648249-add_commented_out_nss_cfg_provider_to_java_security.patch
+# RH1655466: Support RHEL FIPS mode using SunPKCS11 provider
+Patch1001: rh1655466-global_crypto_and_fips.patch
 
 #############################################
 #
-# Shenandaoh specific patches
+# Shenandoah specific patches
 #
 #############################################
 
@@ -1049,31 +1059,38 @@ Patch6: pr3695-toggle_system_crypto_policy.patch
 
 #############################################
 #
-# OpenJDK specific patches
+# Upstreamable patches
 #
+# This section includes patches which need to
+# be reviewed & pushed to the current development
+# tree of OpenJDK.
 #############################################
 
-# 8210416, RHBZ#1632174: [linux] Poor StrictMath performance due to non-optimized compilation
-Patch8:    jdk8210416-rh1632174-compile_fdlibm_with_o2_ffp_contract_off_on_gcc_clang_arches.patch
-# 8210425, RHBZ#1632174: [x86] sharedRuntimeTrig/sharedRuntimeTrans compiled without optimization
-Patch9:    jdk8210425-rh1632174-sharedRuntimeTrig_sharedRuntimeTrans_compiled_without_optimization.patch
+Patch3:    rh649512-remove_uses_of_far_in_jpeg_libjpeg_turbo_1_4_compat_for_jdk10_and_up.patch
+# PR3694, RH1340845: Add security.useSystemPropertiesFile option to java.security to use system crypto policy
+Patch4: pr3694-rh1340845-support_fedora_rhel_system_crypto_policy.patch
+# RH1566890: CVE-2018-3639
+Patch6:    rh1566890-CVE_2018_3639-speculative_store_bypass.patch
+# PR3695: Allow use of system crypto policy to be disabled by the user
+Patch7: pr3695-toggle_system_crypto_policy.patch
+# S390 ambiguous log2_intptr call
+Patch8: s390-8214206_fix.patch
+
+#############################################
+#
+# Patches appearing in 11.0.6
+#
+# This section includes patches which are present
+# in the listed OpenJDK 8u release and should be
+# able to be removed once that release is out
+# and used by this RPM.
+#############################################
+# JDK-8230923: SunJSSE is not properly initialized in FIPS mode from a configuration file
+Patch11: jdk8230923-fips_mode_initialisation_failure.patch
 
 #############################################
 #
 # JDK 9+ only patches
-#
-#############################################
-
-# 8210647, RHBZ#1632174: libsaproc is being compiled without optimization
-Patch10:    jdk8210647-rh1632174-libsaproc_is_being_compiled_without_optimization.patch
-# 8210761, RHBZ#1632174: libjsig is being compiled without optimization
-Patch11:    jdk8210761-rh1632174-libjsig_is_being_compiled_without_optimization.patch
-# 8210703, RHBZ#1632174: vmStructs.cpp compiled with -O0
-Patch12:    jdk8210703-rh1632174-vmStructs_cpp_no_longer_compiled_with_o0
-
-#############################################
-#
-# Patches appearing in 11.0.2
 #
 #############################################
 
@@ -1085,12 +1102,11 @@ BuildRequires: cups-devel
 BuildRequires: desktop-file-utils
 # elfutils only are OK for build without AOT
 BuildRequires: elfutils-devel
-BuildRequires: fontconfig
+BuildRequires: fontconfig-devel
 BuildRequires: freetype-devel
 BuildRequires: giflib-devel
 BuildRequires: gcc-c++
 BuildRequires: gdb
-BuildRequires: gtk3-devel
 BuildRequires: lcms2-devel
 BuildRequires: libjpeg-devel
 BuildRequires: libpng-devel
@@ -1098,6 +1114,8 @@ BuildRequires: libxslt
 BuildRequires: libX11-devel
 BuildRequires: libXi-devel
 BuildRequires: libXinerama-devel
+BuildRequires: libXrandr-devel
+BuildRequires: libXrender-devel
 BuildRequires: libXt-devel
 BuildRequires: libXtst-devel
 # Requirements for setting up the nss.cfg
@@ -1115,8 +1133,6 @@ BuildRequires: libffi-devel
 BuildRequires: tzdata-java >= 2015d
 # Earlier versions have a bug in tree vectorization on PPC
 BuildRequires: gcc >= 4.8.3-8
-# Build requirements for SunEC system NSS support
-BuildRequires: nss-softokn-freebl-devel >= 3.16.1
 
 %if %{with_systemtap}
 BuildRequires: systemtap-sdt-devel
@@ -1261,6 +1277,7 @@ The java-%{origin}-src-slowdebug sub-package contains the complete %{origin_nice
 Summary: %{origin_nice} %{majorver} API documentation
 Group:   Documentation
 Requires: javapackages-filesystem
+Obsoletes: javadoc-debug
 
 %{java_javadoc_rpo %{nil}}
 
@@ -1273,37 +1290,13 @@ The %{origin_nice} %{majorver} API documentation.
 Summary: %{origin_nice} %{majorver} API documentation compressed in single archive
 Group:   Documentation
 Requires: javapackages-filesystem
+Obsoletes: javadoc-zip-debug
 
 %{java_javadoc_rpo %{nil}}
 
 %description javadoc-zip
 The %{origin_nice} %{majorver} API documentation compressed in single archive.
 %endif
-
-%if %{include_debug_build}
-%package javadoc-slowdebug
-Summary: %{origin_nice} %{majorver} API documentation %{for_debug}
-Group:   Documentation
-Requires: javapackages-filesystem
-
-%{java_javadoc_rpo -- %{debug_suffix_unquoted}}
-
-%description javadoc-slowdebug
-The %{origin_nice} %{majorver} API documentation %{for_debug}.
-%endif
-
-%if %{include_debug_build}
-%package javadoc-zip-slowdebug
-Summary: %{origin_nice} %{majorver} API documentation compressed in single archive %{for_debug}
-Group:   Documentation
-Requires: javapackages-filesystem
-
-%{java_javadoc_rpo -- %{debug_suffix_unquoted}}
-
-%description javadoc-zip-slowdebug
-The %{origin_nice} %{majorver} API documentation compressed in single archive %{for_debug}.
-%endif
-
 
 %prep
 if [ %{include_normal_build} -eq 0 -o  %{include_normal_build} -eq 1 ] ; then
@@ -1339,17 +1332,14 @@ pushd %{top_level_dir_name}
 %patch2 -p1
 %patch3 -p1
 %patch4 -p1
-%patch5 -p1
 %patch6 -p1
+%patch7 -p1
 %patch8 -p1
-%patch9 -p1
-%patch10 -p1
 %patch11 -p1
-%patch12 -p1
-%patch525 -p1
 popd # openjdk
 
 %patch1000
+%patch1001
 
 # Extract systemtap tapsets
 %if %{with_systemtap}
@@ -1395,6 +1385,9 @@ done
 # Setup nss.cfg
 sed -e "s:@NSS_LIBDIR@:%{NSS_LIBDIR}:g" %{SOURCE11} > nss.cfg
 
+# Setup nss.fips.cfg
+sed -e "s:@NSS_LIBDIR@:%{NSS_LIBDIR}:g" %{SOURCE15} > nss.fips.cfg
+sed -i -e "s:@NSS_SECMOD@:/etc/pki/nssdb:g" nss.fips.cfg
 
 %build
 # How many CPU's do we have?
@@ -1446,14 +1439,13 @@ bash ../configure \
     --with-jobs=1 \
 %endif
     --with-version-build=%{buildver} \
-    --with-version-pre="" \
+    --with-version-pre="%{ea_designator}" \
     --with-version-opt=%{lts_designator} \
     --with-vendor-version-string="%{vendor_version_string}" \
     --with-boot-jdk=/usr/lib/jvm/java-%{buildjdkver}-openjdk \
     --with-debug-level=$debugbuild \
     --with-native-debug-symbols=internal \
     --enable-unlimited-crypto \
-    --enable-system-nss \
     --with-zlib=system \
     --with-libjpeg=system \
     --with-giflib=system \
@@ -1470,14 +1462,18 @@ bash ../configure \
 %endif
     --disable-warnings-as-errors
 
+# Debug builds don't need same targets as release for
+# build speed-up
+maketargets="%{release_targets}"
+if echo $debugbuild | grep -q "debug" ; then
+  maketargets="%{debug_targets}"
+fi
 make \
     JAVAC_FLAGS=-g \
     LOG=trace \
     WARNINGS_ARE_ERRORS="-Wno-error" \
     CFLAGS_WARNINGS_ARE_ERRORS="-Wno-error" \
-    %{targets} || ( pwd; find $top_dir_abs_path -name "hs_err_pid*.log" | xargs cat && false )
-
-make docs-zip
+    $maketargets || ( pwd; find $top_dir_abs_path -name "hs_err_pid*.log" | xargs cat && false )
 
 # the build (erroneously) removes read permissions from some jars
 # this is a regression in OpenJDK 7 (our compiler):
@@ -1497,6 +1493,9 @@ export JAVA_HOME=$(pwd)/%{buildoutputdir -- $suffix}/images/%{jdkimage}
 # Install nss.cfg right away as we will be using the JRE above
 install -m 644 nss.cfg $JAVA_HOME/conf/security/
 
+# Install nss.fips.cfg: NSS configuration for global FIPS mode (crypto-policies)
+install -m 644 nss.fips.cfg $JAVA_HOME/conf/security/
+
 # Use system-wide tzdata
 rm $JAVA_HOME/lib/tzdb.dat
 ln -s %{_datadir}/javazi-1.8/tzdb.dat $JAVA_HOME/lib/tzdb.dat
@@ -1511,7 +1510,7 @@ for suffix in %{rev_build_loop} ; do
 
 export JAVA_HOME=$(pwd)/%{buildoutputdir -- $suffix}/images/%{jdkimage}
 
-#check sheandoah is enabled
+#check Shenandoah is enabled
 %if %{use_shenandoah_hotspot}
 $JAVA_HOME//bin/java -XX:+UseShenandoahGC -version
 %endif
@@ -1613,11 +1612,6 @@ mkdir -p $RPM_BUILD_ROOT%{_jvmdir}
 cp -a %{buildoutputdir -- $suffix}/images/%{jdkimage} \
   $RPM_BUILD_ROOT%{_jvmdir}/%{sdkdir -- $suffix}
 
-# Install jsa directories so we can owe them
-mkdir -p $RPM_BUILD_ROOT%{_jvmdir}/%{sdkdir -- $suffix}/lib/%{archinstall}/server/
-mkdir -p $RPM_BUILD_ROOT%{_jvmdir}/%{sdkdir -- $suffix}/lib/%{archinstall}/client/
-mkdir -p $RPM_BUILD_ROOT%{_jvmdir}/%{sdkdir -- $suffix}/lib/client/ || true  ; # sometimes is here, sometimes not, ifout it or || true it out
-
 pushd %{buildoutputdir $suffix}/images/%{jdkimage}
 
 %if %{with_systemtap}
@@ -1664,10 +1658,12 @@ pushd %{buildoutputdir $suffix}/images/%{jdkimage}
 popd
 
 
-# Install Javadoc documentation
-install -d -m 755 $RPM_BUILD_ROOT%{_javadocdir}
-cp -a %{buildoutputdir -- $suffix}/images/docs $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir -- $suffix}
-cp -a %{buildoutputdir -- $suffix}/bundles/jdk-%{newjavaver}+%{buildver}%{lts_designator_zip}-docs.zip $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir -- $suffix}.zip
+if ! echo $suffix | grep -q "debug" ; then
+  # Install Javadoc documentation
+  install -d -m 755 $RPM_BUILD_ROOT%{_javadocdir}
+  cp -a %{buildoutputdir $suffix}/images/docs $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir $suffix}
+  cp -a %{buildoutputdir -- $suffix}/bundles/jdk-%{newjavaver}%{ea_designator_zip}+%{buildver}%{lts_designator_zip}-docs.zip $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir -- $suffix}.zip
+fi
 
 # Install icons and menu entries
 for s in 16 24 32 48 ; do
@@ -1817,17 +1813,6 @@ require "copy_jdk_configs.lua"
 %posttrans  devel-slowdebug
 %{posttrans_devel -- %{debug_suffix_unquoted}}
 
-%post javadoc-slowdebug
-%{post_javadoc -- %{debug_suffix_unquoted}}
-
-%postun javadoc-slowdebug
-%{postun_javadoc -- %{debug_suffix_unquoted}}
-
-%post javadoc-zip-slowdebug
-%{post_javadoc_zip -- %{debug_suffix_unquoted}}
-
-%postun javadoc-zip-slowdebug
-%{postun_javadoc_zip -- %{debug_suffix_unquoted}}
 %endif
 
 %if %{include_normal_build}
@@ -1888,17 +1873,157 @@ require "copy_jdk_configs.lua"
 %files src-slowdebug
 %{files_src -- %{debug_suffix_unquoted}}
 
-%files javadoc-slowdebug
-%{files_javadoc -- %{debug_suffix_unquoted}}
-
-%files javadoc-zip-slowdebug
-%{files_javadoc_zip -- %{debug_suffix_unquoted}}
 %endif
 
-
 %changelog
-* Mon Jul 08 2019 Jacco Ligthart <jacco@redsleeve.org> - 1:11.0.2.7-2.redsleeve
-- removed %{arm} from jit_arches
+* Fri Oct 25 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.5.10-2
+- Disable FIPS mode support unless com.redhat.fips is set to "true".
+- Resolves: rhbz#1751845
+
+* Wed Oct 09 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.5.10-1
+- Update to shenandoah-jdk-11.0.5+10 (GA)
+- Switch to GA mode for final release.
+- Remove PR1834/RH1022017 which is now handled by JDK-8228825 upstream.
+- Resolves: rhbz#1753423
+
+* Wed Oct 09 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.5.9-0.0.ea
+- Update to shenandoah-jdk-11.0.5+9 (EA)
+- Resolves: rhbz#1753423
+
+* Mon Oct 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.5.1-0.1.ea
+- Update to shenandoah-jdk-11.0.5+1 (EA)
+- Switch to EA mode for 11.0.5 pre-release builds.
+- Drop JDK-8223482 which is included upstream in 11.0.5+1.
+- Resolves: rhbz#1753423
+
+* Mon Sep 30 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.4.11-4
+- Backport JDK-8230923 so arguments are passed to security providers.
+- Update RH1655466 patch with changes in OpenJDK 8 version.
+- SunPKCS11 runtime provider name is a concatenation of "SunPKCS11-" and the name in the config file.
+- Change nss.fips.cfg config name to "NSS-FIPS" to avoid confusion with nss.cfg.
+- No need to substitute path to nss.fips.cfg as java.security file supports a java.home variable.
+- Resolves: rhbz#1751845
+
+* Tue Aug 13 2019 Martin Balao <mbalao@redhat.com> - 1:11.0.4.11-3
+- Support the FIPS mode crypto policy on RHEL 8.
+- Resolves: rhbz#1725961
+
+* Tue Jul 09 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.11-2
+- Drop NSS runtime dependencies and patches to link against it.
+- Resolves: rhbz#1678554
+
+* Tue Jul 09 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.11-1
+- Update to shenandoah-jdk-11.0.4+11 (GA)
+- Switch to GA mode for final release.
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.10-0.1.ea
+- Update to shenandoah-jdk-11.0.4+10 (EA)
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.9-0.1.ea
+- Update to shenandoah-jdk-11.0.4+9 (EA)
+- Resolves: rhbz#1724452
+
+* Mon Jul 08 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.8-0.1.ea
+- Update to shenandoah-jdk-11.0.4+8 (EA)
+- Resolves: rhbz#1724452
+
+* Sun Jul 07 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.4.7-0.2.ea
+- fontconfig build requirement should be fontconfig-devel, previously masked by Gtk3+ dependency
+- Resolves: rhbz#1724452
+
+* Sun Jul 07 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.4.7-0.2.ea
+- Add missing build requirement for libXrandr-devel, previously masked by Gtk3+ dependency
+- Resolves: rhbz#1724452
+
+* Sun Jul 07 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.4.7-0.2.ea
+- Add missing build requirement for libXrender-devel, previously masked by Gtk3+ dependency
+- Resolves: rhbz#1724452
+
+* Sun Jul 07 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.4.7-0.2.ea
+- Make use of Recommends and Suggests dependent on RHEL 8+ environment.
+- Drop unnecessary build requirement on gtk3-devel, as OpenJDK searches for Gtk+ at runtime.
+- Resolves: rhbz#1724452
+
+* Sun Jul 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.7-0.1.ea
+- Update to shenandoah-jdk-11.0.4+7 (EA)
+- Resolves: rhbz#1724452
+
+* Wed Jul 03 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.6-0.1.ea
+- Obsolete javadoc-debug and javadoc-debug-zip packages via javadoc and javadoc-zip respectively.
+- Resolves: rhbz#1724452
+
+* Wed Jul 03 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.6-0.1.ea
+- Update to shenandoah-jdk-11.0.4+6 (EA)
+- Resolves: rhbz#1724452
+
+* Wed Jul 03 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.5-0.1.ea
+- Update to shenandoah-jdk-11.0.4+5 (EA)
+- Resolves: rhbz#1724452
+
+* Tue Jul 02 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.4-0.1.ea
+- Update to shenandoah-jdk-11.0.4+4 (EA)
+- Resolves: rhbz#1724452
+
+* Mon Jul 01 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.4.3-0.1.ea
+- Update to shenandoah-jdk-11.0.4+3 (EA)
+- Resolves: rhbz#1724452
+
+* Sun Jun 30 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.4.2-0.1.ea
+- Update to shenandoah-jdk-11.0.4+2 (EA)
+- Resolves: rhbz#1724452
+
+* Fri Jun 21 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.4.2-0.1.ea
+- Package jspawnhelper (see JDK-8220360).
+- Resolves: rhbz#1724452
+
+* Fri Jun 21 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.3.7-5
+- Include 'ea' designator in Release when appropriate.
+- Resolves: rhbz#1724452
+
+* Wed May 22 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.3.7-5
+- Handle milestone as variables so we can alter it easily and set the docs zip filename appropriately.
+- Resolves: rhbz#1724452
+
+* Thu Apr 25 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.3.7-4
+- Don't build the test images needlessly.
+- Don't produce javadoc/javadoc-zip sub packages for the debug variant build.
+- Don't perform a bootcycle build for the debug variant build.
+- Resolves: rhbz#1724452
+
+* Wed Apr 24 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.3.7-3
+- Do not generate lib-style requires for -slowdebug subpackages.
+- Resolves: rhbz#1693468
+
+* Tue Apr 23 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.3.7-3
+- Fix requires/provides for the non-system JDK case. JDK 11 is not a system JDK at this point.
+- Resolves: rhbz#1693468
+
+* Tue Apr 16 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.3.7-2
+- Don't package lib/client and lib/client/classes.jsa which don't exist (see RH1643469)
+- Resolves: rhbz#1693468
+
+* Sun Apr 07 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.3.7-1
+- Update to shenandoah-jdk-11.0.3+7 (April 2019 GA)
+- Resolves: rhbz#1693468
+
+* Sat Apr 06 2019 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.3.6-1
+- Update to shenandoah-jdk-11.0.3+6 (April 2019 EA)
+- Drop JDK-8210416/RH1632174 applied upstream.
+- Drop JDK-8210425/RH1632174 applied upstream.
+- Drop JDK-8210647/RH1632174 applied upstream.
+- Drop JDK-8210761/RH1632174 applied upstream.
+- Drop JDK-8210703/RH1632174 applied upstream.
+- Add cast to resolve s390 ambiguity in call to log2_intptr
+- Resolves: rhbz#1693468
+
+* Fri Apr 05 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.2.7-4
+- Add patch for RH1566890
+- Resolves: rhbz#1693468
+
+* Tue Mar 26 2019 Jiri Vanek <jvanek@redhat.com> - 1:11.0.2.7-3
+- added gating
 
 * Fri Feb 08 2019 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.2.7-2
 - Add explicit requirement for libXcomposite which is used when performing
