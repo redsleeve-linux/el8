@@ -124,7 +124,7 @@
 
 Name:           pidgin
 Version:        2.13.0
-Release:        5%{?dist}
+Release:        5%{?dist}.redsleeve
 License:        BSD and GPLv2+ and GPLv2 and LGPLv2+ and MIT
 # GPLv2+ - libpurple, gnt, finch, pidgin, most prpls
 # GPLv2 - novell prpls
@@ -559,11 +559,11 @@ autoreconf --force --install
            --enable-tcl --enable-tk \
            --disable-schemas-install $SWITCHES
 
-make %{?_smp_mflags} LIBTOOL=/usr/bin/libtool
+make %{?_smp_mflags} LIBTOOL="/usr/bin/libtool --tag=CC"
 
 # one_time_password plugin, included upstream but not built by default
 cd libpurple/plugins/
-make one_time_password.so LIBTOOL=/usr/bin/libtool
+make one_time_password.so LIBTOOL="/usr/bin/libtool --tag=CC"
 cd -
 
 %if %{api_docs}
@@ -573,7 +573,7 @@ find doc/html -empty -delete
 
 %install
 rm -rf $RPM_BUILD_ROOT
-make DESTDIR=$RPM_BUILD_ROOT install LIBTOOL=/usr/bin/libtool
+make DESTDIR=$RPM_BUILD_ROOT install LIBTOOL="/usr/bin/libtool --tag=CC"
 
 install -m 0755 libpurple/plugins/one_time_password.so $RPM_BUILD_ROOT%{_libdir}/purple-2/
 
@@ -776,6 +776,9 @@ touch --no-create %{_datadir}/icons/hicolor || :
 %endif
 
 %changelog
+* Sun Nov 17 2019 Jacco Ligthart <jacco@redsleeve.org> 2.13.0-5.redsleeve
+- added "--tag=CC" to the make command due to libtool errors
+
 * Fri Jun 07 2019 Debarshi Ray <rishi@fedoraproject.org> - 2.13.0-5
 - Drop ICQ support in RHEL and port Jabber to GHmac
 - Update License

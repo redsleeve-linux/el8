@@ -1,0 +1,58 @@
+From 946024a0bc8c51038995e61a31a9d5bbc64c7457 Mon Sep 17 00:00:00 2001
+From: Jacco Ligthart <jacco@redsleeve.org>
+Date: Sun, 17 Nov 2019 13:52:16 +0100
+Subject: [PATCH] added "--tag=CC" to the make command due to libtool errors
+
+---
+ SPECS/pidgin.spec | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/SPECS/pidgin.spec b/SPECS/pidgin.spec
+index 0ce8f31..953a0f8 100644
+--- a/SPECS/pidgin.spec
++++ b/SPECS/pidgin.spec
+@@ -124,7 +124,7 @@
+ 
+ Name:           pidgin
+ Version:        2.13.0
+-Release:        5%{?dist}
++Release:        5%{?dist}.redsleeve
+ License:        BSD and GPLv2+ and GPLv2 and LGPLv2+ and MIT
+ # GPLv2+ - libpurple, gnt, finch, pidgin, most prpls
+ # GPLv2 - novell prpls
+@@ -559,11 +559,11 @@ autoreconf --force --install
+            --enable-tcl --enable-tk \
+            --disable-schemas-install $SWITCHES
+ 
+-make %{?_smp_mflags} LIBTOOL=/usr/bin/libtool
++make %{?_smp_mflags} LIBTOOL="/usr/bin/libtool --tag=CC"
+ 
+ # one_time_password plugin, included upstream but not built by default
+ cd libpurple/plugins/
+-make one_time_password.so LIBTOOL=/usr/bin/libtool
++make one_time_password.so LIBTOOL="/usr/bin/libtool --tag=CC"
+ cd -
+ 
+ %if %{api_docs}
+@@ -573,7 +573,7 @@ find doc/html -empty -delete
+ 
+ %install
+ rm -rf $RPM_BUILD_ROOT
+-make DESTDIR=$RPM_BUILD_ROOT install LIBTOOL=/usr/bin/libtool
++make DESTDIR=$RPM_BUILD_ROOT install LIBTOOL="/usr/bin/libtool --tag=CC"
+ 
+ install -m 0755 libpurple/plugins/one_time_password.so $RPM_BUILD_ROOT%{_libdir}/purple-2/
+ 
+@@ -776,6 +776,9 @@ touch --no-create %{_datadir}/icons/hicolor || :
+ %endif
+ 
+ %changelog
++* Sun Nov 17 2019 Jacco Ligthart <jacco@redsleeve.org> 2.13.0-5.redsleeve
++- added "--tag=CC" to the make command due to libtool errors
++
+ * Fri Jun 07 2019 Debarshi Ray <rishi@fedoraproject.org> - 2.13.0-5
+ - Drop ICQ support in RHEL and port Jabber to GHmac
+ - Update License
+-- 
+2.18.1
+
