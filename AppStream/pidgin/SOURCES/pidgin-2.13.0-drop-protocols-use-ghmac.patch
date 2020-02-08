@@ -1,0 +1,878 @@
+From aaf322dad16235a4af7b9eb101f19153ae1c2c8a Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Tue, 9 Oct 2018 18:33:11 +0200
+Subject: [PATCH 1/2] Drop AIM, Gadu-Gadu and ICQ
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1026505
+https://bugzilla.redhat.com/show_bug.cgi?id=1500403
+https://bugzilla.redhat.com/show_bug.cgi?id=1579978
+https://bugzilla.redhat.com/show_bug.cgi?id=1637801
+---
+ configure.ac                      | 4 ++--
+ libpurple/tests/Makefile.am       | 2 --
+ libpurple/tests/check_libpurple.c | 1 -
+ 3 files changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index f973af051bcb..4509a5c58b6c 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1189,7 +1189,7 @@ if test "x$STATIC_PRPLS" != "x" -a "x$DYNAMIC_PRPLS" = "xall"; then
+ fi
+ 
+ if test "x$STATIC_PRPLS" = "xall" ; then
+-	STATIC_PRPLS="bonjour gg irc jabber novell oscar sametime silc simple zephyr"
++	STATIC_PRPLS="bonjour irc jabber novell sametime silc simple zephyr"
+ fi
+ if test "x$have_meanwhile" != "xyes" ; then
+ 	STATIC_PRPLS=`echo $STATIC_PRPLS | $sedpath 's/sametime//'`
+@@ -1260,7 +1260,7 @@ AC_DEFINE_UNQUOTED(STATIC_PROTO_INIT, $extern_init static void static_proto_init
+ 
+ AC_ARG_WITH(dynamic_prpls, [AC_HELP_STRING([--with-dynamic-prpls], [specify which protocols to build dynamically])], [DYNAMIC_PRPLS=`echo $withval | $sedpath 's/,/ /g'`])
+ if test "x$DYNAMIC_PRPLS" = "xall" ; then
+-	DYNAMIC_PRPLS="bonjour gg irc jabber novell oscar sametime silc simple zephyr"
++	DYNAMIC_PRPLS="bonjour irc jabber novell sametime silc simple zephyr"
+ fi
+ if test "x$have_meanwhile" != "xyes"; then
+ 	DYNAMIC_PRPLS=`echo $DYNAMIC_PRPLS | $sedpath 's/sametime//'`
+diff --git a/libpurple/tests/Makefile.am b/libpurple/tests/Makefile.am
+index fa49f8a3a5c3..467c7438a766 100644
+--- a/libpurple/tests/Makefile.am
++++ b/libpurple/tests/Makefile.am
+@@ -14,7 +14,6 @@ check_libpurple_SOURCES=\
+ 		test_jabber_digest_md5.c \
+ 		test_jabber_jutil.c \
+ 		test_jabber_scram.c \
+-		test_oscar_util.c \
+ 		test_util.c \
+ 		test_xmlnode.c \
+ 		$(top_builddir)/libpurple/util.h
+@@ -30,7 +29,6 @@ check_libpurple_CFLAGS=\
+ 
+ check_libpurple_LDADD=\
+ 		$(top_builddir)/libpurple/protocols/jabber/libjabber.la \
+-		$(top_builddir)/libpurple/protocols/oscar/liboscar.la \
+ 		$(top_builddir)/libpurple/libpurple.la \
+         @CHECK_LIBS@ \
+ 		$(GLIB_LIBS)
+diff --git a/libpurple/tests/check_libpurple.c b/libpurple/tests/check_libpurple.c
+index ace7d1eb9d7b..fa32d996094a 100644
+--- a/libpurple/tests/check_libpurple.c
++++ b/libpurple/tests/check_libpurple.c
+@@ -91,7 +91,6 @@ int main(void)
+ 	srunner_add_suite(sr, jabber_digest_md5_suite());
+ 	srunner_add_suite(sr, jabber_jutil_suite());
+ 	srunner_add_suite(sr, jabber_scram_suite());
+-	srunner_add_suite(sr, oscar_util_suite());
+ 	srunner_add_suite(sr, util_suite());
+ 	srunner_add_suite(sr, xmlnode_suite());
+ 
+-- 
+2.20.1
+
+
+From d5015b7560947a7a4f057281b1bdf6d6e114f421 Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Fri, 7 Jun 2019 17:47:03 +0200
+Subject: [PATCH 2/2] Port to GHmac
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1637801
+---
+ libpurple/cipher.c                      |   2 -
+ libpurple/ciphers/Makefile.am           |   1 -
+ libpurple/ciphers/hmac.c                | 218 -----------------
+ libpurple/protocols/jabber/auth.c       |  16 +-
+ libpurple/protocols/jabber/auth_scram.c |  65 +++--
+ libpurple/protocols/jabber/auth_scram.h |   3 +-
+ libpurple/tests/test_cipher.c           | 311 ------------------------
+ libpurple/tests/test_jabber_scram.c     |   2 +-
+ 8 files changed, 41 insertions(+), 577 deletions(-)
+ delete mode 100644 libpurple/ciphers/hmac.c
+
+diff --git a/libpurple/cipher.c b/libpurple/cipher.c
+index d0a7bb7937ac..bc613ffab916 100644
+--- a/libpurple/cipher.c
++++ b/libpurple/cipher.c
+@@ -230,7 +230,6 @@ purple_ciphers_get_handle() {
+  */
+ PurpleCipherOps *purple_des_cipher_get_ops();
+ PurpleCipherOps *purple_des3_cipher_get_ops();
+-PurpleCipherOps *purple_hmac_cipher_get_ops();
+ PurpleCipherOps *purple_md4_cipher_get_ops();
+ PurpleCipherOps *purple_md5_cipher_get_ops();
+ PurpleCipherOps *purple_rc4_cipher_get_ops();
+@@ -256,7 +255,6 @@ purple_ciphers_init() {
+ 	purple_ciphers_register_cipher("sha1", purple_sha1_cipher_get_ops());
+ 	purple_ciphers_register_cipher("sha256", purple_sha256_cipher_get_ops());
+ 	purple_ciphers_register_cipher("md4", purple_md4_cipher_get_ops());
+-	purple_ciphers_register_cipher("hmac", purple_hmac_cipher_get_ops());
+ 	purple_ciphers_register_cipher("des", purple_des_cipher_get_ops());
+ 	purple_ciphers_register_cipher("des3", purple_des3_cipher_get_ops());
+ 	purple_ciphers_register_cipher("rc4", purple_rc4_cipher_get_ops());
+diff --git a/libpurple/ciphers/Makefile.am b/libpurple/ciphers/Makefile.am
+index 9e2299d0c2e9..c187a477ebfb 100644
+--- a/libpurple/ciphers/Makefile.am
++++ b/libpurple/ciphers/Makefile.am
+@@ -3,7 +3,6 @@ noinst_LTLIBRARIES=libpurple-ciphers.la
+ libpurple_ciphers_la_SOURCES=\
+ 	des.c \
+ 	gchecksum.c \
+-	hmac.c \
+ 	md4.c \
+ 	md5.c \
+ 	rc4.c \
+diff --git a/libpurple/ciphers/hmac.c b/libpurple/ciphers/hmac.c
+deleted file mode 100644
+index b09dbd7e4650..000000000000
+--- a/libpurple/ciphers/hmac.c
++++ /dev/null
+@@ -1,218 +0,0 @@
+-/*
+- * purple
+- *
+- * Purple is the legal property of its developers, whose names are too numerous
+- * to list here.  Please refer to the COPYRIGHT file distributed with this
+- * source distribution.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License
+- * along with this program; if not, write to the Free Software
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111-1301  USA
+- */
+-#include <cipher.h>
+-
+-#include <util.h>
+-
+-struct HMAC_Context {
+-	PurpleCipherContext *hash;
+-	char *name;
+-	int blocksize;
+-	guchar *opad;
+-};
+-
+-	static void
+-hmac_init(PurpleCipherContext *context, gpointer extra)
+-{
+-	struct HMAC_Context *hctx;
+-	hctx = g_new0(struct HMAC_Context, 1);
+-	purple_cipher_context_set_data(context, hctx);
+-	purple_cipher_context_reset(context, extra);
+-}
+-
+-	static void
+-hmac_reset(PurpleCipherContext *context, gpointer extra)
+-{
+-	struct HMAC_Context *hctx;
+-
+-	hctx = purple_cipher_context_get_data(context);
+-
+-	g_free(hctx->name);
+-	hctx->name = NULL;
+-	if (hctx->hash)
+-		purple_cipher_context_destroy(hctx->hash);
+-	hctx->hash = NULL;
+-	hctx->blocksize = 0;
+-	g_free(hctx->opad);
+-	hctx->opad = NULL;
+-}
+-
+-	static void
+-hmac_set_opt(PurpleCipherContext *context, const gchar *name, void *value)
+-{
+-	struct HMAC_Context *hctx;
+-
+-	hctx = purple_cipher_context_get_data(context);
+-
+-	if (purple_strequal(name, "hash")) {
+-		g_free(hctx->name);
+-		if (hctx->hash)
+-			purple_cipher_context_destroy(hctx->hash);
+-		hctx->name = g_strdup((char*)value);
+-		hctx->hash = purple_cipher_context_new_by_name((char *)value, NULL);
+-		hctx->blocksize = purple_cipher_context_get_block_size(hctx->hash);
+-	}
+-}
+-
+-	static void *
+-hmac_get_opt(PurpleCipherContext *context, const gchar *name)
+-{
+-	struct HMAC_Context *hctx;
+-
+-	hctx = purple_cipher_context_get_data(context);
+-
+-	if (purple_strequal(name, "hash")) {
+-		return hctx->name;
+-	}
+-
+-	return NULL;
+-}
+-
+-	static void
+-hmac_append(PurpleCipherContext *context, const guchar *data, size_t len)
+-{
+-	struct HMAC_Context *hctx = purple_cipher_context_get_data(context);
+-
+-	g_return_if_fail(hctx->hash != NULL);
+-
+-	purple_cipher_context_append(hctx->hash, data, len);
+-}
+-
+-	static gboolean
+-hmac_digest(PurpleCipherContext *context, size_t in_len, guchar *out, size_t *out_len)
+-{
+-	struct HMAC_Context *hctx = purple_cipher_context_get_data(context);
+-	PurpleCipherContext *hash = hctx->hash;
+-	guchar *inner_hash;
+-	size_t hash_len;
+-	gboolean result;
+-
+-	g_return_val_if_fail(hash != NULL, FALSE);
+-
+-	inner_hash = g_malloc(100); /* TODO: Should be enough for now... */
+-	result = purple_cipher_context_digest(hash, 100, inner_hash, &hash_len);
+-
+-	purple_cipher_context_reset(hash, NULL);
+-
+-	purple_cipher_context_append(hash, hctx->opad, hctx->blocksize);
+-	purple_cipher_context_append(hash, inner_hash, hash_len);
+-
+-	g_free(inner_hash);
+-
+-	result = result && purple_cipher_context_digest(hash, in_len, out, out_len);
+-
+-	return result;
+-}
+-
+-	static void
+-hmac_uninit(PurpleCipherContext *context)
+-{
+-	struct HMAC_Context *hctx;
+-
+-	purple_cipher_context_reset(context, NULL);
+-
+-	hctx = purple_cipher_context_get_data(context);
+-
+-	g_free(hctx);
+-}
+-
+-	static void
+-hmac_set_key_with_len(PurpleCipherContext *context, const guchar * key, size_t key_len)
+-{
+-	struct HMAC_Context *hctx = purple_cipher_context_get_data(context);
+-	int blocksize, i;
+-	guchar *ipad;
+-	guchar *full_key;
+-
+-	g_return_if_fail(hctx->hash != NULL);
+-
+-	g_free(hctx->opad);
+-
+-	blocksize = hctx->blocksize;
+-	ipad = g_malloc(blocksize);
+-	hctx->opad = g_malloc(blocksize);
+-
+-	if (key_len > blocksize) {
+-		purple_cipher_context_reset(hctx->hash, NULL);
+-		purple_cipher_context_append(hctx->hash, key, key_len);
+-		full_key = g_malloc(100); /* TODO: Should be enough for now... */
+-		purple_cipher_context_digest(hctx->hash, 100, full_key, &key_len);
+-	} else
+-		full_key = g_memdup(key, key_len);
+-
+-	if (key_len < blocksize) {
+-		full_key = g_realloc(full_key, blocksize);
+-		memset(full_key + key_len, 0, blocksize - key_len);
+-	}
+-
+-	for(i = 0; i < blocksize; i++) {
+-		ipad[i] = 0x36 ^ full_key[i];
+-		hctx->opad[i] = 0x5c ^ full_key[i];
+-	}
+-
+-	g_free(full_key);
+-
+-	purple_cipher_context_reset(hctx->hash, NULL);
+-	purple_cipher_context_append(hctx->hash, ipad, blocksize);
+-	g_free(ipad);
+-}
+-
+-	static void
+-hmac_set_key(PurpleCipherContext *context, const guchar * key)
+-{
+-	hmac_set_key_with_len(context, key, strlen((char *)key));
+-}
+-
+-	static size_t
+-hmac_get_block_size(PurpleCipherContext *context)
+-{
+-	struct HMAC_Context *hctx = purple_cipher_context_get_data(context);
+-
+-	return hctx->blocksize;
+-}
+-
+-static PurpleCipherOps HMACOps = {
+-	hmac_set_opt,           /* Set option */
+-	hmac_get_opt,           /* Get option */
+-	hmac_init,               /* init */
+-	hmac_reset,              /* reset */
+-	hmac_uninit,             /* uninit */
+-	NULL,                   /* set iv */
+-	hmac_append,             /* append */
+-	hmac_digest,             /* digest */
+-	NULL,                   /* encrypt */
+-	NULL,                   /* decrypt */
+-	NULL,                   /* set salt */
+-	NULL,                   /* get salt size */
+-	hmac_set_key,           /* set key */
+-	NULL,                   /* get key size */
+-	NULL,                   /* set batch mode */
+-	NULL,                   /* get batch mode */
+-	hmac_get_block_size,    /* get block size */
+-	hmac_set_key_with_len   /* set key with len */
+-};
+-
+-PurpleCipherOps *
+-purple_hmac_cipher_get_ops(void) {
+-	return &HMACOps;
+-}
+-
+diff --git a/libpurple/protocols/jabber/auth.c b/libpurple/protocols/jabber/auth.c
+index e5ffb6c33d83..1ca71ea03e81 100644
+--- a/libpurple/protocols/jabber/auth.c
++++ b/libpurple/protocols/jabber/auth.c
+@@ -24,7 +24,6 @@
+ 
+ #include "account.h"
+ #include "debug.h"
+-#include "cipher.h"
+ #include "core.h"
+ #include "conversation.h"
+ #include "request.h"
+@@ -275,17 +274,15 @@ static void auth_old_cb(JabberStream *js, const char *from,
+ 			 * to non-SASL authentication.
+ 			 */
+ 			const char *challenge;
+-			gchar digest[33];
+-			PurpleCipherContext *hmac;
++			gchar *digest;
+ 
+ 			/* Calculate the MHAC-MD5 digest */
+ 			challenge = xmlnode_get_attrib(x, "challenge");
+-			hmac = purple_cipher_context_new_by_name("hmac", NULL);
+-			purple_cipher_context_set_option(hmac, "hash", "md5");
+-			purple_cipher_context_set_key(hmac, (guchar *)pw);
+-			purple_cipher_context_append(hmac, (guchar *)challenge, strlen(challenge));
+-			purple_cipher_context_digest_to_str(hmac, 33, digest, NULL);
+-			purple_cipher_context_destroy(hmac);
++			digest = g_compute_hmac_for_string(G_CHECKSUM_MD5,
++					(guchar *)pw, strlen(pw),
++					challenge, -1);
++
++			g_return_if_fail(digest != NULL);
+ 
+ 			/* Create the response query */
+ 			iq = jabber_iq_new_query(js, JABBER_IQ_SET, "jabber:iq:auth");
+@@ -299,6 +296,7 @@ static void auth_old_cb(JabberStream *js, const char *from,
+ 			x = xmlnode_new_child(query, "crammd5");
+ 
+ 			xmlnode_insert_data(x, digest, 32);
++			g_free(digest);
+ 
+ 			jabber_iq_set_callback(iq, auth_old_result_cb, NULL);
+ 			jabber_iq_send(iq);
+diff --git a/libpurple/protocols/jabber/auth_scram.c b/libpurple/protocols/jabber/auth_scram.c
+index 7f2a9c827cfb..96c0eb0051e5 100644
+--- a/libpurple/protocols/jabber/auth_scram.c
++++ b/libpurple/protocols/jabber/auth_scram.c
+@@ -25,11 +25,10 @@
+ #include "auth.h"
+ #include "auth_scram.h"
+ 
+-#include "cipher.h"
+ #include "debug.h"
+ 
+ static const JabberScramHash hashes[] = {
+-	{ "-SHA-1", "sha1", 20 },
++	{ "-SHA-1", G_CHECKSUM_SHA1 },
+ };
+ 
+ static const JabberScramHash *mech_to_hash(const char *mech)
+@@ -76,7 +75,8 @@ static const struct {
+ guchar *jabber_scram_hi(const JabberScramHash *hash, const GString *str,
+                         GString *salt, guint iterations)
+ {
+-	PurpleCipherContext *context;
++	GHmac *hmac;
++	gsize digest_len;
+ 	guchar *result;
+ 	guint i;
+ 	guchar *prev, *tmp;
+@@ -86,39 +86,38 @@ guchar *jabber_scram_hi(const JabberScramHash *hash, const GString *str,
+ 	g_return_val_if_fail(salt != NULL && salt->len > 0, NULL);
+ 	g_return_val_if_fail(iterations > 0, NULL);
+ 
+-	prev   = g_new0(guint8, hash->size);
+-	tmp    = g_new0(guint8, hash->size);
+-	result = g_new0(guint8, hash->size);
++	digest_len = g_checksum_type_get_length(hash->type);
++	prev   = g_new0(guint8, digest_len);
++	tmp    = g_new0(guint8, digest_len);
++	result = g_new0(guint8, digest_len);
+ 
+-	context = purple_cipher_context_new_by_name("hmac", NULL);
++	hmac = g_hmac_new(hash->type, (guchar *)str->str, str->len);
+ 
+ 	/* Append INT(1), a four-octet encoding of the integer 1, most significant
+ 	 * octet first. */
+ 	g_string_append_len(salt, "\0\0\0\1", 4);
+ 
+ 	/* Compute U0 */
+-	purple_cipher_context_set_option(context, "hash", (gpointer)hash->name);
+-	purple_cipher_context_set_key_with_len(context, (guchar *)str->str, str->len);
+-	purple_cipher_context_append(context, (guchar *)salt->str, salt->len);
+-	purple_cipher_context_digest(context, hash->size, result, NULL);
++	g_hmac_update(hmac, (guchar *)salt->str, salt->len);
++	g_hmac_get_digest(hmac, result, &digest_len);
++	g_hmac_unref(hmac);
+ 
+-	memcpy(prev, result, hash->size);
++	memcpy(prev, result, digest_len);
+ 
+ 	/* Compute U1...Ui */
+ 	for (i = 1; i < iterations; ++i) {
+ 		guint j;
+-		purple_cipher_context_set_option(context, "hash", (gpointer)hash->name);
+-		purple_cipher_context_set_key_with_len(context, (guchar *)str->str, str->len);
+-		purple_cipher_context_append(context, prev, hash->size);
+-		purple_cipher_context_digest(context, hash->size, tmp, NULL);
++		hmac = g_hmac_new(hash->type, (guchar *)str->str, str->len);
++		g_hmac_update(hmac, prev, digest_len);
++		g_hmac_get_digest(hmac, tmp, &digest_len);
++		g_hmac_unref(hmac);
+ 
+-		for (j = 0; j < hash->size; ++j)
++		for (j = 0; j < digest_len; ++j)
+ 			result[j] ^= tmp[j];
+ 
+-		memcpy(prev, tmp, hash->size);
++		memcpy(prev, tmp, digest_len);
+ 	}
+ 
+-	purple_cipher_context_destroy(context);
+ 	g_free(tmp);
+ 	g_free(prev);
+ 	return result;
+@@ -136,31 +135,31 @@ guchar *jabber_scram_hi(const JabberScramHash *hash, const GString *str,
+ static void
+ jabber_scram_hmac(const JabberScramHash *hash, guchar *out, const guchar *key, const gchar *str)
+ {
+-	PurpleCipherContext *context;
+-
+-	context = purple_cipher_context_new_by_name("hmac", NULL);
+-	purple_cipher_context_set_option(context, "hash", (gpointer)hash->name);
+-	purple_cipher_context_set_key_with_len(context, key, hash->size);
+-	purple_cipher_context_append(context, (guchar *)str, strlen(str));
+-	purple_cipher_context_digest(context, hash->size, out, NULL);
+-	purple_cipher_context_destroy(context);
++	GHmac *hmac;
++	gsize digest_len = g_checksum_type_get_length(hash->type);
++
++	hmac = g_hmac_new(hash->type, key, digest_len);
++	g_hmac_update(hmac, (guchar *)str, -1);
++	g_hmac_get_digest(hmac, out, &digest_len);
++	g_hmac_unref(hmac);
+ }
+ 
+ static void
+ jabber_scram_hash(const JabberScramHash *hash, guchar *out, const guchar *data)
+ {
+-	PurpleCipherContext *context;
++	GChecksum *checksum;
++	gsize digest_len = g_checksum_type_get_length(hash->type);
+ 
+-	context = purple_cipher_context_new_by_name(hash->name, NULL);
+-	purple_cipher_context_append(context, data, hash->size);
+-	purple_cipher_context_digest(context, hash->size, out, NULL);
+-	purple_cipher_context_destroy(context);
++	checksum = g_checksum_new(hash->type);
++	g_checksum_update(checksum, data, digest_len);
++	g_checksum_get_digest(checksum, out, &digest_len);
++	g_checksum_free(checksum);
+ }
+ 
+ gboolean
+ jabber_scram_calc_proofs(JabberScramData *data, GString *salt, guint iterations)
+ {
+-	guint hash_len = data->hash->size;
++	guint hash_len = g_checksum_type_get_length(data->hash->type);
+ 	guint i;
+ 
+ 	GString *pass = g_string_new(data->password);
+diff --git a/libpurple/protocols/jabber/auth_scram.h b/libpurple/protocols/jabber/auth_scram.h
+index e1f52d1cbe31..855d4ab73b21 100644
+--- a/libpurple/protocols/jabber/auth_scram.h
++++ b/libpurple/protocols/jabber/auth_scram.h
+@@ -34,8 +34,7 @@
+  */
+ typedef struct {
+ 	const char *mech_substr;
+-	const char *name;
+-	guint size;
++	GChecksumType type;
+ } JabberScramHash;
+ 
+ typedef struct {
+diff --git a/libpurple/tests/test_cipher.c b/libpurple/tests/test_cipher.c
+index 45249319e125..a3148a8bd708 100644
+--- a/libpurple/tests/test_cipher.c
++++ b/libpurple/tests/test_cipher.c
+@@ -474,293 +474,6 @@ START_TEST(test_des3_cbc_null_key_and_text) {
+ }
+ END_TEST
+ 
+-/******************************************************************************
+- * HMAC Tests
+- * See RFC2202 and some other NULL tests I made up
+- *****************************************************************************/
+-
+-#define HMAC_TEST(data, data_len, key, key_len, type, digest) { \
+-	PurpleCipher *cipher = NULL; \
+-	PurpleCipherContext *context = NULL; \
+-	gchar cdigest[41]; \
+-	gboolean ret = FALSE; \
+-	\
+-	cipher = purple_ciphers_find_cipher("hmac"); \
+-	context = purple_cipher_context_new(cipher, NULL); \
+-	purple_cipher_context_set_option(context, "hash", type); \
+-	purple_cipher_context_set_key_with_len(context, (guchar *)key, (key_len)); \
+-	\
+-	purple_cipher_context_append(context, (guchar *)(data), (data_len)); \
+-	ret = purple_cipher_context_digest_to_str(context, sizeof(cdigest), cdigest, \
+-	                                        NULL); \
+-	\
+-	fail_unless(ret == TRUE, NULL); \
+-	fail_unless(purple_strequal((digest), cdigest), NULL); \
+-	\
+-	purple_cipher_context_destroy(context); \
+-}
+-
+-/* HMAC MD5 */
+-
+-START_TEST(test_hmac_md5_Hi) {
+-	HMAC_TEST("Hi There",
+-	          8,
+-	          "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b",
+-	          16,
+-	          "md5",
+-	          "9294727a3638bb1c13f48ef8158bfc9d");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_md5_what) {
+-	HMAC_TEST("what do ya want for nothing?",
+-	          28,
+-	          "Jefe",
+-	          4,
+-	          "md5",
+-	          "750c783e6ab0b503eaa86e310a5db738");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_md5_dd) {
+-	HMAC_TEST("\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+-	          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+-	          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+-	          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+-	          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd",
+-	          50,
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa",
+-	          16,
+-	          "md5",
+-	          "56be34521d144c88dbb8c733f0e8b3f6");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_md5_cd) {
+-	HMAC_TEST("\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+-	          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+-	          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+-	          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+-	          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd",
+-	          50,
+-	          "\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a"
+-	          "\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14"
+-	          "\x15\x16\x17\x18\x19",
+-	          25,
+-	          "md5",
+-	          "697eaf0aca3a3aea3a75164746ffaa79");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_md5_truncation) {
+-	HMAC_TEST("Test With Truncation",
+-	          20,
+-	          "\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c",
+-	          16,
+-	          "md5",
+-	          "56461ef2342edc00f9bab995690efd4c");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_md5_large_key) {
+-	HMAC_TEST("Test Using Larger Than Block-Size Key - Hash Key First",
+-	          54,
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa",
+-	          80,
+-	          "md5",
+-	          "6b1ab7fe4bd7bf8f0b62e6ce61b9d0cd");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_md5_large_key_and_data) {
+-	HMAC_TEST("Test Using Larger Than Block-Size Key and Larger Than One Block-Size Data",
+-	          73,
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa",
+-	          80,
+-	          "md5",
+-	          "6f630fad67cda0ee1fb1f562db3aa53e");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_md5_null_key) {
+-	HMAC_TEST("Hi There",
+-	          8,
+-	          "\x0a\x0b\x00\x0d\x0e\x0f\x1a\x2f\x0b\x0b"
+-	          "\x0b\x00\x00\x0b\x0b\x49\x5f\x6e\x0b\x0b",
+-	          20,
+-	          "md5",
+-	          "597bfd644b797a985561eeb03a169e59");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_md5_null_text) {
+-	HMAC_TEST("Hi\x00There",
+-	          8,
+-	          "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b"
+-	          "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b",
+-	          20,
+-	          "md5",
+-	          "70be8e1b7b50dfcc335d6cd7992c564f");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_md5_null_key_and_text) {
+-	HMAC_TEST("Hi\x00Th\x00re",
+-	          8,
+-	          "\x0c\x0d\x00\x0f\x10\x1a\x3a\x3a\xe6\x34"
+-	          "\x0b\x00\x00\x0b\x0b\x49\x5f\x6e\x0b\x0b",
+-	          20,
+-	          "md5",
+-	          "b31bcbba35a33a067cbba9131cba4889");
+-}
+-END_TEST
+-
+-/* HMAC SHA1 */
+-
+-START_TEST(test_hmac_sha1_Hi) {
+-	HMAC_TEST("Hi There",
+-	          8,
+-	          "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b"
+-	          "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b",
+-	          20,
+-	          "sha1",
+-	          "b617318655057264e28bc0b6fb378c8ef146be00");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_sha1_what) {
+-	HMAC_TEST("what do ya want for nothing?",
+-	          28,
+-	          "Jefe",
+-	          4,
+-	          "sha1",
+-	          "effcdf6ae5eb2fa2d27416d5f184df9c259a7c79");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_sha1_dd) {
+-	HMAC_TEST("\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+-	          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+-	          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+-	          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+-	          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd",
+-	          50,
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa",
+-	          20,
+-	          "sha1",
+-	          "125d7342b9ac11cd91a39af48aa17b4f63f175d3");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_sha1_cd) {
+-	HMAC_TEST("\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+-	          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+-	          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+-	          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+-	          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd",
+-	          50,
+-	          "\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a"
+-	          "\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14"
+-	          "\x15\x16\x17\x18\x19",
+-	          25,
+-	          "sha1",
+-	          "4c9007f4026250c6bc8414f9bf50c86c2d7235da");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_sha1_truncation) {
+-	HMAC_TEST("Test With Truncation",
+-	          20,
+-	          "\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c"
+-	          "\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c",
+-	          20,
+-	          "sha1",
+-	          "4c1a03424b55e07fe7f27be1d58bb9324a9a5a04");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_sha1_large_key) {
+-	HMAC_TEST("Test Using Larger Than Block-Size Key - Hash Key First",
+-	          54,
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa",
+-	          80,
+-	          "sha1",
+-	          "aa4ae5e15272d00e95705637ce8a3b55ed402112");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_sha1_large_key_and_data) {
+-	HMAC_TEST("Test Using Larger Than Block-Size Key and Larger Than One Block-Size Data",
+-	          73,
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+-	          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa",
+-	          80,
+-	          "sha1",
+-	          "e8e99d0f45237d786d6bbaa7965c7808bbff1a91");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_sha1_null_key) {
+-	HMAC_TEST("Hi There",
+-	          8,
+-	          "\x0a\x0b\x00\x0d\x0e\x0f\x1a\x2f\x0b\x0b"
+-	          "\x0b\x00\x00\x0b\x0b\x49\x5f\x6e\x0b\x0b",
+-	          20,
+-	          "sha1",
+-	          "eb62a2e0e33d300be669c52aab3f591bc960aac5");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_sha1_null_text) {
+-	HMAC_TEST("Hi\x00There",
+-	          8,
+-	          "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b"
+-	          "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b",
+-	          20,
+-	          "sha1",
+-	          "31ca58d849e971e418e3439de2c6f83144b6abb7");
+-}
+-END_TEST
+-
+-START_TEST(test_hmac_sha1_null_key_and_text) {
+-	HMAC_TEST("Hi\x00Th\x00re",
+-	          8,
+-	          "\x0c\x0d\x00\x0f\x10\x1a\x3a\x3a\xe6\x34"
+-	          "\x0b\x00\x00\x0b\x0b\x49\x5f\x6e\x0b\x0b",
+-	          20,
+-	          "sha1",
+-	          "e6b8e2fede87aa09dcb13e554df1435e056eae36");
+-}
+-END_TEST
+-
+ /******************************************************************************
+  * Suite
+  *****************************************************************************/
+@@ -832,30 +545,6 @@ cipher_suite(void) {
+ 	tcase_add_test(tc, test_des3_cbc_null_key_and_text);
+ 	suite_add_tcase(s, tc);
+ 
+-	/* hmac tests */
+-	tc = tcase_create("HMAC");
+-	tcase_add_test(tc, test_hmac_md5_Hi);
+-	tcase_add_test(tc, test_hmac_md5_what);
+-	tcase_add_test(tc, test_hmac_md5_dd);
+-	tcase_add_test(tc, test_hmac_md5_cd);
+-	tcase_add_test(tc, test_hmac_md5_truncation);
+-	tcase_add_test(tc, test_hmac_md5_large_key);
+-	tcase_add_test(tc, test_hmac_md5_large_key_and_data);
+-	tcase_add_test(tc, test_hmac_md5_null_key);
+-	tcase_add_test(tc, test_hmac_md5_null_text);
+-	tcase_add_test(tc, test_hmac_md5_null_key_and_text);
+-	tcase_add_test(tc, test_hmac_sha1_Hi);
+-	tcase_add_test(tc, test_hmac_sha1_what);
+-	tcase_add_test(tc, test_hmac_sha1_dd);
+-	tcase_add_test(tc, test_hmac_sha1_cd);
+-	tcase_add_test(tc, test_hmac_sha1_truncation);
+-	tcase_add_test(tc, test_hmac_sha1_large_key);
+-	tcase_add_test(tc, test_hmac_sha1_large_key_and_data);
+-	tcase_add_test(tc, test_hmac_sha1_null_key);
+-	tcase_add_test(tc, test_hmac_sha1_null_text);
+-	tcase_add_test(tc, test_hmac_sha1_null_key_and_text);
+-	suite_add_tcase(s, tc);
+-
+ 	return s;
+ }
+ 
+diff --git a/libpurple/tests/test_jabber_scram.c b/libpurple/tests/test_jabber_scram.c
+index b81b3db767cd..be50d3ef754b 100644
+--- a/libpurple/tests/test_jabber_scram.c
++++ b/libpurple/tests/test_jabber_scram.c
+@@ -5,7 +5,7 @@
+ #include "../protocols/jabber/auth_scram.h"
+ #include "../protocols/jabber/jutil.h"
+ 
+-static JabberScramHash sha1_mech = { "-SHA-1", "sha1", 20 };
++static JabberScramHash sha1_mech = { "-SHA-1", G_CHECKSUM_SHA1 };
+ 
+ #define assert_pbkdf2_equal(password, salt, count, expected) { \
+ 	GString *p = g_string_new(password); \
+-- 
+2.20.1
+
