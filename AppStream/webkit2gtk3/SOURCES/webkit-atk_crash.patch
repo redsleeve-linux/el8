@@ -22,4 +22,4 @@ index f10a1519..523dfd46 100644
 +
              document->updateLayoutIgnorePendingStylesheets();
      }
-     updateChildrenIfNecessary();
+ 

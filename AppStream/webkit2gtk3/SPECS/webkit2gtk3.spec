@@ -6,74 +6,87 @@
         cp -p %1 _license_files/$(echo '%1' | sed -e 's!/!.!g')
 
 Name:           webkit2gtk3
-Version:        2.22.6
-Release:        1%{?dist}.redsleeve
-Summary:        GTK+ Web content engine library
+Version:        2.24.4
+Release:        2%{?dist}
+Summary:        GTK Web content engine library
 
 License:        LGPLv2
 URL:            http://www.webkitgtk.org/
 Source0:        http://webkitgtk.org/releases/webkitgtk-%{version}.tar.xz
 
-# https://bugs.webkit.org/show_bug.cgi?id=132333
-Patch0:        webkit-cloop_big_endians.patch
-# Explicitly specify python2 over python
-Patch1:        webkit-python2.patch
-Patch2:        webkit-aarch64_page_size.patch
+Patch1:         webkit-aarch64_page_size.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1591638
-Patch3:        webkit-atk_crash.patch
+Patch2:         webkit-atk_crash.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1503624
-Patch4:        webkit-atk_continuation_crash.patch
+Patch3:         webkit-atk_continuation_crash.patch
+# Don't use the shebang, but point straight to python 3
+Patch4:         no-env-shebang.patch
 
-BuildRequires:  at-spi2-core-devel
 BuildRequires:  bison
-BuildRequires:  cairo-devel
+BuildRequires:  bubblewrap
 BuildRequires:  cmake
-BuildRequires:  enchant-devel
 BuildRequires:  flex
-BuildRequires:  fontconfig-devel
-BuildRequires:  freetype-devel
-BuildRequires:  git
-BuildRequires:  geoclue2-devel
+BuildRequires:  gcc-c++
 BuildRequires:  gettext
-BuildRequires:  glib2-devel
-BuildRequires:  gnutls-devel
-BuildRequires:  gobject-introspection-devel
+BuildRequires:  git
 BuildRequires:  gperf
-BuildRequires:  gstreamer1-devel
-BuildRequires:  gstreamer1-plugins-base-devel
-BuildRequires:  gstreamer1-plugins-bad-free-devel
-BuildRequires:  gtk2-devel
-BuildRequires:  gtk3-devel
 BuildRequires:  gtk-doc
-BuildRequires:  harfbuzz-devel
 BuildRequires:  hyphen-devel
-BuildRequires:  libicu-devel
-BuildRequires:  libjpeg-devel
-BuildRequires:  libnotify-devel
-BuildRequires:  libpng-devel
-BuildRequires:  libsecret-devel
-BuildRequires:  libsoup-devel
-BuildRequires:  libwebp-devel
-BuildRequires:  libxslt-devel
-BuildRequires:  libXt-devel
-BuildRequires:  libwayland-client-devel
-BuildRequires:  libwayland-egl-devel
-BuildRequires:  libwayland-server-devel
-BuildRequires:  mesa-libEGL-devel
-BuildRequires:  mesa-libGL-devel
-BuildRequires:  mesa-libGLES-devel
-BuildRequires:  pcre-devel
+BuildRequires:  libatomic
+BuildRequires:  ninja-build
 BuildRequires:  perl-File-Copy-Recursive
 BuildRequires:  perl-JSON-PP
 BuildRequires:  perl-Switch
-BuildRequires:  python2
+BuildRequires:  python3
 BuildRequires:  ruby
 BuildRequires:  rubygems
-BuildRequires:  sqlite-devel
-BuildRequires:  upower-devel
-BuildRequires:  woff2-devel
+#BuildRequires:  xdg-dbus-proxy
 
+BuildRequires:  pkgconfig(atspi-2)
+BuildRequires:  pkgconfig(cairo)
+BuildRequires:  pkgconfig(egl)
+%ifarch aarch64 s390x
+# On aarch64 and s390x enchant-2 is not available (gnome-less)
+BuildRequires:  pkgconfig(enchant)
+%else
+BuildRequires:  pkgconfig(enchant-2)
+%endif
+BuildRequires:  pkgconfig(fontconfig)
+BuildRequires:  pkgconfig(freetype2)
+BuildRequires:  pkgconfig(geoclue-2.0)
+BuildRequires:  pkgconfig(gl)
+BuildRequires:  pkgconfig(glib-2.0)
+BuildRequires:  pkgconfig(glesv2)
+BuildRequires:  pkgconfig(gnutls)
+BuildRequires:  pkgconfig(gobject-introspection-1.0)
+BuildRequires:  pkgconfig(gstreamer-1.0)
+BuildRequires:  pkgconfig(gstreamer-plugins-base-1.0)
+BuildRequires:  pkgconfig(gstreamer-plugins-bad-1.0)
+BuildRequires:  pkgconfig(gtk+-2.0)
+BuildRequires:  pkgconfig(gtk+-3.0)
+BuildRequires:  pkgconfig(harfbuzz)
+BuildRequires:  pkgconfig(icu-uc)
+BuildRequires:  pkgconfig(libjpeg)
+BuildRequires:  pkgconfig(libnotify)
+BuildRequires:  pkgconfig(libopenjp2)
+BuildRequires:  pkgconfig(libpcre)
+BuildRequires:  pkgconfig(libpng)
+BuildRequires:  pkgconfig(libseccomp)
+BuildRequires:  pkgconfig(libsecret-1)
+BuildRequires:  pkgconfig(libsoup-2.4)
+BuildRequires:  pkgconfig(libwebp)
+BuildRequires:  pkgconfig(libwoff2dec)
+BuildRequires:  pkgconfig(libxslt)
+BuildRequires:  pkgconfig(sqlite3)
+BuildRequires:  pkgconfig(upower-glib)
+BuildRequires:  pkgconfig(wayland-client)
+BuildRequires:  pkgconfig(wayland-egl)
+BuildRequires:  pkgconfig(wayland-server)
+BuildRequires:  pkgconfig(xt)
+
+Requires:       bubblewrap
 Requires:       geoclue2
+#Requires:       xdg-dbus-proxy
 
 # Obsolete libwebkit2gtk from the webkitgtk3 package
 Obsoletes:      libwebkit2gtk < 2.5.0
@@ -90,17 +103,17 @@ Provides:       bundled(angle)
 # Require the jsc subpackage
 Requires:       %{name}-jsc%{?_isa} = %{version}-%{release}
 
-# Recommend the support for the GTK+ 2 based NPAPI plugins
+# Recommend the support for the GTK 2 based NPAPI plugins
 Recommends:     %{name}-plugin-process-gtk2%{?_isa} = %{version}-%{release}
 
 # Filter out provides for private libraries
 %global __provides_exclude_from ^%{_libdir}/webkit2gtk-4\\.0/.*\\.so$
 
 %description
-WebKitGTK+ is the port of the portable web rendering engine WebKit to the
-GTK+ platform.
+WebKitGTK is the port of the portable web rendering engine WebKit to the
+GTK platform.
 
-This package contains WebKit2 based WebKitGTK+ for GTK+ 3.
+This package contains WebKit2 based WebKitGTK for GTK 3.
 
 %package        devel
 Summary:        Development files for %{name}
@@ -143,14 +156,14 @@ The %{name}-jsc-devel package contains libraries, build data, and header
 files for developing applications that use JavaScript engine from %{name}.
 
 %package        plugin-process-gtk2
-Summary:        GTK+ 2 based NPAPI plugins support for %{name}
+Summary:        GTK 2 based NPAPI plugins support for %{name}
 Requires:       %{name}-jsc%{?_isa} = %{version}-%{release}
 Obsoletes:      %{name} < 2.12.0-3
 Obsoletes:      webkitgtk4-plugin-process-gtk2 < %{version}-%{release}
 Provides:       webkitgtk4-plugin-process-gtk2 = %{version}-%{release}
 
 %description    plugin-process-gtk2
-Support for the GTK+ 2 based NPAPI plugins (such as Adobe Flash) for %{name}.
+Support for the GTK 2 based NPAPI plugins (such as Adobe Flash) for %{name}.
 
 %prep
 %autosetup -p1 -n webkitgtk-%{version} -S git
@@ -160,7 +173,6 @@ rm -rf Source/ThirdParty/gtest/
 rm -rf Source/ThirdParty/qunit/
 
 %build
-export RHEL_ALLOW_PYTHON2_FOR_BUILD=1
 # Increase the DIE limit so our debuginfo packages could be size optimized.
 # Decreases the size for x86_64 from ~5G to ~1.1G.
 # https://bugzilla.redhat.com/show_bug.cgi?id=1456261
@@ -182,24 +194,25 @@ export RHEL_ALLOW_PYTHON2_FOR_BUILD=1
 mkdir -p %{_target_platform}
 pushd %{_target_platform}
 %cmake \
+  -GNinja \
   -DPORT=GTK \
   -DCMAKE_BUILD_TYPE=Release \
   -DENABLE_GTKDOC=ON \
   -DENABLE_MINIBROWSER=ON \
-%ifarch s390x %{power64} aarch64 %{arm}
+  -DPYTHON_EXECUTABLE=%{_bindir}/python3 \
+%ifarch s390x %{power64} aarch64
   -DENABLE_JIT=OFF \
   -DUSE_SYSTEM_MALLOC=ON \
 %endif
   ..
 popd
 
-# Remove the static amount of jobs once
-# https://projects.engineering.redhat.com/browse/BREW-2146 is resolved
-make %{?_smp_mflags} -C %{_target_platform}
-# make -j6 -C %{_target_platform}
+# Show the build time in the status
+export NINJA_STATUS="[%f/%t][%e] "
+%ninja_build -C %{_target_platform}
 
 %install
-%make_install -C %{_target_platform}
+%ninja_install -C %{_target_platform}
 
 %find_lang WebKit2GTK-4.0
 
@@ -215,7 +228,6 @@ make %{?_smp_mflags} -C %{_target_platform}
 %add_to_license_files Source/WebCore/LICENSE-LGPL-2
 %add_to_license_files Source/WebCore/LICENSE-LGPL-2.1
 %add_to_license_files Source/WebInspectorUI/UserInterface/External/CodeMirror/LICENSE
-%add_to_license_files Source/WebInspectorUI/UserInterface/External/ESLint/LICENSE
 %add_to_license_files Source/WebInspectorUI/UserInterface/External/Esprima/LICENSE
 %add_to_license_files Source/WebInspectorUI/UserInterface/External/three.js/LICENSE
 %add_to_license_files Source/WTF/icu/LICENSE
@@ -274,8 +286,21 @@ make %{?_smp_mflags} -C %{_target_platform}
 %{_datadir}/gtk-doc/html/webkitdomgtk-4.0/
 
 %changelog
-* Tue May 21 2019 Jacco Ligthart <kacco@redsleeve.org> - 2.22.6-1.redsleeve
-- disable JIT and use system malloc
+* Mon Oct 14 2019 Eike Rathke <erack@redhat.com> - 2.24.4-2
+- Related: rhbz#1755824 Bump NVR
+
+* Fri Sep 27 2019 Eike Rathke <erack@redhat.com> - 2.24.4-1
+- Resolves: rhbz#1755824 Update to 2.24.4
+
+* Tue Jul 09 2019 Eike Rathke <erack@redhat.com> - 2.24.3-1
+- Resolves: rhbz#1728277 Update to 2.24.3
+
+* Wed May 22 2019 Eike Rathke <erack@redhat.com> - 2.24.2-2
+- Related: rhbz#1696708 Use enchant instead of enchant-2 on aarch64 and s390x
+
+* Tue May 21 2019 Eike Rathke <erack@redhat.com> - 2.24.2-1
+- Resolves: rhbz#1696708 Rebase to 2.24.2
+- Resolves: rhbz#1592271 Switch to Python 3 for build
 
 * Tue Feb 12 2019 Eike Rathke <erack@redhat.com> - 2.22.6-1
 - Resolves: rhbz#1676489 Update to 2.22.6
