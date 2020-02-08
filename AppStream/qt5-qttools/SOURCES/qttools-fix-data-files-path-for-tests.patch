@@ -1,0 +1,213 @@
+diff --git a/tests/auto/qhelpcontentmodel/tst_qhelpcontentmodel.cpp b/tests/auto/qhelpcontentmodel/tst_qhelpcontentmodel.cpp
+index 63ee55c..09dfa2e 100644
+--- a/tests/auto/qhelpcontentmodel/tst_qhelpcontentmodel.cpp
++++ b/tests/auto/qhelpcontentmodel/tst_qhelpcontentmodel.cpp
+@@ -84,12 +84,12 @@ private:
+ void tst_QHelpContentModel::init()
+ {
+     // defined in profile
+-    QString path = QLatin1String(SRCDIR);
++    QString path = QFINDTESTDATA("data/");
+ 
+-    m_colFile = path + QLatin1String("/data/col.qhc");
++    m_colFile = path + QLatin1String("col.qhc");
+     if (QFile::exists(m_colFile))
+         QDir::current().remove(m_colFile);
+-    if (!QFile::copy(path + "/data/collection.qhc", m_colFile))
++    if (!QFile::copy(path + "collection.qhc", m_colFile))
+         QFAIL("Cannot copy file!");
+     QFile f(m_colFile);
+     f.setPermissions(QFile::WriteUser|QFile::ReadUser);
+diff --git a/tests/auto/qhelpenginecore/tst_qhelpenginecore.cpp b/tests/auto/qhelpenginecore/tst_qhelpenginecore.cpp
+index 4793250..2398e83 100644
+--- a/tests/auto/qhelpenginecore/tst_qhelpenginecore.cpp
++++ b/tests/auto/qhelpenginecore/tst_qhelpenginecore.cpp
+@@ -81,14 +81,14 @@ private:
+ void tst_QHelpEngineCore::init()
+ {
+     // defined in profile
+-    m_path = QLatin1String(SRCDIR);
++    m_path = QFINDTESTDATA("data/");
+ 
+     m_path = QFileInfo(m_path).absoluteFilePath();
+ 
+-    m_colFile = m_path + QLatin1String("/data/col.qhc");
++    m_colFile = m_path + QLatin1String("col.qhc");
+     if (QFile::exists(m_colFile))
+         QDir::current().remove(m_colFile);
+-    if (!QFile::copy(m_path + "/data/collection.qhc", m_colFile))
++    if (!QFile::copy(m_path + "collection.qhc", m_colFile))
+         QFAIL("Cannot copy file!");
+     QFile f(m_colFile);
+     f.setPermissions(QFile::WriteUser|QFile::ReadUser);
+@@ -111,7 +111,7 @@ void tst_QHelpEngineCore::setCollectionFile()
+     QHelpEngineCore help(m_colFile, 0);
+     QCOMPARE(help.collectionFile(), QFileInfo(m_colFile).absoluteFilePath());
+ 
+-    QString col1File = m_path + QLatin1String("/data/collection1.qhc");
++    QString col1File = m_path + QLatin1String("collection1.qhc");
+     help.setCollectionFile(col1File);
+     QCOMPARE(help.collectionFile(), QFileInfo(col1File).absoluteFilePath());
+ 
+@@ -125,7 +125,7 @@ void tst_QHelpEngineCore::copyCollectionFile()
+     QHelpEngineCore help(m_colFile, 0);
+     QCOMPARE(help.collectionFile(), QFileInfo(m_colFile).absoluteFilePath());
+ 
+-    QString copiedFile = m_path + QLatin1String("/collectionCopy.qhc");
++    QString copiedFile = m_path + QLatin1String("collectionCopy.qhc");
+     if (QFile::exists(copiedFile))
+         QDir::current().remove(copiedFile);
+ 
+@@ -165,7 +165,7 @@ void tst_QHelpEngineCore::copyCollectionFile()
+         while (m_query->next()) {
+             if (i == 0) {
+                 QCOMPARE(m_query->value(0).toString(), QString("trolltech.com.3-3-8.qmake"));
+-                QCOMPARE(m_query->value(1).toString(), QString("data/qmake-3.3.8.qch"));
++                QCOMPARE(m_query->value(1).toString(), QString("qmake-3.3.8.qch"));
+             }
+             ++i;
+         }
+@@ -179,9 +179,9 @@ void tst_QHelpEngineCore::copyCollectionFile()
+ 
+ void tst_QHelpEngineCore::namespaceName()
+ {
+-    QCOMPARE(QHelpEngineCore::namespaceName(m_path + "/data/qmake-3.3.8.qch"),
++    QCOMPARE(QHelpEngineCore::namespaceName(m_path + "qmake-3.3.8.qch"),
+         QString("trolltech.com.3-3-8.qmake"));
+-    QCOMPARE(QHelpEngineCore::namespaceName(m_path + "/data/linguist-3.3.8.qch"),
++    QCOMPARE(QHelpEngineCore::namespaceName(m_path + "linguist-3.3.8.qch"),
+         QString("trolltech.com.3-3-8.linguist"));
+ }
+ 
+@@ -206,11 +206,11 @@ void tst_QHelpEngineCore::registerDocumentation()
+     {
+         QHelpEngineCore c(m_colFile);
+         QCOMPARE(c.setupData(), true);
+-        c.registerDocumentation(m_path + "/data/qmake-3.3.8.qch");
++        c.registerDocumentation(m_path + "qmake-3.3.8.qch");
+         QCOMPARE(c.registeredDocumentations().count(), 1);
+-        c.registerDocumentation(m_path + "/data/qmake-3.3.8.qch");
++        c.registerDocumentation(m_path + "qmake-3.3.8.qch");
+         QCOMPARE(c.registeredDocumentations().count(), 1);
+-        c.registerDocumentation(m_path + "/data/linguist-3.3.8.qch");
++        c.registerDocumentation(m_path + "linguist-3.3.8.qch");
+         QCOMPARE(c.registeredDocumentations().count(), 2);
+     }
+ 
+@@ -248,9 +248,9 @@ void tst_QHelpEngineCore::documentationFileName()
+     QHelpEngineCore c(m_colFile);
+     QCOMPARE(c.setupData(), true);
+     QCOMPARE(c.documentationFileName(QLatin1String("trolltech.com.3-3-8.qmake")),
+-        QString(m_path + "/data/qmake-3.3.8.qch"));
++        QString(m_path + "qmake-3.3.8.qch"));
+     QCOMPARE(c.documentationFileName(QLatin1String("trolltech.com.1-0-0.test")),
+-        QString(m_path + "/data/test.qch"));
++        QString(m_path + "test.qch"));
+     QCOMPARE(c.documentationFileName(QLatin1String("trolltech.com.empty")),
+         QString());
+ }
+@@ -367,7 +367,7 @@ void tst_QHelpEngineCore::fileData()
+     QCOMPARE(ba.size(), 0);
+     ba = help.fileData(QUrl("qthelp://trolltech.com.1-0-0.test/testFolder/test.html"));
+     QTextStream s(ba, QIODevice::ReadOnly|QIODevice::Text);
+-    QFile f(m_path + "/data/test.html");
++    QFile f(m_path + "test.html");
+     if (!f.open(QIODevice::ReadOnly|QIODevice::Text))
+         QFAIL("Cannot open original file!");
+     QTextStream ts(&f);
+@@ -433,9 +433,9 @@ void tst_QHelpEngineCore::setAutoSaveFilter()
+ 
+ void tst_QHelpEngineCore::metaData()
+ {
+-    QCOMPARE(QHelpEngineCore::metaData(m_path + "/data/test.qch", "author").toString(),
++    QCOMPARE(QHelpEngineCore::metaData(m_path + "test.qch", "author").toString(),
+         QString("Digia Plc and/or its subsidiary(-ies)"));
+-    QCOMPARE(QHelpEngineCore::metaData(m_path + "/data/test.qch", "notExisting").isValid(),
++    QCOMPARE(QHelpEngineCore::metaData(m_path + "test.qch", "notExisting").isValid(),
+         false);
+ }
+ 
+diff --git a/tests/auto/qhelpgenerator/tst_qhelpgenerator.cpp b/tests/auto/qhelpgenerator/tst_qhelpgenerator.cpp
+index 10cfff9..fdb3b93 100644
+--- a/tests/auto/qhelpgenerator/tst_qhelpgenerator.cpp
++++ b/tests/auto/qhelpgenerator/tst_qhelpgenerator.cpp
+@@ -57,8 +57,8 @@ private:
+ 
+ void tst_QHelpGenerator::initTestCase()
+ {
+-    QString path = QLatin1String(SRCDIR);
+-    m_outputFile = path + QLatin1String("/data/test.qch");
++    QString path = QFINDTESTDATA("data/");
++    m_outputFile = path + QLatin1String("test.qch");
+     if (QFile::exists(m_outputFile)) {
+         QDir d;
+         if (!d.remove(m_outputFile))
+@@ -69,9 +69,9 @@ void tst_QHelpGenerator::initTestCase()
+ void tst_QHelpGenerator::generateHelp()
+ {
+     // defined in profile
+-    QString path = QLatin1String(SRCDIR);
++    QString path = QFINDTESTDATA("data/");
+ 
+-    QString inputFile(path + "/data/test.qhp");
++    QString inputFile(path + "test.qhp");
+     QHelpProjectData data;
+     if (!data.readData(inputFile))
+         QFAIL("Cannot read qthp file!");
+@@ -194,17 +194,17 @@ void tst_QHelpGenerator::checkMetaData()
+ void tst_QHelpGenerator::generateTwice()
+ {
+     // defined in profile
+-    QString path = QLatin1String(SRCDIR);
++    QString path = QFINDTESTDATA("data/");
+ 
+-    QString inputFile(path + "/data/test.qhp");
++    QString inputFile(path + "test.qhp");
+     QHelpProjectData data;
+     if (!data.readData(inputFile))
+         QFAIL("Cannot read qhp file!");
+ 
+     QHelpGenerator generator1;
+     QHelpGenerator generator2;
+-    QString outputFile1 = path + QLatin1String("/data/test1.qch");
+-    QString outputFile2 = path + QLatin1String("/data/test2.qch");
++    QString outputFile1 = path + QLatin1String("test1.qch");
++    QString outputFile2 = path + QLatin1String("test2.qch");
+     QCOMPARE(generator1.generate(&data, outputFile1), true);
+     QCOMPARE(generator2.generate(&data, outputFile2), true);
+ 
+diff --git a/tests/auto/qhelpindexmodel/tst_qhelpindexmodel.cpp b/tests/auto/qhelpindexmodel/tst_qhelpindexmodel.cpp
+index 494355c..4e1c015 100644
+--- a/tests/auto/qhelpindexmodel/tst_qhelpindexmodel.cpp
++++ b/tests/auto/qhelpindexmodel/tst_qhelpindexmodel.cpp
+@@ -84,12 +84,12 @@ private:
+ 
+ void tst_QHelpIndexModel::init()
+ {
+-    QString path = QLatin1String(SRCDIR);
++    QString path = QFINDTESTDATA("data/");
+ 
+-    m_colFile = path + QLatin1String("/data/col.qhc");
++    m_colFile = path + QLatin1String("col.qhc");
+     if (QFile::exists(m_colFile))
+         QDir::current().remove(m_colFile);
+-    if (!QFile::copy(path + "/data/collection.qhc", m_colFile))
++    if (!QFile::copy(path + "collection.qhc", m_colFile))
+         QFAIL("Cannot copy file!");
+     QFile f(m_colFile);
+     f.setPermissions(QFile::WriteUser|QFile::ReadUser);
+diff --git a/tests/auto/qhelpprojectdata/tst_qhelpprojectdata.cpp b/tests/auto/qhelpprojectdata/tst_qhelpprojectdata.cpp
+index 3686416..bb507fa 100644
+--- a/tests/auto/qhelpprojectdata/tst_qhelpprojectdata.cpp
++++ b/tests/auto/qhelpprojectdata/tst_qhelpprojectdata.cpp
+@@ -52,8 +52,8 @@ private:
+ 
+ void tst_QHelpProjectData::initTestCase()
+ {
+-    const QString path = QLatin1String(SRCDIR);
+-    m_inputFile = path + QLatin1String("/data/test.qhp");
++    const QString path = QFINDTESTDATA("data/");
++    m_inputFile = path + QLatin1String("test.qhp");
+ }
+ 
+ void tst_QHelpProjectData::readData()

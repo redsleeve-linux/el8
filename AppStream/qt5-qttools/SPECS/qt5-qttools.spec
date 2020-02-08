@@ -1,11 +1,12 @@
 %global qt_module qttools
 
-%global qdoc 0
+%global qdoc 1
+%global build_tests 1
 
 Summary: Qt5 - QtTool components
 Name:    qt5-qttools
 Version: 5.11.1
-Release: 5%{?dist}.redsleeve
+Release: 9%{?dist}.0.1
 
 License: LGPLv3 or LGPLv2
 Url:     http://www.qt.io
@@ -22,6 +23,9 @@ Patch4: qttools-opensource-src-5.7-add-libatomic.patch
 Patch5: qttools-find-clang.patch
 
 ## upstream patches
+%if 0%{?build_tests}
+Patch100: qttools-fix-data-files-path-for-tests.patch
+%endif
 
 Source20: assistant.desktop
 Source21: designer.desktop
@@ -163,6 +167,15 @@ Requires: %{name}-common = %{version}-%{release}
 %description examples
 %{summary}.
 
+%if 0%{?build_tests}
+%package tests
+Summary: Unit tests for %{name}
+Requires: %{name}%{?_isa} = %{version}-%{release}
+
+%description tests
+%{summary}.
+%endif
+
 
 %prep
 %setup -q -n %{qt_module}-everywhere-src-%{version}
@@ -174,16 +187,43 @@ Requires: %{name}-common = %{version}-%{release}
 %patch5 -p1 -b .qttools-find-clang
 %endif
 
+%if 0%{?build_tests}
+%patch100 -p1 -b .fix-data-files-path-for-tests
+%endif
+
 %build
-#export LLVM_INSTALL_DIR=/usr
+export LLVM_INSTALL_DIR=/usr
 
 %{qmake_qt5}
 
 make %{?_smp_mflags}
 
+%if 0%{?build_tests}
+make sub-tests %{?_smp_mflags} -k ||:
+%endif
 
 %install
 make install INSTALL_ROOT=%{buildroot}
+
+%if 0%{?build_tests}
+# Install tests for gating
+pushd tests
+make install INSTALL_ROOT=%{buildroot}
+popd
+
+mkdir -p %{buildroot}%{_qt5_libdir}/qt5/tests/tst_{lconvert,qhelpcontentmodel,qhelpenginecore,qhelpgenerator,qhelpindexmodel,qhelpprojectdata}/data
+mkdir -p %{buildroot}%{_qt5_libdir}/qt5/tests/tst_{lrelease,lupdate,qtattributionsscanner}/testdata
+# FIXME install doesn't seem to work well with directories
+cp -r tests/auto/linguist/lconvert/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_lconvert/data
+cp -r tests/auto/linguist/lrelease/testdata/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_lrelease/testdata
+cp -r tests/auto/linguist/lupdate/testdata/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_lupdate/testdata
+cp -r tests/auto/qhelpcontentmodel/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpcontentmodel/data
+cp -r tests/auto/qhelpenginecore/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpenginecore/data
+cp -r tests/auto/qhelpgenerator/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpgenerator/data
+cp -r tests/auto/qhelpindexmodel/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpindexmodel/data
+cp -r tests/auto/qhelpprojectdata/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpprojectdata/data
+cp -r tests/auto/qtattributionsscanner/testdata/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qtattributionsscanner/testdata
+%endif
 
 # Add desktop files, --vendor=... helps avoid possible conflicts with qt3/qt4
 desktop-file-install \
@@ -461,10 +501,27 @@ fi
 %dir %{_qt5_libdir}/cmake/Qt5Designer
 %{_qt5_libdir}/cmake/Qt5Designer/Qt5Designer_*
 
+%if 0%{?build_tests}
+%files tests
+%{_qt5_libdir}/qt5/tests
+%endif
 
 %changelog
-* Mon Jun 03 2019 Jacco Ligthart <jacco@redsleeve.org> - 5.11.1-5.redsleeve
-- disabled qdoc, which needs clang, which is not available for armv5
+* Fri Jun 07 2019 Jan Grulich <jgrulich@redhat.com> - 5.11.1-9
+- Fix unit tests for gating
+  Resolves: bz#1681905
+
+* Tue Jun 04 2019 Jan Grulich <jgrulich@redhat.com> - 5.11.1-8
+- Fix unit tests for gating
+  Resolves: bz#1681905
+
+* Mon May 20 2019 Jan Grulich <jgrulich@redhat.com> - 5.11.1-7
+- Create a tests subpkg with unit tests for gating
+  Resolves: bz#1681905
+
+* Fri May 17 2019 Jan Grulich <jgrulich@redhat.com> - 5.11.1-6
+- Rebuild for LLVM 8.0.0
+  Resolves: bz#1709949
 
 * Wed Dec 12 2018 Tom Stellard <tstellar@redhat.com> - 5.11.1-5
 - Rebuld for LLVM 7.0.1
