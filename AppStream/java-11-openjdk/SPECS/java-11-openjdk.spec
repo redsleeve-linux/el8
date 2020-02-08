@@ -77,7 +77,7 @@
 %global ppc64le         ppc64le
 %global ppc64be         ppc64 ppc64p7
 %global multilib_arches %{power64} sparc64 x86_64
-%global jit_arches      %{ix86} x86_64 sparcv9 sparc64 %{aarch64} %{power64} %{arm} s390x
+%global jit_arches      %{ix86} x86_64 sparcv9 sparc64 %{aarch64} %{power64} s390x
 %global aot_arches      x86_64 %{aarch64}
 
 # By default, we build a debug build during main build on JIT architectures
@@ -978,7 +978,7 @@ Provides: java-src%{?1} = %{epoch}:%{version}-%{release}
 
 Name:    java-%{javaver}-%{origin}
 Version: %{newjavaver}.%{buildver}
-Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}
+Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}.redsleeve
 # java-1.5.0-ibm from jpackage.org set Epoch to 1 for unknown reasons
 # and this change was brought into RHEL-4. java-1.5.0-ibm packages
 # also included the epoch in their virtual provides. This created a
@@ -1876,6 +1876,9 @@ require "copy_jdk_configs.lua"
 %endif
 
 %changelog
+* Sun Nov 17 2019 Jacco Ligthart <jacco@redsleeve.org> - 1:11.0.5.10-2.redsleeve
+- removed %{arm} from jit_arches
+
 * Fri Oct 25 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.5.10-2
 - Disable FIPS mode support unless com.redhat.fips is set to "true".
 - Resolves: rhbz#1751845
