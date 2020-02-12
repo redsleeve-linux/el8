@@ -48,7 +48,7 @@
 %global with_systemtap 1
 
 # some arches don't have valgrind so we need to disable its support on them
-%ifnarch s390 %{mips} riscv64
+%ifnarch s390 %{mips} riscv64 %{arm}
 %global with_valgrind 1
 %else
 %global with_valgrind 0
@@ -104,7 +104,7 @@ Summary: An interpreted, interactive, object-oriented programming language
 Name: %{python}
 # Remember to also rebase python2-docs when changing this:
 Version: 2.7.16
-Release: 12%{?dist}
+Release: 12.redsleeve%{?dist}
 License: Python
 Group: Development/Languages
 Requires: %{python}-libs%{?_isa} = %{version}-%{release}
@@ -2030,6 +2030,9 @@ fi
 # ======================================================
 
 %changelog
+* Wed Nov 13 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.7.16-12.redsleeve
+- disabled valgrind for arm
+
 * Tue Sep 03 2019 Tomas Orsava <torsava@redhat.com> - 2.7.16-12
 - Adding FIPS compliance to Python 2 in RHEL8:
   - Updated patch 146 with a new version of the FIPS patch
