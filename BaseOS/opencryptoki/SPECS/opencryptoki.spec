@@ -1,7 +1,7 @@
 Name:			opencryptoki
 Summary:		Implementation of the PKCS#11 (Cryptoki) specification v2.11
-Version:		3.11.1
-Release:		3%{?dist}
+Version:		3.12.1
+Release:		2%{?dist}
 License:		CPL
 Group:			System Environment/Base
 URL:			https://github.com/opencryptoki/opencryptoki
@@ -10,13 +10,7 @@ Source0:		https://github.com/opencryptoki/%{name}/archive/v%{version}/%{name}-%{
 Patch0:			opencryptoki-3.11.0-group.patch
 # bz#1373833, change tmpfiles snippets from /var/lock/* to /run/lock/*
 Patch1:			opencryptoki-3.11.0-lockdir.patch
-# bz#1063763, inform the user that he is not in pkcs11 group
-Patch2:			opencryptoki-3.11.0-warn-user-not-in-pkcs11-group.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=1739433
-Patch3:			opencryptoki-3.11.1-use-soname.patch
-# bz#1772108, Support tolerated new crypto cards
-Patch4:			opencryptoki-3.11.1-d6ba9ff61743ce869a5a677f6f77339642efef4b.patch
-
+Patch2:			opencryptoki-50a8a8806059647a3e446fd129995af61ec54867.patch
 Requires(pre):		coreutils
 BuildRequires:		gcc
 BuildRequires:		openssl-devel
@@ -333,8 +327,14 @@ fi
 
 
 %changelog
-* Thu Nov 14 2019 Than Ngo <than@redhat.com> - 3.11.1-3
-- Resolves: #1772108, support tolerated new crypto cards
+* Fri Dec 13 2019 Than Ngo <than@redhat.com> - 3.12.1-2
+- Resolves: #1782445, EP11: Fix EC-uncompress buffer length
+
+* Thu Nov 28 2019 Than Ngo <than@redhat.com> - 3.12.1-1
+- Resolves: #1777313, rebase to 3.12.1
+
+* Tue Nov 12 2019 Than Ngo <than@redhat.com> - 3.12.0-1
+- Resolves: #1726243, rebase to 3.12.0
 
 * Mon Aug 26 2019 Dan Horák <dhorak@redhat.com> - 3.11.1-2
 - Resolves: #1739433, ICA HW token missing after the package update
