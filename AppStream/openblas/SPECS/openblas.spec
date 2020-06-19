@@ -15,7 +15,7 @@
 
 Name:           openblas
 Version:        0.3.3
-Release:        2%{?dist}.redsleeve
+Release:        5%{?dist}
 Summary:        An optimized BLAS library based on GotoBLAS2
 Group:          Development/Libraries
 License:        BSD
@@ -35,6 +35,10 @@ Patch4:         openblas-0.3.3-noopt.patch
 Patch5:         openblas-0.2.20-asmflags.patch
 # Remove optimization pragmas on ppc64le
 Patch6:         openblas-0.2.20-power-optimize.patch
+# Fix izamax on s390x
+Patch7:         openblas-0.3.3-izamax-s390x.patch
+# Detect POWER9 as POWER8
+Patch8:         openblas-0.3.3-power9.patch
 
 BuildRequires:  gcc
 BuildRequires:  gcc-gfortran
@@ -238,6 +242,8 @@ cd OpenBLAS-%{version}
 %patch4 -p1 -b .noopt
 %patch5 -p1 -b .asmflags
 %patch6 -p1 -b .power-optimize
+%patch7 -p1 -b .izamax-s390x
+%patch8 -p1 -b .power9
 
 # Fix source permissions
 find -name \*.f -exec chmod 644 {} \;
@@ -360,9 +366,6 @@ export AVX="NO_AVX2=1"
 %endif
 
 %endif
-%ifarch armv5tel
-TARGET="TARGET=ARMV5 DYNAMIC_ARCH=0"
-%endif
 %ifarch armv7hl
 TARGET="TARGET=ARMV7 DYNAMIC_ARCH=0"
 %endif
@@ -377,6 +380,9 @@ TARGET="TARGET=POWER8 DYNAMIC_ARCH=0"
 %endif
 %ifarch aarch64
 TARGET="TARGET=ARMV8 DYNAMIC_ARCH=0"
+%endif
+%ifarch s390x
+TARGET="TARGET=Z13 DYNAMIC_ARCH=0"
 %endif
 
 %if 0%{?rhel} == 5
@@ -440,9 +446,6 @@ cp -a %{_includedir}/lapacke %{buildroot}%{_includedir}/%{name}
 %multilib_fix_c_header --file %{_includedir}/openblas/openblas_config.h
 
 # Fix name of libraries
-%ifarch armv5tel
-suffix="_armv5"
-%endif
 %ifarch armv7hl
 suffix="_armv7"
 %endif
@@ -686,8 +689,17 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig
 %endif
 
 %changelog
-* Mon Aug 19 2019 Jacco Ligthart <jacco@redsleeve.org> - 0.3.3-2.redsleeve
-- added armv5tel
+* Fri Nov 22 2019 Nikola Forró <nforro@redhat.com> - 0.3.3-5
+- Detect POWER9 as POWER8
+  related: #1752241
+
+* Wed Nov 20 2019 Nikola Forró <nforro@redhat.com> - 0.3.3-4
+- Add tests and enable gating
+  related: #1752241
+
+* Tue Sep 24 2019 Nikola Forró <nforro@redhat.com> - 0.3.3-3
+- Fix izamax on s390x
+  resolves: #1752241
 
 * Wed Nov 07 2018 Nikola Forró <nforro@redhat.com> - 0.3.3-2
 - Fix i686-x86_64 multilib difference
