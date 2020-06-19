@@ -1,0 +1,77 @@
+From 7881d29f2c729e4a8a5af21a0abcf3db18e22918 Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Fri, 14 Feb 2020 15:00:13 +1000
+Subject: [PATCH 1/2] dri: add another get shm variant.
+
+When Brian in 02c3dad0f3b4d26e0faa5cc51d06bc50d693dcdc restricted
+the shm permissions it means we hit the fallback paths in some
+scenarios we hadn't before.
+
+When you use Xephyr to xdmcp from one user to another the new perms
+stop the X server (running as user a) attaching to the SHM segments
+from gnome-shell (running as user b).
+
+In this case however only the GLX side of the code had insight into this,
+and the dri could was meant of fall back, and it worked for put image
+fine but the get image path was broken, since there was no indication
+in the broken case of the need to fallback.
+
+This adds a return type to a new interface member that lets the
+caller know it has to fallback.
+
+Fixes: 02c3dad0f3b4 ("Call shmget() with permission 0600 instead of 0777")
+---
+ include/GL/internal/dri_interface.h    | 15 ++++++++++++++-
+ src/gallium/state_trackers/dri/drisw.c |  3 +++
+ 2 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/include/GL/internal/dri_interface.h b/include/GL/internal/dri_interface.h
+index 09782c8baeb..e40106575c0 100644
+--- a/include/GL/internal/dri_interface.h
++++ b/include/GL/internal/dri_interface.h
+@@ -634,7 +634,7 @@ struct __DRIdamageExtensionRec {
+  * SWRast Loader extension.
+  */
+ #define __DRI_SWRAST_LOADER "DRI_SWRastLoader"
+-#define __DRI_SWRAST_LOADER_VERSION 5
++#define __DRI_SWRAST_LOADER_VERSION 6
+ struct __DRIswrastLoaderExtensionRec {
+     __DRIextension base;
+ 
+@@ -711,6 +711,19 @@ struct __DRIswrastLoaderExtensionRec {
+                          int width, int height, int stride,
+                          int shmid, char *shmaddr, unsigned offset,
+                          void *loaderPrivate);
++
++    /**
++     * get shm image to drawable (v2)
++     *
++     * There are some cases where GLX can't use SHM, but DRI
++     * still tries, we need to get a return type for when to
++     * fallback to the non-shm path.
++     *
++     * \since 6
++     */
++    GLboolean (*getImageShm2)(__DRIdrawable *readable,
++                              int x, int y, int width, int height,
++                              int shmid, void *loaderPrivate);
+ };
+ 
+ /**
+diff --git a/src/gallium/state_trackers/dri/drisw.c b/src/gallium/state_trackers/dri/drisw.c
+index e3fb3f1b925..df364c47391 100644
+--- a/src/gallium/state_trackers/dri/drisw.c
++++ b/src/gallium/state_trackers/dri/drisw.c
+@@ -138,6 +138,9 @@ get_image_shm(__DRIdrawable *dPriv, int x, int y, int width, int height,
+    if (!res->screen->resource_get_handle(res->screen, NULL, res, &whandle, PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE))
+       return FALSE;
+ 
++   if (loader->base.version > 5 && loader->getImageShm2)
++      return loader->getImageShm2(dPriv, x, y, width, height, whandle.handle, dPriv->loaderPrivate);
++
+    loader->getImageShm(dPriv, x, y, width, height, whandle.handle, dPriv->loaderPrivate);
+    return TRUE;
+ }
+-- 
+2.21.1
+

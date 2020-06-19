@@ -1,0 +1,77 @@
+From 74e4f90deeae466ed19d2a31d8f62f6fc5e1709b Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Fri, 14 Feb 2020 15:03:24 +1000
+Subject: [PATCH 2/2] glx: add getImageShm2 path
+
+If the glx side shmid is -1 (because the X server failed to attach)
+then we should let the caller know to fallback.
+
+Fixes: 02c3dad0f3b4 ("Call shmget() with permission 0600 instead of 0777")
+---
+ src/glx/drisw_glx.c | 25 +++++++++++++++++++------
+ 1 file changed, 19 insertions(+), 6 deletions(-)
+
+diff --git a/src/glx/drisw_glx.c b/src/glx/drisw_glx.c
+index 069f64d5216..dfa3218d759 100644
+--- a/src/glx/drisw_glx.c
++++ b/src/glx/drisw_glx.c
+@@ -288,10 +288,10 @@ swrastGetImage(__DRIdrawable * read,
+    swrastGetImage2(read, x, y, w, h, 0, data, loaderPrivate);
+ }
+ 
+-static void
+-swrastGetImageShm(__DRIdrawable * read,
+-                  int x, int y, int w, int h,
+-                  int shmid, void *loaderPrivate)
++static GLboolean
++swrastGetImageShm2(__DRIdrawable * read,
++                   int x, int y, int w, int h,
++                   int shmid, void *loaderPrivate)
+ {
+    struct drisw_drawable *prp = loaderPrivate;
+    __GLXDRIdrawable *pread = &(prp->base);
+@@ -301,8 +301,11 @@ swrastGetImageShm(__DRIdrawable * read,
+ 
+    if (!prp->ximage || shmid != prp->shminfo.shmid) {
+       if (!XCreateDrawable(prp, shmid, dpy))
+-         return;
++         return GL_FALSE;
+    }
++
++   if (prp->shminfo.shmid == -1)
++      return GL_FALSE;
+    readable = pread->xDrawable;
+ 
+    ximage = prp->ximage;
+@@ -312,10 +315,19 @@ swrastGetImageShm(__DRIdrawable * read,
+    ximage->bytes_per_line = bytes_per_line(w * ximage->bits_per_pixel, 32);
+ 
+    XShmGetImage(dpy, readable, ximage, x, y, ~0L);
++   return GL_TRUE;
++}
++
++static void
++swrastGetImageShm(__DRIdrawable * read,
++                  int x, int y, int w, int h,
++                  int shmid, void *loaderPrivate)
++{
++   swrastGetImageShm2(read, x, y, w, h, shmid, loaderPrivate);
+ }
+ 
+ static const __DRIswrastLoaderExtension swrastLoaderExtension_shm = {
+-   .base = {__DRI_SWRAST_LOADER, 5 },
++   .base = {__DRI_SWRAST_LOADER, 6 },
+ 
+    .getDrawableInfo     = swrastGetDrawableInfo,
+    .putImage            = swrastPutImage,
+@@ -325,6 +337,7 @@ static const __DRIswrastLoaderExtension swrastLoaderExtension_shm = {
+    .putImageShm         = swrastPutImageShm,
+    .getImageShm         = swrastGetImageShm,
+    .putImageShm2        = swrastPutImageShm2,
++   .getImageShm2        = swrastGetImageShm2,
+ };
+ 
+ static const __DRIextension *loader_extensions_shm[] = {
+-- 
+2.21.1
+

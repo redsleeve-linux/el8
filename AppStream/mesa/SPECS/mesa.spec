@@ -1,7 +1,7 @@
 %global llvm_toolset %{nil}
 %global llvm_pkg_prefix %{nil}
 
-%ifarch s390x %{arm}
+%ifarch s390x
 %define with_hardware 0
 %else
 %define with_hardware 1
@@ -20,7 +20,7 @@
 %define with_vulkan 0
 %endif
 
-%ifarch aarch64
+%ifarch %{arm} aarch64
 %define with_xa        1
 %endif
 
@@ -36,12 +36,12 @@
 
 %global sanitize 0
 
-#global rctag rc5
+#global rctag rc4
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-Version:        19.1.4
-Release:        3%{?rctag:.%{rctag}}%{?dist}.redsleeve
+Version:        19.3.4
+Release:        2%{?rctag:.%{rctag}}%{?dist}
 
 License:        MIT
 URL:            http://www.mesa3d.org
@@ -55,10 +55,12 @@ Source3:        Makefile
 # Fedora opts to ignore the optional part of clause 2 and treat that code as 2 clause BSD.
 Source4:        Mesa-MLAA-License-Clarification-Email.txt
 
-Source5:	glesv2.pc
+# fix for shm black images with Xephyr (#1798702)
+# upstream in 19.3.5 most likely
+Patch0: 0001-dri-add-another-get-shm-variant.patch
+Patch1: 0002-glx-add-getImageShm2-path.patch
+Patch2: dri-shm-fix-put-image.patch
 
-Patch0:		0001-mesa-add-support-for-CET-to-x86-x86-64-asm-files.patch
-Patch1:		0001-llvmpipe-use-ppc64le-ppc64-Large-code-model-for-JIT-.patch
 BuildRequires:  gcc
 BuildRequires:  gcc-c++
 
@@ -108,7 +110,7 @@ BuildRequires: python3-mako
 %ifarch %{valgrind_arches}
 BuildRequires: pkgconfig(valgrind)
 %endif
-BuildRequires: pkgconfig(libglvnd) >= 0.2.0
+BuildRequires: pkgconfig(libglvnd) >= 1.2.0
 
 %if 0%{?rhel} == 7
 BuildRequires: llvm-toolset-7-runtime
@@ -121,31 +123,24 @@ BuildRequires: llvm-toolset-7-runtime
 
 %package filesystem
 Summary:        Mesa driver filesystem
-Provides:       mesa-dri-filesystem = %{?epoch:%{epoch}}%{version}-%{release}
-Obsoletes:      mesa-dri-filesystem < %{?epoch:%{epoch}}%{version}-%{release}
+Provides:       mesa-dri-filesystem = %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      mesa-dri-filesystem < %{?epoch:%{epoch}:}%{version}-%{release}
 
 %description filesystem
 %{summary}.
 
-%package khr-devel
-Summary:        Mesa Khronos development headers
-
-%description khr-devel
-%{summary}.
-
 %package libGL
 Summary:        Mesa libGL runtime libraries
-Requires:       %{name}-libglapi%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
-Requires:       libglvnd-glx%{?_isa} >= 1:1.0.1-0.8
+Requires:       %{name}-libglapi%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
+Requires:       libglvnd-glx%{?_isa} >= 1:1.2.0-1
 
 %description libGL
 %{summary}.
 
 %package libGL-devel
 Summary:        Mesa libGL development package
-Requires:       %{name}-libGL%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
-Requires:       libglvnd-devel%{?_isa}
-Requires:       %{name}-khr-devel%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
+Requires:       %{name}-libGL%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
+Requires:       libglvnd-devel%{?_isa} >= 1:1.2.0-1
 Provides:       libGL-devel
 Provides:       libGL-devel%{?_isa}
 
@@ -154,44 +149,24 @@ Provides:       libGL-devel%{?_isa}
 
 %package libEGL
 Summary:        Mesa libEGL runtime libraries
-Requires:       libglvnd-egl%{?_isa}
+Requires:       libglvnd-egl%{?_isa} >= 1:1.2.0-1
 
 %description libEGL
 %{summary}.
 
 %package libEGL-devel
 Summary:        Mesa libEGL development package
-Requires:       %{name}-libEGL%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
-Requires:       libglvnd-devel%{?_isa}
-Requires:       %{name}-khr-devel%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
+Requires:       %{name}-libEGL%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
+Requires:       libglvnd-devel%{?_isa} >= 1:1.2.0-1
 Provides:       libEGL-devel
 Provides:       libEGL-devel%{?_isa}
 
 %description libEGL-devel
 %{summary}.
 
-%package libGLES
-Summary:        Mesa libGLES runtime libraries
-Requires:       %{name}-libglapi%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
-Requires:       libglvnd-gles%{?_isa}
-
-%description libGLES
-%{summary}.
-
-%package libGLES-devel
-Summary:        Mesa libGLES development package
-Requires:       %{name}-libGLES%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
-Requires:       libglvnd-devel%{?_isa}
-Requires:       %{name}-khr-devel%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
-Provides:       libGLES-devel
-Provides:       libGLES-devel%{?_isa}
-
-%description libGLES-devel
-%{summary}.
-
 %package dri-drivers
 Summary:        Mesa-based DRI drivers
-Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 
 %description dri-drivers
 %{summary}.
@@ -199,7 +174,7 @@ Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}}%{version}-%{rele
 %if 0%{?with_omx}
 %package omx-drivers
 Summary:        Mesa-based OMX drivers
-Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 
 %description omx-drivers
 %{summary}.
@@ -208,7 +183,7 @@ Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}}%{version}-%{rele
 %if 0%{?with_vdpau}
 %package        vdpau-drivers
 Summary:        Mesa-based VDPAU drivers
-Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 
 %description vdpau-drivers
 %{summary}.
@@ -216,7 +191,7 @@ Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}}%{version}-%{rele
 
 %package libOSMesa
 Summary:        Mesa offscreen rendering libraries
-Requires:       %{name}-libglapi%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-libglapi%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 Provides:       libOSMesa
 Provides:       libOSMesa%{?_isa}
 
@@ -225,7 +200,7 @@ Provides:       libOSMesa%{?_isa}
 
 %package libOSMesa-devel
 Summary:        Mesa offscreen rendering development package
-Requires:       %{name}-libOSMesa%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-libOSMesa%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 
 %description libOSMesa-devel
 %{summary}.
@@ -240,7 +215,7 @@ Provides:       libgbm%{?_isa}
 
 %package libgbm-devel
 Summary:        Mesa libgbm development package
-Requires:       %{name}-libgbm%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-libgbm%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 Provides:       libgbm-devel
 Provides:       libgbm-devel%{?_isa}
 
@@ -279,7 +254,7 @@ Provides:       libglapi%{?_isa}
 Summary:        Mesa OpenCL runtime library
 Requires:       ocl-icd%{?_isa}
 Requires:       libclc%{?_isa}
-Requires:       %{name}-libgbm%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-libgbm%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 Requires:       opencl-filesystem
 
 %description libOpenCL
@@ -287,7 +262,7 @@ Requires:       opencl-filesystem
 
 %package libOpenCL-devel
 Summary:        Mesa OpenCL development package
-Requires:       %{name}-libOpenCL%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-libOpenCL%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 
 %description libOpenCL-devel
 %{summary}.
@@ -302,7 +277,7 @@ Summary:        Mesa Direct3D9 state tracker
 
 %package libd3d-devel
 Summary:        Mesa Direct3D9 state tracker development package
-Requires:       %{name}-libd3d%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-libd3d%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 
 %description libd3d-devel
 %{summary}.
@@ -318,7 +293,7 @@ The drivers with support for the Vulkan API.
 
 %package vulkan-devel
 Summary:        Mesa Vulkan development files
-Requires:       %{name}-vulkan-drivers%{?_isa} = %{?epoch:%{epoch}}%{version}-%{release}
+Requires:       %{name}-vulkan-drivers%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
 Requires:       vulkan-devel
 
 %description vulkan-devel
@@ -338,7 +313,6 @@ Headers for development with the Vulkan API.
 %endif
 
 cp %{SOURCE4} docs/
-cp %{SOURCE5} .
 
 pathfix.py -i %{__python3} -pn bin/*.py src/egl/generate/*.py \
                                src/gallium/tools/trace/*.py \
@@ -348,7 +322,7 @@ pathfix.py -i %{__python3} -pn bin/*.py src/egl/generate/*.py \
 %build
 
 export ASFLAGS="--generate-missing-build-notes=yes"
-%meson -Dcpp_std=gnu++11 \
+%meson -Dcpp_std=gnu++14 \
   -Db_ndebug=true \
   -Dplatforms=x11,wayland,drm,surfaceless \
   -Ddri3=true \
@@ -387,15 +361,13 @@ export ASFLAGS="--generate-missing-build-notes=yes"
 %install
 %meson_install
 
-install glesv2.pc %{buildroot}%{_libdir}/pkgconfig/
-
 # libvdpau opens the versioned name, don't bother including the unversioned
-rm -f %{buildroot}%{_libdir}/vdpau/*.so
+rm -vf %{buildroot}%{_libdir}/vdpau/*.so
 # likewise glvnd
-rm -f %{buildroot}%{_libdir}/libGLX_mesa.so
-rm -f %{buildroot}%{_libdir}/libEGL_mesa.so
+rm -vf %{buildroot}%{_libdir}/libGLX_mesa.so
+rm -vf %{buildroot}%{_libdir}/libEGL_mesa.so
 # XXX can we just not build this
-rm -f %{buildroot}%{_libdir}/libGLES*
+rm -vf %{buildroot}%{_libdir}/libGLES*
 
 # glvnd needs a default provider for indirect rendering where it cannot
 # determine the vendor
@@ -426,53 +398,22 @@ done
 %endif
 %endif
 
-%files khr-devel
-%dir %{_includedir}/KHR
-%{_includedir}/KHR/khrplatform.h
-
 %files libGL
 %{_libdir}/libGLX_mesa.so.0*
 %{_libdir}/libGLX_system.so.0*
 %files libGL-devel
-%{_includedir}/GL/gl.h
-%{_includedir}/GL/gl_mangle.h
-%{_includedir}/GL/glext.h
-%{_includedir}/GL/glx.h
-%{_includedir}/GL/glx_mangle.h
-%{_includedir}/GL/glxext.h
-%{_includedir}/GL/glcorearb.h
 %dir %{_includedir}/GL/internal
 %{_includedir}/GL/internal/dri_interface.h
 %{_libdir}/pkgconfig/dri.pc
 %{_libdir}/libglapi.so
-%{_libdir}/pkgconfig/gl.pc
 
 %files libEGL
 %{_datadir}/glvnd/egl_vendor.d/50_mesa.json
 %{_libdir}/libEGL_mesa.so.0*
 %files libEGL-devel
 %dir %{_includedir}/EGL
-%{_includedir}/EGL/eglext.h
-%{_includedir}/EGL/egl.h
 %{_includedir}/EGL/eglmesaext.h
-%{_includedir}/EGL/eglplatform.h
 %{_includedir}/EGL/eglextchromium.h
-%{_libdir}/pkgconfig/egl.pc
-
-%files libGLES
-# No files, all provided by libglvnd
-%files libGLES-devel
-%dir %{_includedir}/GLES2
-%{_includedir}/GLES2/gl2platform.h
-%{_includedir}/GLES2/gl2.h
-%{_includedir}/GLES2/gl2ext.h
-%dir %{_includedir}/GLES3
-%{_includedir}/GLES3/gl3platform.h
-%{_includedir}/GLES3/gl3.h
-%{_includedir}/GLES3/gl3ext.h
-%{_includedir}/GLES3/gl31.h
-%{_includedir}/GLES3/gl32.h
-%{_libdir}/pkgconfig/glesv2.pc
 
 %post libglapi -p /sbin/ldconfig
 %postun libglapi -p /sbin/ldconfig
@@ -602,11 +543,23 @@ done
 %endif
 
 %changelog
-* Fri Feb 07 2020 Jacco Ligthart <jacco@redsleeve.org> - 19.1.4-3.redsleeve
-- added %{arm} to the no hardware architectures
+* Thu Feb 20 2020 Dave Airlie <airlied@redhat.com> - 19.3.4-2
+- Fix put image shm fallback path.
 
-* Mon Nov 25 2019 Ben Crocker <bcrocker@redhat.com> - 19.1.4-3
-- Patch to require Large CodeModel for llvmpipe on ppc64
+* Sat Feb 15 2020 Dave Airlie <airlied@redhat.com> - 19.3.4-1
+- Update to 19.3.4 release (s390x fix)
+
+* Thu Jan 30 2020 Dave Airlie <airlied@redhat.com> - 19.3.3-1
+- Update to 19.3.3 release
+
+* Mon Nov 25 2019 Dave Airlie <airlied@redhat.com> - 19.3.0-3
+- drop khr-devel subpackage from here
+
+* Fri Nov 22 2019 Dave Airlie <airlied@redhat.com> - 19.3.0-2
+- sort out libglvnd requires
+
+* Thu Nov 21 2019 Dave Airlie <airlied@redhat.com> - 19.3.0-1
+- mesa-19.3.0-rc4
 
 * Fri Aug 09 2019 Dave Airlie <airlied@redhat.com> - 19.1.4-2
 - Add CET support to asm files
