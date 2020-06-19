@@ -1,7 +1,7 @@
 Summary: Lightweight library to easily extract data from zip files
 Name: zziplib
 Version: 0.13.68
-Release: 7%{?dist}.redsleeve
+Release: 8%{?dist}
 License: LGPLv2+ or MPLv1.1
 Group: Applications/Archiving
 URL: http://zziplib.sourceforge.net/
@@ -23,6 +23,7 @@ Patch8: CVE-2018-16548.part2.patch
 Patch9: CVE-2018-16548.part3.patch
 
 Patch10: CVE-2018-17828.patch
+Patch11: CVE-2018-17828-singlez.patch
 
 BuildRequires: perl-interpreter
 BuildRequires: python3-devel
@@ -87,6 +88,7 @@ zziplib library.
 %patch8 -p1
 %patch9 -p1
 %patch10 -p1
+%patch11 -p1
 
 pathfix.py -i %{__python3} -pn docs
 
@@ -103,10 +105,10 @@ sed -i 's|^runpath_var=LD_RUN_PATH|runpath_var=DIE_RPATH_DIE|g' */libtool
 # Only patch generated _config.h on non-i686 and armv7hl
 # These platforms have a correct _config.h already
 cd _builddir
-%ifarch i686 %{arm}
+%ifarch i686 armv7hl
 %apply_patch %{PATCH101} -p2
 %endif
-%ifnarch i686 %{arm}
+%ifnarch i686 armv7hl
 %apply_patch %{PATCH100} -p2
 %endif
 cd ..
@@ -138,8 +140,9 @@ make install DESTDIR=%{buildroot}
 %{_mandir}/man3/*
 
 %changelog
-* Sat May 19 2019 Jacco Ligthart <jacco@redsleeve.org> 0.13.68-7.redsleeve
-- changed test for 32bit arm from armv7hl to %{arm}
+* Tue Oct 16 2018 Jakub Martisko <jamartis@redhat.com> - 0.13.68-8
+- Fix CVE-2018-17828 in the "single z" binaries
+- Resolves: #1772447
 
 * Tue Oct 16 2018 Jakub Martisko <jamartis@redhat.com> - 0.13.68-7
 - Fix CVE-2018-17828
