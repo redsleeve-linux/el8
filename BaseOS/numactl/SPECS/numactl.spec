@@ -1,7 +1,7 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
 Version:	2.0.12
-Release:	7%{?dist}
+Release:	9%{?dist}
 # libnuma is LGPLv2 and GPLv2
 # numactl binaries are GPLv2 only
 License:	GPLv2
@@ -44,6 +44,9 @@ Patch604 :0004-Fix-regress-test-numastat-function-and-few-test-fixe.patch
 Patch605 :0005-Correct-calculation-of-nr_nodes-and-re-enable-move_p.patch
 Patch606 :0006-Fix-move_pages-test-for-non-contiguous-nodes.patch
 Patch607 :0007-Fix-Add-ShmemHugePages-and-ShmemPmdMapped-to-system_.patch
+Patch608 :0008-memhog-add-man-page.patch
+Patch609: 0009-numastat.8-clarify-that-information-relates-to-resid.patch
+Patch610: 0010-Fix-crashes-when-using-the-touch-option.patch
 
 
 
@@ -81,6 +84,9 @@ Provides development headers for numa library calls
 %patch605 -p1
 %patch606 -p1
 %patch607 -p1
+%patch608 -p1
+%patch609 -p1
+%patch610 -p1
 
 
 %build
