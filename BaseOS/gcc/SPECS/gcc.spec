@@ -1,10 +1,10 @@
-%global DATE 20190507
-%global SVNREV 270976
+%global DATE 20191121
+%global SVNREV 278589
 %global gcc_version 8.3.1
 %global gcc_major 8
 # Note, gcc_release must be integer, if you want to add suffixes to
 # %%{release}, append them after %%{gcc_release} on Release: line.
-%global gcc_release 4
+%global gcc_release 5
 %global nvptx_tools_gitrev c28050f60193b3b95a18866a96f03334e874e78f
 %global nvptx_newlib_gitrev aadc8eb0ec43b7cd0dd2dfb484bae63c8b05ef24
 %global _unpackaged_files_terminate_build 0
@@ -104,7 +104,7 @@
 Summary: Various compilers (C, C++, Objective-C, ...)
 Name: gcc
 Version: %{gcc_version}
-Release: %{gcc_release}.5%{?dist}
+Release: %{gcc_release}%{?dist}
 # libgcc, libgfortran, libgomp, libstdc++ and crtstuff have
 # GCC Runtime Exception.
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
@@ -269,15 +269,9 @@ Patch12: gcc8-mcet.patch
 Patch13: gcc8-rh1574936.patch
 Patch14: gcc8-libgcc-hardened.patch
 Patch15: gcc8-rh1670535.patch
-Patch16: gcc8-pr85400.patch
 Patch17: gcc8-libgomp-20190503.patch
 Patch18: gcc8-pr86747.patch
 Patch19: gcc8-libgomp-testsuite.patch
-Patch20: gcc8-rh1711346.patch
-Patch21: gcc8-rh1730380.patch
-Patch22: gcc8-pr86098.patch
-Patch23: gcc8-pr90139.patch
-Patch24: gcc8-pr90756.patch
 
 Patch30: gcc8-rh1668903-1.patch
 Patch31: gcc8-rh1668903-2.patch
@@ -852,15 +846,9 @@ to NVidia PTX capable devices if available.
 %patch14 -p0 -b .libgcc-hardened~
 %endif
 %patch15 -p0 -b .rh1670535~
-%patch16 -p0 -b .pr85400~
 %patch17 -p0 -b .libgomp-20190503~
 %patch18 -p0 -b .pr86747~
 %patch19 -p0 -b .libgomp-testsuite~
-%patch20 -p0 -b .rh1711346~
-%patch21 -p0 -b .rh1730380~
-%patch22 -p0 -b .pr86098~
-%patch23 -p0 -b .pr90139~
-%patch24 -p0 -b .pr90756~
 
 %patch30 -p0 -b .rh1668903-1~
 %patch31 -p0 -b .rh1668903-2~
@@ -3177,6 +3165,10 @@ fi
 %endif
 
 %changelog
+* Thu Nov 21 2019 Marek Polacek <polacek@redhat.com> 8.3.1-5
+- update from Fedora gcc-8.3.1-5 (#1747157)
+- use unspec_volatile for darn (PR target/91481, #1760205, CVE-2019-15847)
+
 * Tue Jul 16 2019 Marek Polacek <polacek@redhat.com> 8.3.1-4.5
 - fix shift count operand printing (#1730380)
 - fix tree-outof-ssa.c ICE with vector types (PR middle-end/90139, #1730454)
