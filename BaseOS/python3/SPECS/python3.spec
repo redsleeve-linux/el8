@@ -14,7 +14,7 @@ URL: https://www.python.org/
 #  WARNING  When rebasing to a new Python version,
 #           remember to update the python3-docs package as well
 Version: %{pybasever}.8
-Release: 15.1%{?dist}
+Release: 23%{?dist}
 License: Python
 
 
@@ -30,13 +30,7 @@ License: Python
 %bcond_without rpmwheels
 
 # Expensive optimizations (mainly, profile-guided optimizations)
-%ifarch %{ix86} x86_64
 %bcond_without optimizations
-%else
-# On some architectures, the optimized build takes tens of hours, possibly
-# longer than Koji's 24-hour timeout. Disable optimizations here.
-%bcond_with optimizations
-%endif
 
 # Run the test suite in %%check
 %bcond_without tests
@@ -357,6 +351,13 @@ Patch274: 00274-fix-arch-names.patch
 # See also: https://bugzilla.redhat.com/show_bug.cgi?id=1489816
 Patch294: 00294-define-TLS-cipher-suite-on-build-time.patch
 
+# 00316 #
+# We remove the exe files from distutil's bdist_wininst
+# So we mark the command as unsupported - and the tests are skipped
+# Fixed upstream and backported from the 3.7 branch: https://bugs.python.org/issue10945
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1754040
+Patch316: 00316-mark-bdist_wininst-unsupported.patch
+
 # 00317 #
 # Security fix for CVE-2019-5010: Fix segfault in ssl's cert parser
 # https://bugzilla.redhat.com/show_bug.cgi?id=1666789
@@ -364,11 +365,29 @@ Patch294: 00294-define-TLS-cipher-suite-on-build-time.patch
 Patch317: 00317-CVE-2019-5010.patch
 
 # 00318 #
-# test_ssl fixes for TLS 1.3 and OpenSSL 1.1.1
+# Various fixes for TLS 1.3 and OpenSSL 1.1.1
 # https://bugzilla.redhat.com/show_bug.cgi?id=1639531
+
+# test_ssl fixes for TLS 1.3 and OpenSSL 1.1.1
 # https://bugs.python.org/issue32947#msg333990
 # https://github.com/python/cpython/pull/11612
-Patch318: 00318-test-ssl-fix-for-tls-13.patch
+
+# Encrypt private key test files with AES256
+# https://bugs.python.org/issue38271
+# https://github.com/python/cpython/pull/16396
+
+# Prefer PROTOCOL_TLS_CLIENT/SERVER (partial backport)
+# https://bugs.python.org/issue31346
+# https://github.com/python/cpython/pull/3058
+
+# Enable TLS 1.3 in tests (partial backport)
+# https://bugs.python.org/issue33618
+# https://github.com/python/cpython/pull/7082
+
+# OpenSSL 1.1.1-pre1 / TLS 1.3 fixes (partial backport)
+# https://bugs.python.org/issue32947
+# https://github.com/python/cpython/pull/5923
+Patch318: 00318-fixes-for-tls-13.patch
 
 # 00319 #
 # Fix test_tarfile on ppc64
@@ -419,6 +438,8 @@ Patch327: 00327-enable-tls-1.3-PHA-in-http.client.patch
 # - add a new "usedforsecurity" keyword argument to the various digest
 #   algorithms in hashlib so that you can whitelist a callsite with
 #   "usedforsecurity=False"
+#   The change has been implemented upstream since Python 3.9:
+#   https://bugs.python.org/issue9216
 # - OpenSSL wrappers for the hashes blake2{b512,s256},
 #     sha3_{224,256,384,512}, shake_{128,256} are now exported from _hashlib
 # - In FIPS mode, the blake2, sha3 and shake hashes use OpenSSL wrappers
@@ -426,8 +447,46 @@ Patch327: 00327-enable-tls-1.3-PHA-in-http.client.patch
 # - In FIPS mode, hmac.HMAC can only be instantiated with an OpenSSL wrapper
 #   or an string with OpenSSL hash name as the "digestmod" argument.
 #   The argument must be specified (instead of defaulting to ‘md5’).
+#
+# - Also while in FIPS mode, we utilize OpenSSL's DRBG and disable the
+#   os.getrandom() function.
+#
+#   Upstream changes that have also been backported with this patch
+#   to allow tests to pass on stricter environments:
+#
+#   Avoid MD5 or check for MD5 availablity
+#   https://bugs.python.org/issue38270
+#   https://github.com/python/cpython/pull/16393
+#   https://github.com/python/cpython/pull/16437
+#   https://github.com/python/cpython/pull/17446
+#
+#   add usedforsecurity to hashlib constructors (partial backport for fixing a uuid test)
+#   https://github.com/python/cpython/pull/16044
 # Resolves: rhbz#1731424
 Patch329: 00329-fips.patch
+
+# 00330 #
+# Fix CVE-2018-20852: cookie domain check returning incorrect results
+# Fixed upstream: https://bugs.python.org/issue35121
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1741553
+Patch330: 00330-CVE-2018-20852.patch
+
+# 00332 #
+# Fix CVE-2019-16056: Don't parse email addresses containing
+# multiple '@' characters.
+# Fixed upstream: https://bugs.python.org/issue34155
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1750776
+Patch332: 00332-CVE-2019-16056.patch
+
+# 00333 #
+# Reduce the number of tests run during the profile guided optimizations build,
+# as running the whole test suite during profiling increases the build time
+# substantially, with negligible performance gain.
+# Fixed upstream and backported from the 3.8 branch:
+# https://bugs.python.org/issue36044
+# https://bugs.python.org/issue37667
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1749576
+Patch333: 00333-reduce-pgo-tests.patch
 
 # (New patches go here ^^^)
 #
@@ -456,16 +515,20 @@ Requires: %{name}-libs%{?_isa} = %{version}-%{release}
 
 %if %{with rpmwheels}
 
-# RHEL8 was forked from F28 and thus required python3-setuptools/pip here
+# RHEL8 was forked from F28 and thus required python3-setuptools here
 # for the rewheel module to work. We've since backported the use of RPM
 # prepared wheels from F29+ into RHEL8, and thus this dependency isn't
 # strictly needed.
 # However, it is possible, that some packages in BaseOS actually depend on
-# setuptools/pip without declaring the dependency in their spec file. Thus
-# we're keeping these dependencies here to avoid the possibility of breaking
+# setuptools without declaring the dependency in their spec file. Thus
+# we're keeping this dependency here to avoid the possibility of breaking
 # them.
 Requires: platform-python-setuptools
-Requires: platform-python-pip
+# For python3-pip the Requires has been reduced to Recommends, as there are
+# generally less packages that depend on pip than packages that depend on
+# setuptools at runtime, and thus there's less chance of breakage.
+# (rhbz#1756217).
+Recommends: platform-python-pip
 
 Requires: python3-setuptools-wheel
 Requires: python3-pip-wheel
@@ -727,6 +790,7 @@ rm Lib/ensurepip/_bundled/*.whl
 %patch262 -p1
 %patch274 -p1
 %patch294 -p1
+%patch316 -p1
 %patch317 -p1
 %patch318 -p1
 %patch319 -p1
@@ -736,6 +800,9 @@ rm Lib/ensurepip/_bundled/*.whl
 %patch326 -p1
 %patch327 -p1
 %patch329 -p1
+%patch330 -p1
+%patch332 -p1
+%patch333 -p1
 
 
 # Remove files that should be generated by the build
@@ -823,7 +890,7 @@ BuildPython() {
   %{nil}
 
   # Invoke the build
-  make EXTRA_CFLAGS="$CFLAGS $MoreCFlags" %{?_smp_mflags}
+  %make_build CFLAGS_NODIST="$CFLAGS_NODIST $MoreCFlags"
 
   popd
   echo FINISHED: BUILD OF PYTHON FOR CONFIGURATION: $ConfName
@@ -1162,19 +1229,12 @@ CheckPython() {
   WITHIN_PYTHON_RPM_BUILD= \
   LD_LIBRARY_PATH=$ConfDir $ConfDir/python -m test.regrtest \
     -wW --slowest --findleaks \
-    -x test_distutils \
     -x test_bdist_rpm \
     %ifarch %{arm}
     -x test_gdb \
     %endif
     %ifarch %{mips64}
     -x test_ctypes \
-    %endif
-    %ifarch s390x
-    -x test_gdb \
-    %endif
-    %ifarch ppc64le
-    -x test_gdb \
     %endif
 
   echo FINISHED: CHECKING OF PYTHON FOR CONFIGURATION: $ConfName
@@ -1663,10 +1723,41 @@ fi
 # ======================================================
 
 %changelog
-* Fri Oct 11 2019 Tomas Orsava <torsava@redhat.com> - 3.6.8-15.1
+* Wed Nov 27 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-23
+- Modify the test suite to better handle disabled SSL/TLS versions and FIPS mode
+- Use OpenSSL's DRBG and disable os.getrandom() function in FIPS mode
+Resolves: rhbz#1754028, rhbz#1754027, rhbz#1754026, rhbz#1774471
+
+* Thu Oct 24 2019 Tomas Orsava <torsava@redhat.com> - 3.6.8-22
+- Changed Requires into Recommends for python3-pip to allow a lower RHEL8
+  footprint for containers and other minimal environments
+Resolves: rhbz#1756217
+
+* Wed Oct 16 2019 Tomas Orsava <torsava@redhat.com> - 3.6.8-21
 - Patch 329 (FIPS) modified: Added workaround for mod_ssl:
   Skip error checking in _Py_hashlib_fips_error
 Resolves: rhbz#1760106
+
+* Mon Oct 14 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-20
+- Security fix for CVE-2019-16056
+Resolves: rhbz#1750776
+
+* Wed Oct 09 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-19
+- Skip windows specific test_get_exe_bytes test case and enable test_distutils
+Resolves: rhbz#1754040
+
+* Mon Oct 07 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-18
+- Reduce the number of tests running during the profile guided optimizations build
+- Enable profile guided optimizations for all the supported architectures
+Resolves: rhbz#1749576
+
+* Mon Oct 07 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-17
+- Security fix for CVE-2018-20852
+Resolves: rhbz#1741553
+
+* Fri Oct 04 2019 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-16
+- Properly pass the -Og optimization flag to the debug build
+Resolves: rhbz#1712977 and rhbz#1714733
 
 * Thu Aug 29 2019 Tomas Orsava <torsava@redhat.com> - 3.6.8-15
 - Patch 329 that adds support for OpenSSL FIPS mode has been improved and

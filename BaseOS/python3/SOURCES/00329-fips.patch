@@ -1,7 +1,783 @@
-From f85cd78683a7f4216f85439ff12bde07c8118597 Mon Sep 17 00:00:00 2001
+From 53d108c5103c99079f1f231b0e731f3f47a142fc Mon Sep 17 00:00:00 2001
+From: "Miss Islington (bot)"
+ <31488909+miss-islington@users.noreply.github.com>
+Date: Wed, 25 Sep 2019 08:50:31 -0700
+Subject: [PATCH 01/36] [3.8] bpo-38270: Check for hash digest algorithms and
+ avoid MD5 (GH-16382) (GH-16393)
+
+Make it easier to run and test Python on systems with restrict crypto policies:
+
+* add requires_hashdigest to test.support to check if a hash digest algorithm is available and working
+* avoid MD5 in test_hmac
+* replace MD5 with SHA256 in test_tarfile
+* mark network tests that require MD5 for MD5-based digest auth or CRAM-MD5
+
+https://bugs.python.org/issue38270
+(cherry picked from commit c64a1a61e6fc542cada40eb069a239317e1af36e)
+
+Co-authored-by: Christian Heimes <christian@python.org>
+
+https://bugs.python.org/issue38270
+
+Automerge-Triggered-By: @tiran
+---
+ Lib/test/support/__init__.py      | 22 ++++++++++
+ Lib/test/test_hmac.py             | 67 +++++++++++++++++++------------
+ Lib/test/test_imaplib.py          |  6 ++-
+ Lib/test/test_poplib.py           |  2 +
+ Lib/test/test_smtplib.py          | 11 ++++-
+ Lib/test/test_tarfile.py          | 56 ++++++++++++++------------
+ Lib/test/test_urllib2_localnet.py |  1 +
+ 7 files changed, 112 insertions(+), 53 deletions(-)
+
+diff --git a/Lib/test/support/__init__.py b/Lib/test/support/__init__.py
+index 66c0fed8411..a43819904e0 100644
+--- a/Lib/test/support/__init__.py
++++ b/Lib/test/support/__init__.py
+@@ -11,6 +11,7 @@ import faulthandler
+ import fnmatch
+ import functools
+ import gc
++import hashlib
+ import importlib
+ import importlib.util
+ import io
+@@ -627,6 +628,27 @@ def requires_mac_ver(*min_version):
+         return wrapper
+     return decorator
+ 
++def requires_hashdigest(digestname):
++    """Decorator raising SkipTest if a hashing algorithm is not available
++
++    The hashing algorithm could be missing or blocked by a strict crypto
++    policy.
++
++    ValueError: [digital envelope routines: EVP_DigestInit_ex] disabled for FIPS
++    ValueError: unsupported hash type md4
++    """
++    def decorator(func):
++        @functools.wraps(func)
++        def wrapper(*args, **kwargs):
++            try:
++                hashlib.new(digestname)
++            except ValueError:
++                raise unittest.SkipTest(
++                    f"hash digest '{digestname}' is not available."
++                )
++            return func(*args, **kwargs)
++        return wrapper
++    return decorator
+ 
+ # Don't use "localhost", since resolving it uses the DNS under recent
+ # Windows versions (see issue #18792).
+diff --git a/Lib/test/test_hmac.py b/Lib/test/test_hmac.py
+index 067e13f1079..81c3485f761 100644
+--- a/Lib/test/test_hmac.py
++++ b/Lib/test/test_hmac.py
+@@ -4,6 +4,8 @@ import hashlib
+ import unittest
+ import warnings
+ 
++from test.support import requires_hashdigest
++
+ 
+ def ignore_warning(func):
+     @functools.wraps(func)
+@@ -17,6 +19,7 @@ def ignore_warning(func):
+ 
+ class TestVectorsTestCase(unittest.TestCase):
+ 
++    @requires_hashdigest('md5')
+     def test_md5_vectors(self):
+         # Test the HMAC module against test vectors from the RFC.
+ 
+@@ -63,6 +66,7 @@ class TestVectorsTestCase(unittest.TestCase):
+                  b"and Larger Than One Block-Size Data"),
+                 "6f630fad67cda0ee1fb1f562db3aa53e")
+ 
++    @requires_hashdigest('sha1')
+     def test_sha_vectors(self):
+         def shatest(key, data, digest):
+             h = hmac.HMAC(key, data, digestmod=hashlib.sha1)
+@@ -230,23 +234,28 @@ class TestVectorsTestCase(unittest.TestCase):
+                                    '134676fb6de0446065c97440fa8c6a58',
+                  })
+ 
++    @requires_hashdigest('sha224')
+     def test_sha224_rfc4231(self):
+         self._rfc4231_test_cases(hashlib.sha224, 'sha224', 28, 64)
+ 
++    @requires_hashdigest('sha256')
+     def test_sha256_rfc4231(self):
+         self._rfc4231_test_cases(hashlib.sha256, 'sha256', 32, 64)
+ 
++    @requires_hashdigest('sha384')
+     def test_sha384_rfc4231(self):
+         self._rfc4231_test_cases(hashlib.sha384, 'sha384', 48, 128)
+ 
++    @requires_hashdigest('sha512')
+     def test_sha512_rfc4231(self):
+         self._rfc4231_test_cases(hashlib.sha512, 'sha512', 64, 128)
+ 
++    @requires_hashdigest('sha256')
+     def test_legacy_block_size_warnings(self):
+         class MockCrazyHash(object):
+             """Ain't no block_size attribute here."""
+             def __init__(self, *args):
+-                self._x = hashlib.sha1(*args)
++                self._x = hashlib.sha256(*args)
+                 self.digest_size = self._x.digest_size
+             def update(self, v):
+                 self._x.update(v)
+@@ -273,76 +282,80 @@ class TestVectorsTestCase(unittest.TestCase):
+             self.assertEqual(h.hexdigest().upper(), digest)
+ 
+ 
++
+ class ConstructorTestCase(unittest.TestCase):
+ 
++    expected = (
++        "6c845b47f52b3b47f6590c502db7825aad757bf4fadc8fa972f7cd2e76a5bdeb"
++    )
+     @ignore_warning
++    @requires_hashdigest('sha256')
+     def test_normal(self):
+         # Standard constructor call.
+-        failed = 0
+         try:
+-            h = hmac.HMAC(b"key")
++            hmac.HMAC(b"key", digestmod='sha256')
+         except Exception:
+             self.fail("Standard constructor call raised exception.")
+ 
+     @ignore_warning
++    @requires_hashdigest('sha256')
+     def test_with_str_key(self):
+         # Pass a key of type str, which is an error, because it expects a key
+         # of type bytes
+         with self.assertRaises(TypeError):
+-            h = hmac.HMAC("key")
++            h = hmac.HMAC("key", digestmod='sha256')
+ 
+-    @ignore_warning
++    @requires_hashdigest('sha256')
+     def test_dot_new_with_str_key(self):
+         # Pass a key of type str, which is an error, because it expects a key
+         # of type bytes
+         with self.assertRaises(TypeError):
+-            h = hmac.new("key")
++            h = hmac.HMAC("key", digestmod='sha256')
+ 
+     @ignore_warning
++    @requires_hashdigest('sha256')
+     def test_withtext(self):
+         # Constructor call with text.
+         try:
+-            h = hmac.HMAC(b"key", b"hash this!")
++            h = hmac.HMAC(b"key", b"hash this!", digestmod='sha256')
+         except Exception:
+             self.fail("Constructor call with text argument raised exception.")
+-        self.assertEqual(h.hexdigest(), '34325b639da4cfd95735b381e28cb864')
++        self.assertEqual(h.hexdigest(), self.expected)
+ 
++    @requires_hashdigest('sha256')
+     def test_with_bytearray(self):
+         try:
+             h = hmac.HMAC(bytearray(b"key"), bytearray(b"hash this!"),
+-                          digestmod="md5")
++                          digestmod="sha256")
+         except Exception:
+             self.fail("Constructor call with bytearray arguments raised exception.")
+-        self.assertEqual(h.hexdigest(), '34325b639da4cfd95735b381e28cb864')
++            self.assertEqual(h.hexdigest(), self.expected)
+ 
++    @requires_hashdigest('sha256')
+     def test_with_memoryview_msg(self):
+         try:
+-            h = hmac.HMAC(b"key", memoryview(b"hash this!"), digestmod="md5")
++            h = hmac.HMAC(b"key", memoryview(b"hash this!"), digestmod="sha256")
+         except Exception:
+             self.fail("Constructor call with memoryview msg raised exception.")
+-        self.assertEqual(h.hexdigest(), '34325b639da4cfd95735b381e28cb864')
++            self.assertEqual(h.hexdigest(), self.expected)
+ 
++    @requires_hashdigest('sha256')
+     def test_withmodule(self):
+         # Constructor call with text and digest module.
+         try:
+-            h = hmac.HMAC(b"key", b"", hashlib.sha1)
++            h = hmac.HMAC(b"key", b"", hashlib.sha256)
+         except Exception:
+-            self.fail("Constructor call with hashlib.sha1 raised exception.")
++            self.fail("Constructor call with hashlib.sha256 raised exception.")
+ 
+-class SanityTestCase(unittest.TestCase):
+ 
+-    @ignore_warning
+-    def test_default_is_md5(self):
+-        # Testing if HMAC defaults to MD5 algorithm.
+-        # NOTE: this whitebox test depends on the hmac class internals
+-        h = hmac.HMAC(b"key")
+-        self.assertEqual(h.digest_cons, hashlib.md5)
++class SanityTestCase(unittest.TestCase):
+ 
++    @requires_hashdigest('sha256')
+     def test_exercise_all_methods(self):
+         # Exercising all methods once.
+         # This must not raise any exceptions
+         try:
+-            h = hmac.HMAC(b"my secret key", digestmod="md5")
++            h = hmac.HMAC(b"my secret key", digestmod="sha256")
+             h.update(b"compute the hash of this text!")
+             dig = h.digest()
+             dig = h.hexdigest()
+@@ -350,11 +363,13 @@ class SanityTestCase(unittest.TestCase):
+         except Exception:
+             self.fail("Exception raised during normal usage of HMAC class.")
+ 
++
+ class CopyTestCase(unittest.TestCase):
+ 
++    @requires_hashdigest('sha256')
+     def test_attributes(self):
+         # Testing if attributes are of same type.
+-        h1 = hmac.HMAC(b"key", digestmod="md5")
++        h1 = hmac.HMAC(b"key", digestmod="sha256")
+         h2 = h1.copy()
+         self.assertTrue(h1.digest_cons == h2.digest_cons,
+             "digest constructors don't match.")
+@@ -363,9 +378,10 @@ class CopyTestCase(unittest.TestCase):
+         self.assertEqual(type(h1.outer), type(h2.outer),
+             "Types of outer don't match.")
+ 
++    @requires_hashdigest('sha256')
+     def test_realcopy(self):
+         # Testing if the copy method created a real copy.
+-        h1 = hmac.HMAC(b"key", digestmod="md5")
++        h1 = hmac.HMAC(b"key", digestmod="sha256")
+         h2 = h1.copy()
+         # Using id() in case somebody has overridden __eq__/__ne__.
+         self.assertTrue(id(h1) != id(h2), "No real copy of the HMAC instance.")
+@@ -374,9 +390,10 @@ class CopyTestCase(unittest.TestCase):
+         self.assertTrue(id(h1.outer) != id(h2.outer),
+             "No real copy of the attribute 'outer'.")
+ 
++    @requires_hashdigest('sha256')
+     def test_equality(self):
+         # Testing if the copy has the same digests.
+-        h1 = hmac.HMAC(b"key", digestmod="md5")
++        h1 = hmac.HMAC(b"key", digestmod="sha256")
+         h1.update(b"some random text")
+         h2 = h1.copy()
+         self.assertEqual(h1.digest(), h2.digest(),
+diff --git a/Lib/test/test_imaplib.py b/Lib/test/test_imaplib.py
+index 0593a3756b0..086cc0ac4e0 100644
+--- a/Lib/test/test_imaplib.py
++++ b/Lib/test/test_imaplib.py
+@@ -14,7 +14,8 @@ import calendar
+ import inspect
+ 
+ from test.support import (reap_threads, verbose, transient_internet,
+-                          run_with_tz, run_with_locale, cpython_only)
++                          run_with_tz, run_with_locale, cpython_only,
++                          requires_hashdigest)
+ import unittest
+ from unittest import mock
+ from datetime import datetime, timezone, timedelta
+@@ -369,6 +370,7 @@ class NewIMAPTestsMixin():
+         self.assertEqual(code, 'OK')
+         self.assertEqual(server.response, b'ZmFrZQ==\r\n')  # b64 encoded 'fake'
+ 
++    @requires_hashdigest('md5')
+     def test_login_cram_md5_bytes(self):
+         class AuthHandler(SimpleIMAPHandler):
+             capabilities = 'LOGINDISABLED AUTH=CRAM-MD5'
+@@ -386,6 +388,7 @@ class NewIMAPTestsMixin():
+         ret, _ = client.login_cram_md5("tim", b"tanstaaftanstaaf")
+         self.assertEqual(ret, "OK")
+ 
++    @requires_hashdigest('md5')
+     def test_login_cram_md5_plain_text(self):
+         class AuthHandler(SimpleIMAPHandler):
+             capabilities = 'LOGINDISABLED AUTH=CRAM-MD5'
+@@ -797,6 +800,7 @@ class ThreadedNetworkedTests(unittest.TestCase):
+                              b'ZmFrZQ==\r\n')  # b64 encoded 'fake'
+ 
+     @reap_threads
++    @requires_hashdigest('md5')
+     def test_login_cram_md5(self):
+ 
+         class AuthHandler(SimpleIMAPHandler):
+diff --git a/Lib/test/test_poplib.py b/Lib/test/test_poplib.py
+index 234c855545c..b8146be3a8c 100644
+--- a/Lib/test/test_poplib.py
++++ b/Lib/test/test_poplib.py
+@@ -304,9 +304,11 @@ class TestPOP3Class(TestCase):
+     def test_rpop(self):
+         self.assertOK(self.client.rpop('foo'))
+ 
++    @test_support.requires_hashdigest('md5')
+     def test_apop_normal(self):
+         self.assertOK(self.client.apop('foo', 'dummypassword'))
+ 
++    @test_support.requires_hashdigest('md5')
+     def test_apop_REDOS(self):
+         # Replace welcome with very long evil welcome.
+         # NB The upper bound on welcome length is currently 2048.
+diff --git a/Lib/test/test_smtplib.py b/Lib/test/test_smtplib.py
+index 87047514e7a..64b3201254a 100644
+--- a/Lib/test/test_smtplib.py
++++ b/Lib/test/test_smtplib.py
+@@ -4,6 +4,7 @@ import email.mime.text
+ from email.message import EmailMessage
+ from email.base64mime import body_encode as encode_base64
+ import email.utils
++import hashlib
+ import hmac
+ import socket
+ import smtpd
+@@ -18,6 +19,7 @@ import textwrap
+ 
+ import unittest
+ from test import support, mock_socket
++from test.support import requires_hashdigest
+ from unittest.mock import Mock
+ 
+ HOST = "localhost"
+@@ -968,6 +970,7 @@ class SMTPSimTests(unittest.TestCase):
+         self.assertEqual(resp, (235, b'Authentication Succeeded'))
+         smtp.close()
+ 
++    @requires_hashdigest('md5')
+     def testAUTH_CRAM_MD5(self):
+         self.serv.add_feature("AUTH CRAM-MD5")
+         smtp = smtplib.SMTP(HOST, self.port, local_hostname='localhost', timeout=15)
+@@ -984,7 +987,13 @@ class SMTPSimTests(unittest.TestCase):
+         smtp.close()
+ 
+     def test_auth_function(self):
+-        supported = {'CRAM-MD5', 'PLAIN', 'LOGIN'}
++        supported = {'PLAIN', 'LOGIN'}
++        try:
++            hashlib.md5()
++        except ValueError:
++            pass
++        else:
++            supported.add('CRAM-MD5')
+         for mechanism in supported:
+             self.serv.add_feature("AUTH {}".format(mechanism))
+         for mechanism in supported:
+diff --git a/Lib/test/test_tarfile.py b/Lib/test/test_tarfile.py
+index 4cd7d5370f5..b5e855e0d7e 100644
+--- a/Lib/test/test_tarfile.py
++++ b/Lib/test/test_tarfile.py
+@@ -1,7 +1,7 @@
+ import sys
+ import os
+ import io
+-from hashlib import md5
++from hashlib import sha256
+ from contextlib import contextmanager
+ from random import Random
+ import pathlib
+@@ -11,7 +11,7 @@ import unittest.mock
+ import tarfile
+ 
+ from test import support
+-from test.support import script_helper
++from test.support import script_helper, requires_hashdigest
+ 
+ # Check for our compression modules.
+ try:
+@@ -27,8 +27,8 @@ try:
+ except ImportError:
+     lzma = None
+ 
+-def md5sum(data):
+-    return md5(data).hexdigest()
++def sha256sum(data):
++    return sha256(data).hexdigest()
+ 
+ TEMPDIR = os.path.abspath(support.TESTFN) + "-tardir"
+ tarextdir = TEMPDIR + '-extract-test'
+@@ -39,8 +39,12 @@ xzname = os.path.join(TEMPDIR, "testtar.tar.xz")
+ tmpname = os.path.join(TEMPDIR, "tmp.tar")
+ dotlessname = os.path.join(TEMPDIR, "testtar")
+ 
+-md5_regtype = "65f477c818ad9e15f7feab0c6d37742f"
+-md5_sparse = "a54fbc4ca4f4399a90e1b27164012fc6"
++sha256_regtype = (
++    "e09e4bc8b3c9d9177e77256353b36c159f5f040531bbd4b024a8f9b9196c71ce"
++)
++sha256_sparse = (
++    "4f05a776071146756345ceee937b33fc5644f5a96b9780d1c7d6a32cdf164d7b"
++)
+ 
+ 
+ class TarTest:
+@@ -95,7 +99,7 @@ class UstarReadTest(ReadTest, unittest.TestCase):
+             data = fobj.read()
+             self.assertEqual(len(data), tarinfo.size,
+                     "regular file extraction failed")
+-            self.assertEqual(md5sum(data), md5_regtype,
++            self.assertEqual(sha256sum(data), sha256_regtype,
+                     "regular file extraction failed")
+ 
+     def test_fileobj_readlines(self):
+@@ -180,7 +184,7 @@ class UstarReadTest(ReadTest, unittest.TestCase):
+         with self.tar.extractfile("ustar/regtype") as fobj:
+             fobj = io.TextIOWrapper(fobj)
+             data = fobj.read().encode("iso8859-1")
+-            self.assertEqual(md5sum(data), md5_regtype)
++            self.assertEqual(sha256sum(data), sha256_regtype)
+             try:
+                 fobj.seek(100)
+             except AttributeError:
+@@ -546,13 +550,13 @@ class MiscReadTestBase(CommonReadTest):
+             self.addCleanup(support.unlink, os.path.join(TEMPDIR, "ustar/lnktype"))
+             with open(os.path.join(TEMPDIR, "ustar/lnktype"), "rb") as f:
+                 data = f.read()
+-            self.assertEqual(md5sum(data), md5_regtype)
++            self.assertEqual(sha256sum(data), sha256_regtype)
+ 
+             tar.extract("ustar/symtype", TEMPDIR)
+             self.addCleanup(support.unlink, os.path.join(TEMPDIR, "ustar/symtype"))
+             with open(os.path.join(TEMPDIR, "ustar/symtype"), "rb") as f:
+                 data = f.read()
+-            self.assertEqual(md5sum(data), md5_regtype)
++            self.assertEqual(sha256sum(data), sha256_regtype)
+ 
+     def test_extractall(self):
+         # Test if extractall() correctly restores directory permissions
+@@ -687,7 +691,7 @@ class StreamReadTest(CommonReadTest, unittest.TestCase):
+             data = fobj.read()
+         self.assertEqual(len(data), tarinfo.size,
+                 "regular file extraction failed")
+-        self.assertEqual(md5sum(data), md5_regtype,
++        self.assertEqual(sha256sum(data), sha256_regtype,
+                 "regular file extraction failed")
+ 
+     def test_provoke_stream_error(self):
+@@ -799,8 +803,8 @@ class MemberReadTest(ReadTest, unittest.TestCase):
+     def _test_member(self, tarinfo, chksum=None, **kwargs):
+         if chksum is not None:
+             with self.tar.extractfile(tarinfo) as f:
+-                self.assertEqual(md5sum(f.read()), chksum,
+-                        "wrong md5sum for %s" % tarinfo.name)
++                self.assertEqual(sha256sum(f.read()), chksum,
++                        "wrong sha256sum for %s" % tarinfo.name)
+ 
+         kwargs["mtime"] = 0o7606136617
+         kwargs["uid"] = 1000
+@@ -815,11 +819,11 @@ class MemberReadTest(ReadTest, unittest.TestCase):
+ 
+     def test_find_regtype(self):
+         tarinfo = self.tar.getmember("ustar/regtype")
+-        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
++        self._test_member(tarinfo, size=7011, chksum=sha256_regtype)
+ 
+     def test_find_conttype(self):
+         tarinfo = self.tar.getmember("ustar/conttype")
+-        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
++        self._test_member(tarinfo, size=7011, chksum=sha256_regtype)
+ 
+     def test_find_dirtype(self):
+         tarinfo = self.tar.getmember("ustar/dirtype")
+@@ -851,28 +855,28 @@ class MemberReadTest(ReadTest, unittest.TestCase):
+ 
+     def test_find_sparse(self):
+         tarinfo = self.tar.getmember("ustar/sparse")
+-        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
++        self._test_member(tarinfo, size=86016, chksum=sha256_sparse)
+ 
+     def test_find_gnusparse(self):
+         tarinfo = self.tar.getmember("gnu/sparse")
+-        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
++        self._test_member(tarinfo, size=86016, chksum=sha256_sparse)
+ 
+     def test_find_gnusparse_00(self):
+         tarinfo = self.tar.getmember("gnu/sparse-0.0")
+-        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
++        self._test_member(tarinfo, size=86016, chksum=sha256_sparse)
+ 
+     def test_find_gnusparse_01(self):
+         tarinfo = self.tar.getmember("gnu/sparse-0.1")
+-        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
++        self._test_member(tarinfo, size=86016, chksum=sha256_sparse)
+ 
+     def test_find_gnusparse_10(self):
+         tarinfo = self.tar.getmember("gnu/sparse-1.0")
+-        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
++        self._test_member(tarinfo, size=86016, chksum=sha256_sparse)
+ 
+     def test_find_umlauts(self):
+         tarinfo = self.tar.getmember("ustar/umlauts-"
+                                      "\xc4\xd6\xdc\xe4\xf6\xfc\xdf")
+-        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
++        self._test_member(tarinfo, size=7011, chksum=sha256_regtype)
+ 
+     def test_find_ustar_longname(self):
+         name = "ustar/" + "12345/" * 39 + "1234567/longname"
+@@ -880,7 +884,7 @@ class MemberReadTest(ReadTest, unittest.TestCase):
+ 
+     def test_find_regtype_oldv7(self):
+         tarinfo = self.tar.getmember("misc/regtype-old-v7")
+-        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
++        self._test_member(tarinfo, size=7011, chksum=sha256_regtype)
+ 
+     def test_find_pax_umlauts(self):
+         self.tar.close()
+@@ -888,7 +892,7 @@ class MemberReadTest(ReadTest, unittest.TestCase):
+                                 encoding="iso8859-1")
+         tarinfo = self.tar.getmember("pax/umlauts-"
+                                      "\xc4\xd6\xdc\xe4\xf6\xfc\xdf")
+-        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
++        self._test_member(tarinfo, size=7011, chksum=sha256_regtype)
+ 
+ 
+ class LongnameTest:
+@@ -950,8 +954,8 @@ class GNUReadTest(LongnameTest, ReadTest, unittest.TestCase):
+         filename = os.path.join(TEMPDIR, name)
+         with open(filename, "rb") as fobj:
+             data = fobj.read()
+-        self.assertEqual(md5sum(data), md5_sparse,
+-                "wrong md5sum for %s" % name)
++        self.assertEqual(sha256sum(data), sha256_sparse,
++                "wrong sha256sum for %s" % name)
+ 
+         if self._fs_supports_holes():
+             s = os.stat(filename)
+@@ -2431,7 +2435,7 @@ class LinkEmulationTest(ReadTest, unittest.TestCase):
+         self.tar.extract(name, TEMPDIR)
+         with open(os.path.join(TEMPDIR, name), "rb") as f:
+             data = f.read()
+-        self.assertEqual(md5sum(data), md5_regtype)
++        self.assertEqual(sha256sum(data), sha256_regtype)
+ 
+     # See issues #1578269, #8879, and #17689 for some history on these skips
+     @unittest.skipIf(hasattr(os.path, "islink"),
+diff --git a/Lib/test/test_urllib2_localnet.py b/Lib/test/test_urllib2_localnet.py
+index ef0091c4930..895f97cc09a 100644
+--- a/Lib/test/test_urllib2_localnet.py
++++ b/Lib/test/test_urllib2_localnet.py
+@@ -325,6 +325,7 @@ class ProxyAuthTests(unittest.TestCase):
+     PASSWD = "test123"
+     REALM = "TestRealm"
+ 
++    @support.requires_hashdigest("md5")
+     def setUp(self):
+         super(ProxyAuthTests, self).setUp()
+         # Ignore proxy bypass settings in the environment.
+-- 
+2.21.0
+
+
+From 75d9613294e1cbd5aab9363cf3c435871a25f065 Mon Sep 17 00:00:00 2001
+From: Christian Heimes <christian@python.org>
+Date: Mon, 30 Sep 2019 09:10:38 +0200
+Subject: [PATCH 02/36] [3.8] bpo-38270: More fixes for strict crypto policy
+ (GH-16418) (#16437)
+
+test_hmac and test_hashlib test built-in hashing implementations and
+OpenSSL-based hashing implementations. Add more checks to skip OpenSSL
+implementations when a strict crypto policy is active.
+
+Use EVP_DigestInit_ex() instead of EVP_DigestInit() to initialize the
+EVP context. The EVP_DigestInit() function clears alls flags and breaks
+usedforsecurity flag again.
+
+Signed-off-by: Christian Heimes <christian@python.org>
+
+https://bugs.python.org/issue38270.
+(cherry picked from commit 90558158093c0ad893102158fd3c2dd9f864e82e)
+
+Co-authored-by: Christian Heimes <christian@python.org>
+---
+ Lib/test/support/__init__.py | 19 ++++++++++++++++---
+ Lib/test/test_hashlib.py     |  3 +++
+ Lib/test/test_hmac.py        | 12 ++++++------
+ 3 files changed, 25 insertions(+), 9 deletions(-)
+
+diff --git a/Lib/test/support/__init__.py b/Lib/test/support/__init__.py
+index a43819904e0..3342218cf0a 100644
+--- a/Lib/test/support/__init__.py
++++ b/Lib/test/support/__init__.py
+@@ -71,6 +71,11 @@ try:
+ except ImportError:
+     resource = None
+ 
++try:
++    import _hashlib
++except ImportError:
++    _hashlib = None
++
+ __all__ = [
+     # globals
+     "PIPE_MAX_SIZE", "verbose", "max_memuse", "use_resources", "failfast",
+@@ -88,7 +93,8 @@ __all__ = [
+     "create_empty_file", "can_symlink", "fs_is_case_insensitive",
+     # unittest
+     "is_resource_enabled", "requires", "requires_freebsd_version",
+-    "requires_linux_version", "requires_mac_ver", "check_syntax_error",
++    "requires_linux_version", "requires_mac_ver", "requires_hashdigest",
++    "check_syntax_error",
+     "TransientResource", "time_out", "socket_peer_reset", "ioerror_peer_reset",
+     "transient_internet", "BasicTestRunner", "run_unittest", "run_doctest",
+     "skip_unless_symlink", "requires_gzip", "requires_bz2", "requires_lzma",
+@@ -628,12 +634,16 @@ def requires_mac_ver(*min_version):
+         return wrapper
+     return decorator
+ 
+-def requires_hashdigest(digestname):
++def requires_hashdigest(digestname, openssl=None):
+     """Decorator raising SkipTest if a hashing algorithm is not available
+ 
+     The hashing algorithm could be missing or blocked by a strict crypto
+     policy.
+ 
++    If 'openssl' is True, then the decorator checks that OpenSSL provides
++    the algorithm. Otherwise the check falls back to built-in
++    implementations.
++
+     ValueError: [digital envelope routines: EVP_DigestInit_ex] disabled for FIPS
+     ValueError: unsupported hash type md4
+     """
+@@ -641,7 +651,10 @@ def requires_hashdigest(digestname):
+         @functools.wraps(func)
+         def wrapper(*args, **kwargs):
+             try:
+-                hashlib.new(digestname)
++                if openssl and _hashlib is not None:
++                    _hashlib.new(digestname)
++                else:
++                    hashlib.new(digestname)
+             except ValueError:
+                 raise unittest.SkipTest(
+                     f"hash digest '{digestname}' is not available."
+diff --git a/Lib/test/test_hashlib.py b/Lib/test/test_hashlib.py
+index 9711856853d..1b1b4d54112 100644
+--- a/Lib/test/test_hashlib.py
++++ b/Lib/test/test_hashlib.py
+@@ -8,6 +8,7 @@
+ 
+ import array
+ from binascii import unhexlify
++import functools
+ import hashlib
+ import importlib
+ import itertools
+@@ -21,6 +22,7 @@ import unittest
+ import warnings
+ from test import support
+ from test.support import _4G, bigmemtest, import_fresh_module
++from test.support import requires_hashdigest
+ from http.client import HTTPException
+ 
+ # Were we compiled --with-pydebug or with #define Py_DEBUG?
+@@ -117,6 +119,7 @@ class HashLibTestCase(unittest.TestCase):
+             constructors.add(_test_algorithm_via_hashlib_new)
+ 
+         _hashlib = self._conditional_import_module('_hashlib')
++        self._hashlib = _hashlib
+         if _hashlib:
+             # These two algorithms should always be present when this module
+             # is compiled.  If not, something was compiled wrong.
+diff --git a/Lib/test/test_hmac.py b/Lib/test/test_hmac.py
+index 81c3485f761..2a5a0d3d061 100644
+--- a/Lib/test/test_hmac.py
++++ b/Lib/test/test_hmac.py
+@@ -19,7 +19,7 @@ def ignore_warning(func):
+ 
+ class TestVectorsTestCase(unittest.TestCase):
+ 
+-    @requires_hashdigest('md5')
++    @requires_hashdigest('md5', openssl=True)
+     def test_md5_vectors(self):
+         # Test the HMAC module against test vectors from the RFC.
+ 
+@@ -66,7 +66,7 @@ class TestVectorsTestCase(unittest.TestCase):
+                  b"and Larger Than One Block-Size Data"),
+                 "6f630fad67cda0ee1fb1f562db3aa53e")
+ 
+-    @requires_hashdigest('sha1')
++    @requires_hashdigest('sha1', openssl=True)
+     def test_sha_vectors(self):
+         def shatest(key, data, digest):
+             h = hmac.HMAC(key, data, digestmod=hashlib.sha1)
+@@ -234,19 +234,19 @@ class TestVectorsTestCase(unittest.TestCase):
+                                    '134676fb6de0446065c97440fa8c6a58',
+                  })
+ 
+-    @requires_hashdigest('sha224')
++    @requires_hashdigest('sha224', openssl=True)
+     def test_sha224_rfc4231(self):
+         self._rfc4231_test_cases(hashlib.sha224, 'sha224', 28, 64)
+ 
+-    @requires_hashdigest('sha256')
++    @requires_hashdigest('sha256', openssl=True)
+     def test_sha256_rfc4231(self):
+         self._rfc4231_test_cases(hashlib.sha256, 'sha256', 32, 64)
+ 
+-    @requires_hashdigest('sha384')
++    @requires_hashdigest('sha384', openssl=True)
+     def test_sha384_rfc4231(self):
+         self._rfc4231_test_cases(hashlib.sha384, 'sha384', 48, 128)
+ 
+-    @requires_hashdigest('sha512')
++    @requires_hashdigest('sha512', openssl=True)
+     def test_sha512_rfc4231(self):
+         self._rfc4231_test_cases(hashlib.sha512, 'sha512', 64, 128)
+ 
+-- 
+2.21.0
+
+
+From 19a40f7e820bb991c03e03c05dc832539b676983 Mon Sep 17 00:00:00 2001
+From: stratakis <cstratak@redhat.com>
+Date: Tue, 3 Dec 2019 16:35:54 +0100
+Subject: [PATCH 03/36] bpo-38270: Fix indentation of test_hmac assertions
+ (GH-17446)
+
+Since https://github.com/python/cpython/commit/c64a1a61e6fc542cada40eb069a239317e1af36e two assertions were indented and thus ignored when running test_hmac.
+
+This PR fixes it. As the change is quite trivial I didn't add a NEWS entry.
+
+
+https://bugs.python.org/issue38270
+---
+ Lib/test/test_hmac.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Lib/test/test_hmac.py b/Lib/test/test_hmac.py
+index 2a5a0d3d061..338e0215a41 100644
+--- a/Lib/test/test_hmac.py
++++ b/Lib/test/test_hmac.py
+@@ -329,7 +329,7 @@ class ConstructorTestCase(unittest.TestCase):
+                           digestmod="sha256")
+         except Exception:
+             self.fail("Constructor call with bytearray arguments raised exception.")
+-            self.assertEqual(h.hexdigest(), self.expected)
++        self.assertEqual(h.hexdigest(), self.expected)
+ 
+     @requires_hashdigest('sha256')
+     def test_with_memoryview_msg(self):
+@@ -337,7 +337,7 @@ class ConstructorTestCase(unittest.TestCase):
+             h = hmac.HMAC(b"key", memoryview(b"hash this!"), digestmod="sha256")
+         except Exception:
+             self.fail("Constructor call with memoryview msg raised exception.")
+-            self.assertEqual(h.hexdigest(), self.expected)
++        self.assertEqual(h.hexdigest(), self.expected)
+ 
+     @requires_hashdigest('sha256')
+     def test_withmodule(self):
+-- 
+2.21.0
+
+
+From 5fa96205b380f2cb555ac346e6b7039746cb51ca Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Thu, 25 Jul 2019 16:19:52 +0200
-Subject: [PATCH 01/36] Expose OpenSSL FIPS_mode() as hashlib.get_fips_mode()
+Subject: [PATCH 04/36] Expose OpenSSL FIPS_mode() as hashlib.get_fips_mode()
 
 ---
  Lib/hashlib.py                  |  5 +++++
@@ -10,10 +786,10 @@ Subject: [PATCH 01/36] Expose OpenSSL FIPS_mode() as hashlib.get_fips_mode()
  3 files changed, 65 insertions(+), 1 deletion(-)
 
 diff --git a/Lib/hashlib.py b/Lib/hashlib.py
-index 98d2d7981a38..ae17c5851109 100644
+index 98d2d7981a3..ae17c585110 100644
 --- a/Lib/hashlib.py
 +++ b/Lib/hashlib.py
-@@ -236,6 +236,11 @@ def prf(msg, inner=inner, outer=outer):
+@@ -236,6 +236,11 @@ try:
  except ImportError:
      pass
  
@@ -26,7 +802,7 @@ index 98d2d7981a38..ae17c5851109 100644
  for __func_name in __always_supported:
      # try them all, some may not work due to the OpenSSL
 diff --git a/Modules/_hashopenssl.c b/Modules/_hashopenssl.c
-index 84edd72c85a3..4876a7f7aa76 100644
+index 84edd72c85a..4876a7f7aa7 100644
 --- a/Modules/_hashopenssl.c
 +++ b/Modules/_hashopenssl.c
 @@ -25,6 +25,9 @@
@@ -87,10 +863,10 @@ index 84edd72c85a3..4876a7f7aa76 100644
      CONSTRUCTOR_METH_DEF(sha1),
      CONSTRUCTOR_METH_DEF(sha224),
 diff --git a/Modules/clinic/_hashopenssl.c.h b/Modules/clinic/_hashopenssl.c.h
-index 04453526040b..8828e2776e95 100644
+index 04453526040..8828e2776e9 100644
 --- a/Modules/clinic/_hashopenssl.c.h
 +++ b/Modules/clinic/_hashopenssl.c.h
-@@ -54,7 +54,30 @@ _hashlib_scrypt(PyObject *module, PyObject **args, Py_ssize_t nargs, PyObject *k
+@@ -54,7 +54,30 @@ exit:
  
  #endif /* (OPENSSL_VERSION_NUMBER > 0x10100000L && !defined(OPENSSL_NO_SCRYPT) && !defined(LIBRESSL_VERSION_NUMBER)) */
  
@@ -122,11 +898,14 @@ index 04453526040b..8828e2776e95 100644
  #endif /* !defined(_HASHLIB_SCRYPT_METHODDEF) */
 -/*[clinic end generated code: output=118cd7036fa0fb52 input=a9049054013a1b77]*/
 +/*[clinic end generated code: output=7d683c930bbb7c36 input=a9049054013a1b77]*/
+-- 
+2.21.0
 
-From b8c716a651d5884e0dfdbb2cfefb0f49a0ee0540 Mon Sep 17 00:00:00 2001
+
+From e60cc93037b913ca2a410d73b52d8301ab0d76cd Mon Sep 17 00:00:00 2001
 From: Charalampos Stratakis <cstratak@redhat.com>
 Date: Thu, 25 Jul 2019 17:04:06 +0200
-Subject: [PATCH 02/36] Use python's fall backs for the crypto it implements
+Subject: [PATCH 05/36] Use python's fall backs for the crypto it implements
  only if we are not in FIPS mode
 
 ---
@@ -135,10 +914,10 @@ Subject: [PATCH 02/36] Use python's fall backs for the crypto it implements
  2 files changed, 81 insertions(+), 129 deletions(-)
 
 diff --git a/Lib/hashlib.py b/Lib/hashlib.py
-index ae17c5851109..7db1e02601fe 100644
+index ae17c585110..7db1e02601f 100644
 --- a/Lib/hashlib.py
 +++ b/Lib/hashlib.py
-@@ -67,56 +67,64 @@
+@@ -67,56 +67,64 @@ algorithms_available = set(__always_supported)
  __all__ = __always_supported + ('new', 'algorithms_guaranteed',
                                  'algorithms_available', 'pbkdf2_hmac')
  
@@ -303,7 +1082,7 @@ index ae17c5851109..7db1e02601fe 100644
          return __get_builtin_constructor(name)(data)
  
  
-@@ -163,72 +176,14 @@ def __hash_new(name, data=b'', **kwargs):
+@@ -163,72 +176,14 @@ try:
      algorithms_available = algorithms_available.union(
              _hashlib.openssl_md_meth_names)
  except ImportError:
@@ -380,7 +1159,7 @@ index ae17c5851109..7db1e02601fe 100644
  
  try:
      # OpenSSL's scrypt requires OpenSSL 1.1+
-@@ -236,12 +191,6 @@ def prf(msg, inner=inner, outer=outer):
+@@ -236,12 +191,6 @@ try:
  except ImportError:
      pass
  
@@ -393,7 +1172,7 @@ index ae17c5851109..7db1e02601fe 100644
  for __func_name in __always_supported:
      # try them all, some may not work due to the OpenSSL
      # version not supporting that algorithm.
-@@ -254,4 +203,6 @@ def prf(msg, inner=inner, outer=outer):
+@@ -254,4 +203,6 @@ for __func_name in __always_supported:
  
  # Cleanup locals()
  del __always_supported, __func_name, __get_hash
@@ -402,10 +1181,10 @@ index ae17c5851109..7db1e02601fe 100644
 +if not get_fips_mode():
 +    del __py_new
 diff --git a/Lib/test/test_hashlib.py b/Lib/test/test_hashlib.py
-index 9711856853de..c67d2f6d00aa 100644
+index 1b1b4d54112..4e6b5b607a9 100644
 --- a/Lib/test/test_hashlib.py
 +++ b/Lib/test/test_hashlib.py
-@@ -930,6 +930,7 @@ def _test_pbkdf2_hmac(self, pbkdf2):
+@@ -933,6 +933,7 @@ class KDFTests(unittest.TestCase):
              iterations=1, dklen=None)
          self.assertEqual(out, self.pbkdf2_results['sha1'][0][0])
  
@@ -413,11 +1192,14 @@ index 9711856853de..c67d2f6d00aa 100644
      def test_pbkdf2_hmac_py(self):
          self._test_pbkdf2_hmac(py_hashlib.pbkdf2_hmac)
  
+-- 
+2.21.0
 
-From 88185ade926f6a629acd8d24f00dfd10bfa9de0e Mon Sep 17 00:00:00 2001
+
+From 4803386d980b9ad1a9bdde829e8642676acd8bf4 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Thu, 25 Jul 2019 17:19:06 +0200
-Subject: [PATCH 03/36] Disable Python's hash implementations in FIPS mode,
+Subject: [PATCH 06/36] Disable Python's hash implementations in FIPS mode,
  forcing OpenSSL
 
 ---
@@ -433,7 +1215,7 @@ Subject: [PATCH 03/36] Disable Python's hash implementations in FIPS mode,
 
 diff --git a/Include/_hashopenssl.h b/Include/_hashopenssl.h
 new file mode 100644
-index 000000000000..a726c0d3fbf3
+index 00000000000..a726c0d3fbf
 --- /dev/null
 +++ b/Include/_hashopenssl.h
 @@ -0,0 +1,66 @@
@@ -504,7 +1286,7 @@ index 000000000000..a726c0d3fbf3
 +
 +#endif  // !Py_HASHOPENSSL_H
 diff --git a/Modules/_blake2/blake2b_impl.c b/Modules/_blake2/blake2b_impl.c
-index 418c0184006d..341e67a8fcc4 100644
+index 418c0184006..341e67a8fcc 100644
 --- a/Modules/_blake2/blake2b_impl.c
 +++ b/Modules/_blake2/blake2b_impl.c
 @@ -14,6 +14,7 @@
@@ -534,7 +1316,7 @@ index 418c0184006d..341e67a8fcc4 100644
  
  #ifdef WITH_THREAD
 diff --git a/Modules/_blake2/blake2module.c b/Modules/_blake2/blake2module.c
-index e2a3d420d4eb..817b71656844 100644
+index e2a3d420d4e..817b7165684 100644
 --- a/Modules/_blake2/blake2module.c
 +++ b/Modules/_blake2/blake2module.c
 @@ -9,6 +9,7 @@
@@ -555,7 +1337,7 @@ index e2a3d420d4eb..817b71656844 100644
      if (m == NULL)
          return NULL;
 diff --git a/Modules/_blake2/blake2s_impl.c b/Modules/_blake2/blake2s_impl.c
-index 24e529b6596a..0dfe0586b570 100644
+index 24e529b6596..0dfe0586b57 100644
 --- a/Modules/_blake2/blake2s_impl.c
 +++ b/Modules/_blake2/blake2s_impl.c
 @@ -14,6 +14,7 @@
@@ -585,7 +1367,7 @@ index 24e529b6596a..0dfe0586b570 100644
  
  #ifdef WITH_THREAD
 diff --git a/Modules/_hashopenssl.c b/Modules/_hashopenssl.c
-index 4876a7f7aa76..02cf6087a2ea 100644
+index 4876a7f7aa7..02cf6087a2e 100644
 --- a/Modules/_hashopenssl.c
 +++ b/Modules/_hashopenssl.c
 @@ -17,16 +17,13 @@
@@ -645,7 +1427,7 @@ index 4876a7f7aa76..02cf6087a2ea 100644
  newEVPobject(PyObject *name)
  {
 diff --git a/Modules/_sha3/sha3module.c b/Modules/_sha3/sha3module.c
-index 2c2b2dbc5c7d..624f7f247d4f 100644
+index 2c2b2dbc5c7..624f7f247d4 100644
 --- a/Modules/_sha3/sha3module.c
 +++ b/Modules/_sha3/sha3module.c
 @@ -18,6 +18,7 @@
@@ -682,10 +1464,10 @@ index 2c2b2dbc5c7d..624f7f247d4f 100644
          return NULL;
      }
 diff --git a/setup.py b/setup.py
-index e2c18982532b..e2e659ef7950 100644
+index e2c18982532..e2e659ef795 100644
 --- a/setup.py
 +++ b/setup.py
-@@ -901,31 +901,30 @@ def detect_modules(self):
+@@ -901,31 +901,30 @@ class PyBuildExt(build_ext):
          have_usable_openssl = (have_any_openssl and
                                 openssl_ver >= min_openssl_ver)
  
@@ -730,7 +1512,7 @@ index e2c18982532b..e2e659ef7950 100644
  
          blake2_deps = glob(os.path.join(os.getcwd(), srcdir,
                                          'Modules/_blake2/impl/*'))
-@@ -944,6 +943,7 @@ def detect_modules(self):
+@@ -944,6 +943,7 @@ class PyBuildExt(build_ext):
                                  '_blake2/blake2b_impl.c',
                                  '_blake2/blake2s_impl.c'],
                                 define_macros=blake2_macros,
@@ -738,7 +1520,7 @@ index e2c18982532b..e2e659ef7950 100644
                                 depends=blake2_deps) )
  
          sha3_deps = glob(os.path.join(os.getcwd(), srcdir,
-@@ -951,7 +951,8 @@ def detect_modules(self):
+@@ -951,7 +951,8 @@ class PyBuildExt(build_ext):
          sha3_deps.append('hashlib.h')
          exts.append( Extension('_sha3',
                                 ['_sha3/sha3module.c'],
@@ -748,11 +1530,14 @@ index e2c18982532b..e2e659ef7950 100644
  
          # Modules that provide persistent dictionary-like semantics.  You will
          # probably want to arrange for at least one of them to be available on
+-- 
+2.21.0
 
-From ced78ca1f37efca7a43dc467756a4ff5b5669555 Mon Sep 17 00:00:00 2001
+
+From 0f35f480e2134c7d5c4ea3d68d8c0af14f56afa3 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Thu, 25 Jul 2019 17:35:27 +0200
-Subject: [PATCH 04/36] Expose all hashes available to OpenSSL, using a list
+Subject: [PATCH 07/36] Expose all hashes available to OpenSSL, using a list
 
 ---
  Modules/_hashopenssl.c      | 44 ++++++++++++++-----------------------
@@ -761,7 +1546,7 @@ Subject: [PATCH 04/36] Expose all hashes available to OpenSSL, using a list
  create mode 100644 Modules/_hashopenssl_list.h
 
 diff --git a/Modules/_hashopenssl.c b/Modules/_hashopenssl.c
-index 02cf6087a2ea..7dfd70822b99 100644
+index 02cf6087a2e..7dfd70822b9 100644
 --- a/Modules/_hashopenssl.c
 +++ b/Modules/_hashopenssl.c
 @@ -66,12 +66,9 @@ static PyTypeObject EVPtype;
@@ -858,7 +1643,7 @@ index 02cf6087a2ea..7dfd70822b99 100644
  }
 diff --git a/Modules/_hashopenssl_list.h b/Modules/_hashopenssl_list.h
 new file mode 100644
-index 000000000000..3c11b2eb6c62
+index 00000000000..3c11b2eb6c6
 --- /dev/null
 +++ b/Modules/_hashopenssl_list.h
 @@ -0,0 +1,21 @@
@@ -883,11 +1668,14 @@ index 000000000000..3c11b2eb6c62
 +_HASH(sha3_512, "sha3-512")
 +_HASH(shake_128, "shake128")
 +_HASH(shake_256, "shake256")
+-- 
+2.21.0
 
-From c05359891debdfd0f2b320c6c396e9baf4a9f6ab Mon Sep 17 00:00:00 2001
+
+From 7e5b74b7268e4fb7d473d24cd023493e4e87eb76 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Thu, 25 Jul 2019 18:13:45 +0200
-Subject: [PATCH 05/36] Fix tests
+Subject: [PATCH 08/36] Fix tests
 
 ---
  Lib/hashlib.py           |  5 +++-
@@ -895,10 +1683,10 @@ Subject: [PATCH 05/36] Fix tests
  2 files changed, 49 insertions(+), 14 deletions(-)
 
 diff --git a/Lib/hashlib.py b/Lib/hashlib.py
-index 7db1e02601fe..2def0a310c66 100644
+index 7db1e02601f..2def0a310c6 100644
 --- a/Lib/hashlib.py
 +++ b/Lib/hashlib.py
-@@ -122,7 +122,10 @@ def __get_builtin_constructor(name):
+@@ -122,7 +122,10 @@ if not get_fips_mode():
  
  def __get_openssl_constructor(name):
      if not get_fips_mode():
@@ -911,10 +1699,10 @@ index 7db1e02601fe..2def0a310c66 100644
              return __get_builtin_constructor(name)
      try:
 diff --git a/Lib/test/test_hashlib.py b/Lib/test/test_hashlib.py
-index c67d2f6d00aa..645a3d01b91d 100644
+index 4e6b5b607a9..e57c93b42f5 100644
 --- a/Lib/test/test_hashlib.py
 +++ b/Lib/test/test_hashlib.py
-@@ -179,7 +179,9 @@ def test_hash_array(self):
+@@ -182,7 +182,9 @@ class HashLibTestCase(unittest.TestCase):
          a = array.array("b", range(10))
          for cons in self.hash_constructors:
              c = cons(a)
@@ -925,7 +1713,7 @@ index c67d2f6d00aa..645a3d01b91d 100644
                  c.hexdigest(16)
              else:
                  c.hexdigest()
-@@ -226,7 +228,9 @@ def test_get_builtin_constructor(self):
+@@ -229,7 +231,9 @@ class HashLibTestCase(unittest.TestCase):
      def test_hexdigest(self):
          for cons in self.hash_constructors:
              h = cons()
@@ -936,7 +1724,7 @@ index c67d2f6d00aa..645a3d01b91d 100644
                  self.assertIsInstance(h.digest(16), bytes)
                  self.assertEqual(hexstr(h.digest(16)), h.hexdigest(16))
              else:
-@@ -240,6 +244,8 @@ def test_digest_length_overflow(self):
+@@ -243,6 +247,8 @@ class HashLibTestCase(unittest.TestCase):
              h = cons()
              if h.name not in self.shakes:
                  continue
@@ -945,7 +1733,7 @@ index c67d2f6d00aa..645a3d01b91d 100644
              for digest in h.digest, h.hexdigest:
                  with self.assertRaises((ValueError, OverflowError)):
                      digest(-10)
-@@ -269,7 +275,9 @@ def test_large_update(self):
+@@ -272,7 +278,9 @@ class HashLibTestCase(unittest.TestCase):
              m1.update(bees)
              m1.update(cees)
              m1.update(dees)
@@ -956,7 +1744,7 @@ index c67d2f6d00aa..645a3d01b91d 100644
                  args = (16,)
              else:
                  args = ()
-@@ -296,15 +304,36 @@ def check(self, name, data, hexdigest, shake=False, **kwargs):
+@@ -299,15 +307,36 @@ class HashLibTestCase(unittest.TestCase):
          # 2 is for hashlib.name(...) and hashlib.new(name, ...)
          self.assertGreaterEqual(len(constructors), 2)
          for hash_object_constructor in constructors:
@@ -995,7 +1783,7 @@ index c67d2f6d00aa..645a3d01b91d 100644
              digest = bytes.fromhex(hexdigest)
              self.assertEqual(computed, digest)
              if not shake:
-@@ -344,12 +373,14 @@ def check_blocksize_name(self, name, block_size=0, digest_size=0,
+@@ -347,12 +376,14 @@ class HashLibTestCase(unittest.TestCase):
          for hash_object_constructor in constructors:
              m = hash_object_constructor()
              self.assertEqual(m.block_size, block_size)
@@ -1015,7 +1803,7 @@ index c67d2f6d00aa..645a3d01b91d 100644
              else:
                  self.assertEqual(len(m.digest()), digest_size)
                  self.assertEqual(len(m.hexdigest()), 2*digest_size)
-@@ -379,9 +410,10 @@ def check_sha3(self, name, capacity, rate, suffix):
+@@ -382,9 +413,10 @@ class HashLibTestCase(unittest.TestCase):
          for hash_object_constructor in constructors:
              m = hash_object_constructor()
              self.assertEqual(capacity + rate, 1600)
@@ -1029,11 +1817,14 @@ index c67d2f6d00aa..645a3d01b91d 100644
  
      @requires_sha3
      def test_extra_sha3(self):
+-- 
+2.21.0
 
-From b9238e7d197c315d2c9c7aa34e5c8a4b728b25a0 Mon Sep 17 00:00:00 2001
+
+From d6618795dd079acd8585f830b129d7f2fc9a6c52 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Fri, 26 Jul 2019 11:27:57 +0200
-Subject: [PATCH 06/36] Change FIPS exceptions from _blake2, _sha3 module init
+Subject: [PATCH 09/36] Change FIPS exceptions from _blake2, _sha3 module init
  to ImportError
 
 ---
@@ -1045,7 +1836,7 @@ Subject: [PATCH 06/36] Change FIPS exceptions from _blake2, _sha3 module init
  5 files changed, 13 insertions(+), 14 deletions(-)
 
 diff --git a/Include/_hashopenssl.h b/Include/_hashopenssl.h
-index a726c0d3fbf3..47ed00304220 100644
+index a726c0d3fbf..47ed0030422 100644
 --- a/Include/_hashopenssl.h
 +++ b/Include/_hashopenssl.h
 @@ -39,7 +39,7 @@ _setException(PyObject *exc)
@@ -1081,7 +1872,7 @@ index a726c0d3fbf3..47ed00304220 100644
  
  #endif  // !Py_HASHOPENSSL_H
 diff --git a/Modules/_blake2/blake2b_impl.c b/Modules/_blake2/blake2b_impl.c
-index 341e67a8fcc4..f6bfce823b8f 100644
+index 341e67a8fcc..f6bfce823b8 100644
 --- a/Modules/_blake2/blake2b_impl.c
 +++ b/Modules/_blake2/blake2b_impl.c
 @@ -104,7 +104,7 @@ py_blake2b_new_impl(PyTypeObject *type, PyObject *data, int digest_size,
@@ -1103,7 +1894,7 @@ index 341e67a8fcc4..f6bfce823b8f 100644
      GET_BUFFER_VIEW_OR_ERROUT(data, &buf);
  
 diff --git a/Modules/_blake2/blake2module.c b/Modules/_blake2/blake2module.c
-index 817b71656844..a9c7cbc7ebe9 100644
+index 817b7165684..a9c7cbc7ebe 100644
 --- a/Modules/_blake2/blake2module.c
 +++ b/Modules/_blake2/blake2module.c
 @@ -58,7 +58,7 @@ PyInit__blake2(void)
@@ -1116,7 +1907,7 @@ index 817b71656844..a9c7cbc7ebe9 100644
      m = PyModule_Create(&blake2_module);
      if (m == NULL)
 diff --git a/Modules/_blake2/blake2s_impl.c b/Modules/_blake2/blake2s_impl.c
-index 0dfe0586b570..28ae5b651019 100644
+index 0dfe0586b57..28ae5b65101 100644
 --- a/Modules/_blake2/blake2s_impl.c
 +++ b/Modules/_blake2/blake2s_impl.c
 @@ -104,7 +104,7 @@ py_blake2s_new_impl(PyTypeObject *type, PyObject *data, int digest_size,
@@ -1138,7 +1929,7 @@ index 0dfe0586b570..28ae5b651019 100644
      GET_BUFFER_VIEW_OR_ERROUT(data, &buf);
  
 diff --git a/Modules/_sha3/sha3module.c b/Modules/_sha3/sha3module.c
-index 624f7f247d4f..2783a75644fc 100644
+index 624f7f247d4..2783a75644f 100644
 --- a/Modules/_sha3/sha3module.c
 +++ b/Modules/_sha3/sha3module.c
 @@ -163,7 +163,7 @@ static PyTypeObject SHAKE256type;
@@ -1168,18 +1959,21 @@ index 624f7f247d4f..2783a75644fc 100644
  
      if ((m = PyModule_Create(&_SHA3module)) == NULL) {
          return NULL;
+-- 
+2.21.0
 
-From d9cf1f68ed7c7d10846119d146583d6fd2d52143 Mon Sep 17 00:00:00 2001
+
+From eb78e4b4179842185f53edba2073ab7644db7ad3 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Fri, 26 Jul 2019 11:24:09 +0200
-Subject: [PATCH 07/36] Make hashlib importable under FIPS mode
+Subject: [PATCH 10/36] Make hashlib importable under FIPS mode
 
 ---
  Lib/hashlib.py | 8 +++++---
  1 file changed, 5 insertions(+), 3 deletions(-)
 
 diff --git a/Lib/hashlib.py b/Lib/hashlib.py
-index 2def0a310c66..ca1dd2022515 100644
+index 2def0a310c6..ca1dd202251 100644
 --- a/Lib/hashlib.py
 +++ b/Lib/hashlib.py
 @@ -132,12 +132,14 @@ def __get_openssl_constructor(name):
@@ -1200,11 +1994,14 @@ index 2def0a310c66..ca1dd2022515 100644
          return __get_builtin_constructor(name)
  
  if not get_fips_mode():
+-- 
+2.21.0
 
-From 5b21c029a9b69b06f9ef245264db2ddd227011f9 Mon Sep 17 00:00:00 2001
+
+From 0f313f65457f1e7d0e7238a71935f5d4e0d197ee Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Fri, 26 Jul 2019 15:41:10 +0200
-Subject: [PATCH 08/36] Implement hmac.new using new built-in module,
+Subject: [PATCH 11/36] Implement hmac.new using new built-in module,
  _hmacopenssl
 
 ---
@@ -1217,10 +2014,10 @@ Subject: [PATCH 08/36] Implement hmac.new using new built-in module,
  create mode 100644 Modules/clinic/_hmacopenssl.c.h
 
 diff --git a/Lib/hmac.py b/Lib/hmac.py
-index 121029aa670b..ed98406bd2e1 100644
+index 121029aa670..ed98406bd2e 100644
 --- a/Lib/hmac.py
 +++ b/Lib/hmac.py
-@@ -6,6 +6,8 @@
+@@ -6,6 +6,8 @@ Implements the HMAC algorithm as described by RFC 2104.
  import warnings as _warnings
  from _operator import _compare_digest as compare_digest
  import hashlib as _hashlib
@@ -1229,7 +2026,7 @@ index 121029aa670b..ed98406bd2e1 100644
  
  trans_5C = bytes((x ^ 0x5C) for x in range(256))
  trans_36 = bytes((x ^ 0x36) for x in range(256))
-@@ -37,6 +39,11 @@ def __init__(self, key, msg = None, digestmod = None):
+@@ -37,6 +39,11 @@ class HMAC:
  
          Note: key and msg must be a bytes or bytearray objects.
          """
@@ -1241,7 +2038,7 @@ index 121029aa670b..ed98406bd2e1 100644
  
          if not isinstance(key, (bytes, bytearray)):
              raise TypeError("key: expected bytes or bytearray, but got %r" % type(key).__name__)
-@@ -90,6 +97,8 @@ def name(self):
+@@ -90,6 +97,8 @@ class HMAC:
      def update(self, msg):
          """Update this hashing object with the string msg.
          """
@@ -1250,7 +2047,7 @@ index 121029aa670b..ed98406bd2e1 100644
          self.inner.update(msg)
  
      def copy(self):
-@@ -130,6 +139,19 @@ def hexdigest(self):
+@@ -130,6 +139,19 @@ class HMAC:
          h = self._current()
          return h.hexdigest()
  
@@ -1287,7 +2084,7 @@ index 121029aa670b..ed98406bd2e1 100644
 +        return HMAC(key, msg, digestmod)
 diff --git a/Modules/_hmacopenssl.c b/Modules/_hmacopenssl.c
 new file mode 100644
-index 000000000000..ca95d725f019
+index 00000000000..ca95d725f01
 --- /dev/null
 +++ b/Modules/_hmacopenssl.c
 @@ -0,0 +1,396 @@
@@ -1689,7 +2486,7 @@ index 000000000000..ca95d725f019
 +}
 diff --git a/Modules/clinic/_hmacopenssl.c.h b/Modules/clinic/_hmacopenssl.c.h
 new file mode 100644
-index 000000000000..b472a6eddd34
+index 00000000000..b472a6eddd3
 --- /dev/null
 +++ b/Modules/clinic/_hmacopenssl.c.h
 @@ -0,0 +1,133 @@
@@ -1827,10 +2624,10 @@ index 000000000000..b472a6eddd34
 +}
 +/*[clinic end generated code: output=10b6e8cac6d7a2c9 input=a9049054013a1b77]*/
 diff --git a/setup.py b/setup.py
-index e2e659ef7950..282aa4178ed3 100644
+index e2e659ef795..282aa4178ed 100644
 --- a/setup.py
 +++ b/setup.py
-@@ -922,6 +922,10 @@ def detect_modules(self):
+@@ -922,6 +922,10 @@ class PyBuildExt(build_ext):
                        openssl_ver)
                  missing.append('_hashlib')
  
@@ -1841,11 +2638,14 @@ index e2e659ef7950..282aa4178ed3 100644
          # RHEL: Always force OpenSSL for md5, sha1, sha256, sha512;
          # don't build Python's implementations.
          # sha3 and blake2 have extra functionality, so do build those:
+-- 
+2.21.0
 
-From 7eb3d47afdad9052f505ecbbbfab065dbbc240e0 Mon Sep 17 00:00:00 2001
+
+From 37797b4d89e7b4859dc4728da91cbebf5fdb2a52 Mon Sep 17 00:00:00 2001
 From: Marcel Plch <mplch@redhat.com>
 Date: Mon, 29 Jul 2019 12:45:11 +0200
-Subject: [PATCH 09/36] FIPS review
+Subject: [PATCH 12/36] FIPS review
 
 * Port _hmacopenssl to multiphase init.
 * Make _hmacopenssl.HMAC.copy create same type as self.
@@ -1856,10 +2656,10 @@ Subject: [PATCH 09/36] FIPS review
  2 files changed, 70 insertions(+), 44 deletions(-)
 
 diff --git a/Lib/hmac.py b/Lib/hmac.py
-index ed98406bd2e1..b9bf16b84ca0 100644
+index ed98406bd2e..b9bf16b84ca 100644
 --- a/Lib/hmac.py
 +++ b/Lib/hmac.py
-@@ -42,7 +42,7 @@ def __init__(self, key, msg = None, digestmod = None):
+@@ -42,7 +42,7 @@ class HMAC:
          if _hashlib.get_fips_mode():
              raise ValueError(
                  'hmac.HMAC is not available in FIPS mode. '
@@ -1869,7 +2669,7 @@ index ed98406bd2e1..b9bf16b84ca0 100644
  
          if not isinstance(key, (bytes, bytearray)):
 diff --git a/Modules/_hmacopenssl.c b/Modules/_hmacopenssl.c
-index ca95d725f019..216ed04f2360 100644
+index ca95d725f01..216ed04f236 100644
 --- a/Modules/_hmacopenssl.c
 +++ b/Modules/_hmacopenssl.c
 @@ -24,7 +24,10 @@
@@ -2053,11 +2853,14 @@ index ca95d725f019..216ed04f2360 100644
 +{
 +    return PyModuleDef_Init(&_hmacopenssl_def);
  }
+-- 
+2.21.0
 
-From 641e76725f2660da75490ea0c10da52688093778 Mon Sep 17 00:00:00 2001
+
+From 9a3bf73d382cda99a665cab8438f3cd0388256b0 Mon Sep 17 00:00:00 2001
 From: Marcel Plch <mplch@redhat.com>
 Date: Mon, 29 Jul 2019 13:05:04 +0200
-Subject: [PATCH 10/36] revert cosmetic nitpick and remove trailing whitespace
+Subject: [PATCH 13/36] revert cosmetic nitpick and remove trailing whitespace
 
 ---
  Lib/hmac.py            | 2 +-
@@ -2065,10 +2868,10 @@ Subject: [PATCH 10/36] revert cosmetic nitpick and remove trailing whitespace
  2 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/Lib/hmac.py b/Lib/hmac.py
-index b9bf16b84ca0..ed98406bd2e1 100644
+index b9bf16b84ca..ed98406bd2e 100644
 --- a/Lib/hmac.py
 +++ b/Lib/hmac.py
-@@ -42,7 +42,7 @@ def __init__(self, key, msg = None, digestmod = None):
+@@ -42,7 +42,7 @@ class HMAC:
          if _hashlib.get_fips_mode():
              raise ValueError(
                  'hmac.HMAC is not available in FIPS mode. '
@@ -2078,7 +2881,7 @@ index b9bf16b84ca0..ed98406bd2e1 100644
  
          if not isinstance(key, (bytes, bytearray)):
 diff --git a/Modules/_hmacopenssl.c b/Modules/_hmacopenssl.c
-index 216ed04f2360..221714ca4349 100644
+index 216ed04f236..221714ca434 100644
 --- a/Modules/_hmacopenssl.c
 +++ b/Modules/_hmacopenssl.c
 @@ -363,7 +363,7 @@ static PyType_Slot HmacType_slots[] = {
@@ -2099,11 +2902,14 @@ index 216ed04f2360..221714ca4349 100644
      .m_name = "_hmacopenssl",
      .m_methods = hmacopenssl_functions,
      .m_slots = hmacopenssl_slots,
+-- 
+2.21.0
 
-From 0a1522aacb0b070632f7feaad6f92bfe8fc9c89b Mon Sep 17 00:00:00 2001
+
+From b2853963d35c60595cec7e5cd40f31b1c9c59426 Mon Sep 17 00:00:00 2001
 From: Charalampos Stratakis <cstratak@redhat.com>
 Date: Wed, 31 Jul 2019 15:43:43 +0200
-Subject: [PATCH 11/36] Add initial tests for various hashes under FIPS mode
+Subject: [PATCH 14/36] Add initial tests for various hashes under FIPS mode
 
 ---
  Lib/test/test_fips.py | 64 +++++++++++++++++++++++++++++++++++++++++++
@@ -2112,7 +2918,7 @@ Subject: [PATCH 11/36] Add initial tests for various hashes under FIPS mode
 
 diff --git a/Lib/test/test_fips.py b/Lib/test/test_fips.py
 new file mode 100644
-index 000000000000..bee911ef405a
+index 00000000000..bee911ef405
 --- /dev/null
 +++ b/Lib/test/test_fips.py
 @@ -0,0 +1,64 @@
@@ -2180,18 +2986,21 @@ index 000000000000..bee911ef405a
 +
 +if __name__ == "__main__":
 +    unittest.main()
+-- 
+2.21.0
 
-From f20b01bb18523587cb5beedc67a8ee08a502788d Mon Sep 17 00:00:00 2001
+
+From b3a8214b5afe4809983e6a5e5d339527e8238318 Mon Sep 17 00:00:00 2001
 From: Marcel Plch <mplch@redhat.com>
 Date: Thu, 1 Aug 2019 16:39:37 +0200
-Subject: [PATCH 12/36] Initialize HMAC type.
+Subject: [PATCH 15/36] Initialize HMAC type.
 
 ---
  Modules/_hmacopenssl.c | 12 ++++++++----
  1 file changed, 8 insertions(+), 4 deletions(-)
 
 diff --git a/Modules/_hmacopenssl.c b/Modules/_hmacopenssl.c
-index 221714ca4349..239445a0831b 100644
+index 221714ca434..239445a0831 100644
 --- a/Modules/_hmacopenssl.c
 +++ b/Modules/_hmacopenssl.c
 @@ -22,12 +22,12 @@
@@ -2246,11 +3055,14 @@ index 221714ca4349..239445a0831b 100644
      return 0;
  
  fail:
+-- 
+2.21.0
 
-From b819ca654873ea36144ce1cb6f8c422a6d2f5d7d Mon Sep 17 00:00:00 2001
+
+From 5bd6eb14097fe4ff2bb639e5c50260b1379d0a69 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Thu, 1 Aug 2019 17:57:05 +0200
-Subject: [PATCH 13/36] Use a stronger hash in multiprocessing handshake
+Subject: [PATCH 16/36] Use a stronger hash in multiprocessing handshake
 
 Adapted from patch by David Malcolm,
 https://bugs.python.org/issue17258
@@ -2259,10 +3071,10 @@ https://bugs.python.org/issue17258
  1 file changed, 6 insertions(+), 2 deletions(-)
 
 diff --git a/Lib/multiprocessing/connection.py b/Lib/multiprocessing/connection.py
-index d3797503a755..a0b1538f88b3 100644
+index d3797503a75..a0b1538f88b 100644
 --- a/Lib/multiprocessing/connection.py
 +++ b/Lib/multiprocessing/connection.py
-@@ -42,6 +42,10 @@
+@@ -42,6 +42,10 @@ BUFSIZE = 8192
  # A very generous timeout when it comes to local connections...
  CONNECTION_TIMEOUT = 20.
  
@@ -2291,18 +3103,21 @@ index d3797503a755..a0b1538f88b3 100644
      connection.send_bytes(digest)
      response = connection.recv_bytes(256)        # reject large message
      if response != WELCOME:
+-- 
+2.21.0
 
-From 01950bb63c0a52faf5304e3978a6308641305a03 Mon Sep 17 00:00:00 2001
+
+From 1dd4b2d6c4797b828ac38d8c62f1e69fce49f1e9 Mon Sep 17 00:00:00 2001
 From: Marcel Plch <mplch@redhat.com>
 Date: Fri, 2 Aug 2019 17:36:01 +0200
-Subject: [PATCH 14/36] Fix refcounting
+Subject: [PATCH 17/36] Fix refcounting
 
 ---
  Modules/_hmacopenssl.c | 35 ++++++++++++++++++++++++++++++++++-
  1 file changed, 34 insertions(+), 1 deletion(-)
 
 diff --git a/Modules/_hmacopenssl.c b/Modules/_hmacopenssl.c
-index 239445a0831b..9c2882833d1c 100644
+index 239445a0831..9c2882833d1 100644
 --- a/Modules/_hmacopenssl.c
 +++ b/Modules/_hmacopenssl.c
 @@ -373,6 +373,34 @@ static struct PyMethodDef hmacopenssl_functions[] = {
@@ -2362,18 +3177,21 @@ index 239445a0831b..9c2882833d1c 100644
  };
  
  
+-- 
+2.21.0
 
-From 823eae4610e3235f60a89715ba37a970c18a7c0b Mon Sep 17 00:00:00 2001
+
+From 4e1351cc2d704e8da7bb8125ad0ab194e8a02ec4 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 5 Aug 2019 13:37:05 +0200
-Subject: [PATCH 15/36] hmac: Don't default to md5 in FIPS mode
+Subject: [PATCH 18/36] hmac: Don't default to md5 in FIPS mode
 
 ---
  Lib/hmac.py | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/Lib/hmac.py b/Lib/hmac.py
-index ed98406bd2e1..7b8821edd582 100644
+index ed98406bd2e..7b8821edd58 100644
 --- a/Lib/hmac.py
 +++ b/Lib/hmac.py
 @@ -165,7 +165,7 @@ def new(key, msg = None, digestmod = None):
@@ -2385,11 +3203,14 @@ index ed98406bd2e1..7b8821edd582 100644
          name = _get_openssl_name(digestmod)
          result = _hmacopenssl.new(key, digestmod=name)
          if msg:
+-- 
+2.21.0
 
-From fd74d1c00d95542eef3c238f990da5bc7fc05619 Mon Sep 17 00:00:00 2001
+
+From ea44160c242101f14d22242a0722e730ef304b8b Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 5 Aug 2019 14:20:58 +0200
-Subject: [PATCH 16/36] Make _hmacopenssl.HMAC subclassable; subclass it as
+Subject: [PATCH 19/36] Make _hmacopenssl.HMAC subclassable; subclass it as
  hmac.HMAC under FIPS
 
 This removes the _hmacopenssl.new function.
@@ -2401,10 +3222,10 @@ This removes the _hmacopenssl.new function.
  4 files changed, 56 insertions(+), 87 deletions(-)
 
 diff --git a/Lib/hmac.py b/Lib/hmac.py
-index 7b8821edd582..d479c5a4492f 100644
+index 7b8821edd58..d479c5a4492 100644
 --- a/Lib/hmac.py
 +++ b/Lib/hmac.py
-@@ -141,6 +141,8 @@ def hexdigest(self):
+@@ -141,6 +141,8 @@ class HMAC:
  
  
  def _get_openssl_name(digestmod):
@@ -2450,10 +3271,10 @@ index 7b8821edd582..d479c5a4492f 100644
 -        return HMAC(key, msg, digestmod)
 +    return HMAC(key, msg, digestmod)
 diff --git a/Lib/test/test_fips.py b/Lib/test/test_fips.py
-index bee911ef405a..34812e6098ae 100644
+index bee911ef405..34812e6098a 100644
 --- a/Lib/test/test_fips.py
 +++ b/Lib/test/test_fips.py
-@@ -54,7 +54,7 @@ def test_sha(self):
+@@ -54,7 +54,7 @@ class HashlibFipsTests(unittest.TestCase):
          self.compare_hashes(hashlib.sha512(b'abc'), _hashlib.openssl_sha512(b'abc'))
  
      def test_hmac_digests(self):
@@ -2463,7 +3284,7 @@ index bee911ef405a..34812e6098ae 100644
  
  
 diff --git a/Modules/_hmacopenssl.c b/Modules/_hmacopenssl.c
-index 9c2882833d1c..7d3d9739f3ab 100644
+index 9c2882833d1..7d3d9739f3a 100644
 --- a/Modules/_hmacopenssl.c
 +++ b/Modules/_hmacopenssl.c
 @@ -41,33 +41,25 @@ typedef struct {
@@ -2535,7 +3356,7 @@ index 9c2882833d1c..7d3d9739f3ab 100644
      if (retval == NULL) {
          goto error;
      }
-@@ -130,6 +125,7 @@ _hmacopenssl_new_impl(PyObject *module, Py_buffer *key,
+@@ -130,6 +125,7 @@ error:
      if (ctx) HMAC_CTX_free(ctx);
      if (name) Py_DECREF(name);
      if (retval) PyObject_Del(name);
@@ -2618,7 +3439,7 @@ index 9c2882833d1c..7d3d9739f3ab 100644
      .m_size = sizeof(hmacopenssl_state),
      .m_traverse = hmacopenssl_traverse,
 diff --git a/Modules/clinic/_hmacopenssl.c.h b/Modules/clinic/_hmacopenssl.c.h
-index b472a6eddd34..861acc11bfd9 100644
+index b472a6eddd3..861acc11bfd 100644
 --- a/Modules/clinic/_hmacopenssl.c.h
 +++ b/Modules/clinic/_hmacopenssl.c.h
 @@ -2,43 +2,6 @@
@@ -2671,18 +3492,21 @@ index b472a6eddd34..861acc11bfd9 100644
  }
 -/*[clinic end generated code: output=10b6e8cac6d7a2c9 input=a9049054013a1b77]*/
 +/*[clinic end generated code: output=d93ad460795d49b5 input=a9049054013a1b77]*/
+-- 
+2.21.0
 
-From d3b322a12c10890fee2bc4837a3d37f0a81455a6 Mon Sep 17 00:00:00 2001
+
+From e3d6a5adbe0032726dff0b1f6473ce3ff63fad51 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 5 Aug 2019 16:10:36 +0200
-Subject: [PATCH 17/36] Fix _hmacopenssl.HMAC.block_size
+Subject: [PATCH 20/36] Fix _hmacopenssl.HMAC.block_size
 
 ---
  Modules/_hmacopenssl.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/Modules/_hmacopenssl.c b/Modules/_hmacopenssl.c
-index 7d3d9739f3ab..a24c8ba0229d 100644
+index 7d3d9739f3a..a24c8ba0229 100644
 --- a/Modules/_hmacopenssl.c
 +++ b/Modules/_hmacopenssl.c
 @@ -318,7 +318,7 @@ _hmacopenssl_get_block_size(HmacObject *self, void *closure)
@@ -2694,42 +3518,14 @@ index 7d3d9739f3ab..a24c8ba0229d 100644
  }
  
  static PyMethodDef Hmac_methods[] = {
+-- 
+2.21.0
 
-From e643e9c61bce62bcc3caed8c022f1afee979feb8 Mon Sep 17 00:00:00 2001
-From: Petr Viktorin <pviktori@redhat.com>
-Date: Mon, 5 Aug 2019 14:45:52 +0200
-Subject: [PATCH 18/36] Skip hanging test
 
----
- Lib/test/test_logging.py | 3 +++
- 1 file changed, 3 insertions(+)
-
-diff --git a/Lib/test/test_logging.py b/Lib/test/test_logging.py
-index 763a5d1df0e3..0b229465983c 100644
---- a/Lib/test/test_logging.py
-+++ b/Lib/test/test_logging.py
-@@ -46,6 +46,8 @@
- import unittest
- import warnings
- import weakref
-+import hashlib
-+
- try:
-     import threading
-     # The following imports are needed only for tests which
-@@ -1815,6 +1817,7 @@ def handle_request(self, request):
-         request.end_headers()
-         self.handled.set()
- 
-+    @unittest.skipIf(hashlib.get_fips_mode(), 'Hangs in FIPS mode.')
-     def test_output(self):
-         # The log message sent to the HTTPHandler is properly received.
-         logger = logging.getLogger("http")
-
-From 30e11ab9d19beea8dafe96da7f47bf1513849f3d Mon Sep 17 00:00:00 2001
+From f925a1165d7b07fb4d0bba216f7dbc387b94e94d Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 5 Aug 2019 15:02:08 +0200
-Subject: [PATCH 19/36] distutils upload: Skip md5 checksum in FIPS mode
+Subject: [PATCH 21/36] distutils upload: Skip md5 checksum in FIPS mode
 
 ---
  Lib/distutils/command/upload.py    | 11 ++++++++++-
@@ -2737,10 +3533,10 @@ Subject: [PATCH 19/36] distutils upload: Skip md5 checksum in FIPS mode
  2 files changed, 21 insertions(+), 3 deletions(-)
 
 diff --git a/Lib/distutils/command/upload.py b/Lib/distutils/command/upload.py
-index 32dda359badb..0edb39efd4cb 100644
+index 32dda359bad..0edb39efd4c 100644
 --- a/Lib/distutils/command/upload.py
 +++ b/Lib/distutils/command/upload.py
-@@ -102,7 +102,6 @@ def upload_file(self, command, pyversion, filename):
+@@ -102,7 +102,6 @@ class upload(PyPIRCCommand):
              'content': (os.path.basename(filename),content),
              'filetype': command,
              'pyversion': pyversion,
@@ -2748,7 +3544,7 @@ index 32dda359badb..0edb39efd4cb 100644
  
              # additional meta-data
              'metadata_version': '1.0',
-@@ -121,6 +120,16 @@ def upload_file(self, command, pyversion, filename):
+@@ -121,6 +120,16 @@ class upload(PyPIRCCommand):
              'requires': meta.get_requires(),
              'obsoletes': meta.get_obsoletes(),
              }
@@ -2766,10 +3562,10 @@ index 32dda359badb..0edb39efd4cb 100644
          if command == 'bdist_rpm':
              dist, version, id = platform.dist()
 diff --git a/Lib/distutils/tests/test_upload.py b/Lib/distutils/tests/test_upload.py
-index c17d8e7d54e9..b4b64e97737d 100644
+index c17d8e7d54e..b4b64e97737 100644
 --- a/Lib/distutils/tests/test_upload.py
 +++ b/Lib/distutils/tests/test_upload.py
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,7 @@ import os
  import unittest
  import unittest.mock as mock
  from urllib.request import HTTPError
@@ -2777,7 +3573,7 @@ index c17d8e7d54e9..b4b64e97737d 100644
  
  from test.support import run_unittest
  
-@@ -130,7 +131,11 @@ def test_upload(self):
+@@ -130,7 +131,11 @@ class uploadTestCase(BasePyPIRCCommandTestCase):
  
          # what did we send ?
          headers = dict(self.last_open.req.headers)
@@ -2790,7 +3586,7 @@ index c17d8e7d54e9..b4b64e97737d 100644
          content_type = headers['Content-type']
          self.assertTrue(content_type.startswith('multipart/form-data'))
          self.assertEqual(self.last_open.req.get_method(), 'POST')
-@@ -166,7 +171,11 @@ def test_upload_correct_cr(self):
+@@ -166,7 +171,11 @@ class uploadTestCase(BasePyPIRCCommandTestCase):
          cmd.run()
  
          headers = dict(self.last_open.req.headers)
@@ -2803,19 +3599,22 @@ index c17d8e7d54e9..b4b64e97737d 100644
          self.assertIn(b'long description\r', self.last_open.req.data)
  
      def test_upload_fails(self):
+-- 
+2.21.0
 
-From 8eb2ce39572904704ada072e25d8e6bf5727f492 Mon Sep 17 00:00:00 2001
+
+From 936a7835a1873952eab8f7ec3b9b67f63786c001 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 5 Aug 2019 15:32:25 +0200
-Subject: [PATCH 20/36] Fix HMAC tests on FIPS mode
+Subject: [PATCH 22/36] Fix HMAC tests on FIPS mode
 
 ---
  Lib/hmac.py           |  3 +++
- Lib/test/test_hmac.py | 50 ++++++++++++++++++++++++++++++++++---------
- 2 files changed, 43 insertions(+), 10 deletions(-)
+ Lib/test/test_hmac.py | 26 ++++++++++++++++++++++++++
+ 2 files changed, 29 insertions(+)
 
 diff --git a/Lib/hmac.py b/Lib/hmac.py
-index d479c5a4492f..7af94c39ed63 100644
+index d479c5a4492..7af94c39ed6 100644
 --- a/Lib/hmac.py
 +++ b/Lib/hmac.py
 @@ -157,6 +157,9 @@ def _get_openssl_name(digestmod):
@@ -2829,45 +3628,21 @@ index d479c5a4492f..7af94c39ed63 100644
          result = _hmacopenssl.HMAC.__new__(cls, key, digestmod=name)
          if msg:
 diff --git a/Lib/test/test_hmac.py b/Lib/test/test_hmac.py
-index 067e13f1079a..6f53a6d1fd5b 100644
+index 338e0215a41..5b090727ef6 100644
 --- a/Lib/test/test_hmac.py
 +++ b/Lib/test/test_hmac.py
-@@ -17,6 +17,7 @@ def wrapper(*args, **kwargs):
- 
- class TestVectorsTestCase(unittest.TestCase):
- 
-+    @unittest.skipIf(hashlib.get_fips_mode(), 'md5 unacceptable in FIPS mode.')
-     def test_md5_vectors(self):
-         # Test the HMAC module against test vectors from the RFC.
- 
-@@ -242,6 +243,7 @@ def test_sha384_rfc4231(self):
+@@ -250,6 +250,7 @@ class TestVectorsTestCase(unittest.TestCase):
      def test_sha512_rfc4231(self):
          self._rfc4231_test_cases(hashlib.sha512, 'sha512', 64, 128)
  
 +    @unittest.skipIf(hashlib.get_fips_mode(), 'MockCrazyHash unacceptable in FIPS mode.')
+     @requires_hashdigest('sha256')
      def test_legacy_block_size_warnings(self):
          class MockCrazyHash(object):
-             """Ain't no block_size attribute here."""
-@@ -264,6 +266,7 @@ def digest(self):
-                 hmac.HMAC(b'a', b'b', digestmod=MockCrazyHash)
-                 self.fail('Expected warning about small block_size')
- 
-+    @unittest.skipIf(hashlib.get_fips_mode(), 'md5 is not default in FIPS mode.')
-     def test_with_digestmod_warning(self):
-         with self.assertWarns(PendingDeprecationWarning):
-             key = b"\x0b" * 16
-@@ -275,6 +278,7 @@ def test_with_digestmod_warning(self):
- 
- class ConstructorTestCase(unittest.TestCase):
- 
-+    @unittest.skipIf(hashlib.get_fips_mode(), 'md5 is not default in FIPS mode.')
-     @ignore_warning
-     def test_normal(self):
-         # Standard constructor call.
-@@ -284,6 +288,14 @@ def test_normal(self):
-         except Exception:
+@@ -298,6 +299,14 @@ class ConstructorTestCase(unittest.TestCase):
              self.fail("Standard constructor call raised exception.")
  
+     @ignore_warning
 +    def test_normal_digestmod(self):
 +        # Standard constructor call.
 +        failed = 0
@@ -2876,83 +3651,26 @@ index 067e13f1079a..6f53a6d1fd5b 100644
 +        except Exception:
 +            self.fail("Standard constructor call raised exception.")
 +
-     @ignore_warning
+     @requires_hashdigest('sha256')
      def test_with_str_key(self):
          # Pass a key of type str, which is an error, because it expects a key
-@@ -302,25 +314,25 @@ def test_dot_new_with_str_key(self):
-     def test_withtext(self):
-         # Constructor call with text.
-         try:
--            h = hmac.HMAC(b"key", b"hash this!")
-+            h = hmac.HMAC(b"key", b"hash this!", digestmod='sha1')
-         except Exception:
-             self.fail("Constructor call with text argument raised exception.")
--        self.assertEqual(h.hexdigest(), '34325b639da4cfd95735b381e28cb864')
-+        self.assertEqual(h.hexdigest(), '3f2e20f3e2f006270db98760b9725a008c5bd114')
- 
-     def test_with_bytearray(self):
-         try:
-             h = hmac.HMAC(bytearray(b"key"), bytearray(b"hash this!"),
--                          digestmod="md5")
-+                          digestmod="sha1")
-         except Exception:
-             self.fail("Constructor call with bytearray arguments raised exception.")
--        self.assertEqual(h.hexdigest(), '34325b639da4cfd95735b381e28cb864')
-+        self.assertEqual(h.hexdigest(), '3f2e20f3e2f006270db98760b9725a008c5bd114')
- 
-     def test_with_memoryview_msg(self):
-         try:
--            h = hmac.HMAC(b"key", memoryview(b"hash this!"), digestmod="md5")
-+            h = hmac.HMAC(b"key", memoryview(b"hash this!"), digestmod="sha1")
-         except Exception:
-             self.fail("Constructor call with memoryview msg raised exception.")
--        self.assertEqual(h.hexdigest(), '34325b639da4cfd95735b381e28cb864')
-+        self.assertEqual(h.hexdigest(), '3f2e20f3e2f006270db98760b9725a008c5bd114')
- 
-     def test_withmodule(self):
-         # Constructor call with text and digest module.
-@@ -331,6 +343,7 @@ def test_withmodule(self):
- 
- class SanityTestCase(unittest.TestCase):
- 
-+    @unittest.skipIf(hashlib.get_fips_mode(), "md5 is not default in FIPS mode")
-     @ignore_warning
-     def test_default_is_md5(self):
-         # Testing if HMAC defaults to MD5 algorithm.
-@@ -342,7 +355,7 @@ def test_exercise_all_methods(self):
-         # Exercising all methods once.
-         # This must not raise any exceptions
-         try:
--            h = hmac.HMAC(b"my secret key", digestmod="md5")
-+            h = hmac.HMAC(b"my secret key", digestmod="sha1")
-             h.update(b"compute the hash of this text!")
-             dig = h.digest()
-             dig = h.hexdigest()
-@@ -352,9 +365,10 @@ def test_exercise_all_methods(self):
+@@ -366,6 +375,7 @@ class SanityTestCase(unittest.TestCase):
  
  class CopyTestCase(unittest.TestCase):
  
 +    @unittest.skipIf(hashlib.get_fips_mode(), "Internal attributes unavailable in FIPS mode")
+     @requires_hashdigest('sha256')
      def test_attributes(self):
          # Testing if attributes are of same type.
--        h1 = hmac.HMAC(b"key", digestmod="md5")
-+        h1 = hmac.HMAC(b"key", digestmod="sha1")
-         h2 = h1.copy()
-         self.assertTrue(h1.digest_cons == h2.digest_cons,
-             "digest constructors don't match.")
-@@ -363,9 +377,10 @@ def test_attributes(self):
+@@ -378,6 +388,7 @@ class CopyTestCase(unittest.TestCase):
          self.assertEqual(type(h1.outer), type(h2.outer),
              "Types of outer don't match.")
  
 +    @unittest.skipIf(hashlib.get_fips_mode(), "Internal attributes unavailable in FIPS mode")
+     @requires_hashdigest('sha256')
      def test_realcopy(self):
          # Testing if the copy method created a real copy.
--        h1 = hmac.HMAC(b"key", digestmod="md5")
-+        h1 = hmac.HMAC(b"key", digestmod="sha1")
-         h2 = h1.copy()
-         # Using id() in case somebody has overridden __eq__/__ne__.
-         self.assertTrue(id(h1) != id(h2), "No real copy of the HMAC instance.")
-@@ -374,9 +389,24 @@ def test_realcopy(self):
+@@ -390,6 +401,21 @@ class CopyTestCase(unittest.TestCase):
          self.assertTrue(id(h1.outer) != id(h2.outer),
              "No real copy of the attribute 'outer'.")
  
@@ -2971,247 +3689,14 @@ index 067e13f1079a..6f53a6d1fd5b 100644
 +        h2.update(b'hi')
 +        assert h1.digest() == h2.digest() == new_digest
 +
+     @requires_hashdigest('sha256')
      def test_equality(self):
          # Testing if the copy has the same digests.
--        h1 = hmac.HMAC(b"key", digestmod="md5")
-+        h1 = hmac.HMAC(b"key", digestmod="sha1")
-         h1.update(b"some random text")
-         h2 = h1.copy()
-         self.assertEqual(h1.digest(), h2.digest(),
+-- 
+2.21.0
 
-From d7ac1f3fe2f7024d582ba9d0f10008499f832b76 Mon Sep 17 00:00:00 2001
-From: Petr Viktorin <pviktori@redhat.com>
-Date: Mon, 5 Aug 2019 16:24:40 +0200
-Subject: [PATCH 21/36] test_smtplib: Skip tests of CRAM-MD5 auth
 
----
- Lib/test/test_smtplib.py | 4 ++++
- 1 file changed, 4 insertions(+)
-
-diff --git a/Lib/test/test_smtplib.py b/Lib/test/test_smtplib.py
-index 87047514e7aa..150e9fbcf053 100644
---- a/Lib/test/test_smtplib.py
-+++ b/Lib/test/test_smtplib.py
-@@ -15,6 +15,7 @@
- import select
- import errno
- import textwrap
-+import hashlib
- 
- import unittest
- from test import support, mock_socket
-@@ -968,6 +969,7 @@ def testAUTH_LOGIN(self):
-         self.assertEqual(resp, (235, b'Authentication Succeeded'))
-         smtp.close()
- 
-+    @unittest.skipIf(hashlib.get_fips_mode(), "md5 auth unacceptable in FIPS mode")
-     def testAUTH_CRAM_MD5(self):
-         self.serv.add_feature("AUTH CRAM-MD5")
-         smtp = smtplib.SMTP(HOST, self.port, local_hostname='localhost', timeout=15)
-@@ -975,6 +977,7 @@ def testAUTH_CRAM_MD5(self):
-         self.assertEqual(resp, (235, b'Authentication Succeeded'))
-         smtp.close()
- 
-+    @unittest.skipIf(hashlib.get_fips_mode(), "md5 auth unacceptable in FIPS mode")
-     def testAUTH_multiple(self):
-         # Test that multiple authentication methods are tried.
-         self.serv.add_feature("AUTH BOGUS PLAIN LOGIN CRAM-MD5")
-@@ -983,6 +986,7 @@ def testAUTH_multiple(self):
-         self.assertEqual(resp, (235, b'Authentication Succeeded'))
-         smtp.close()
- 
-+    @unittest.skipIf(hashlib.get_fips_mode(), "md5 auth unacceptable in FIPS mode")
-     def test_auth_function(self):
-         supported = {'CRAM-MD5', 'PLAIN', 'LOGIN'}
-         for mechanism in supported:
-
-From d1e2300f593d8c32bd3d23cd43eae02192e3eb03 Mon Sep 17 00:00:00 2001
-From: Petr Viktorin <pviktori@redhat.com>
-Date: Mon, 5 Aug 2019 16:34:49 +0200
-Subject: [PATCH 22/36] test_tarfile: Replace md5 checksums with sha1
-
----
- Lib/test/test_tarfile.py | 50 ++++++++++++++++++++--------------------
- 1 file changed, 25 insertions(+), 25 deletions(-)
-
-diff --git a/Lib/test/test_tarfile.py b/Lib/test/test_tarfile.py
-index 4cd7d5370f58..c8c8eebd3194 100644
---- a/Lib/test/test_tarfile.py
-+++ b/Lib/test/test_tarfile.py
-@@ -1,7 +1,7 @@
- import sys
- import os
- import io
--from hashlib import md5
-+from hashlib import sha1
- from contextlib import contextmanager
- from random import Random
- import pathlib
-@@ -27,8 +27,8 @@
- except ImportError:
-     lzma = None
- 
--def md5sum(data):
--    return md5(data).hexdigest()
-+def sha1sum(data):
-+    return sha1(data).hexdigest()
- 
- TEMPDIR = os.path.abspath(support.TESTFN) + "-tardir"
- tarextdir = TEMPDIR + '-extract-test'
-@@ -39,8 +39,8 @@ def md5sum(data):
- tmpname = os.path.join(TEMPDIR, "tmp.tar")
- dotlessname = os.path.join(TEMPDIR, "testtar")
- 
--md5_regtype = "65f477c818ad9e15f7feab0c6d37742f"
--md5_sparse = "a54fbc4ca4f4399a90e1b27164012fc6"
-+sha1_regtype = "bc5bb0da4d26c3e37a76d2fbf89a2a9972aeceaa"
-+sha1_sparse = "693f6a770ef62ebdffc5666bd426b9506e6d8285"
- 
- 
- class TarTest:
-@@ -95,7 +95,7 @@ def test_fileobj_regular_file(self):
-             data = fobj.read()
-             self.assertEqual(len(data), tarinfo.size,
-                     "regular file extraction failed")
--            self.assertEqual(md5sum(data), md5_regtype,
-+            self.assertEqual(sha1sum(data), sha1_regtype,
-                     "regular file extraction failed")
- 
-     def test_fileobj_readlines(self):
-@@ -180,7 +180,7 @@ def test_fileobj_text(self):
-         with self.tar.extractfile("ustar/regtype") as fobj:
-             fobj = io.TextIOWrapper(fobj)
-             data = fobj.read().encode("iso8859-1")
--            self.assertEqual(md5sum(data), md5_regtype)
-+            self.assertEqual(sha1sum(data), sha1_regtype)
-             try:
-                 fobj.seek(100)
-             except AttributeError:
-@@ -546,13 +546,13 @@ def test_extract_hardlink(self):
-             self.addCleanup(support.unlink, os.path.join(TEMPDIR, "ustar/lnktype"))
-             with open(os.path.join(TEMPDIR, "ustar/lnktype"), "rb") as f:
-                 data = f.read()
--            self.assertEqual(md5sum(data), md5_regtype)
-+            self.assertEqual(sha1sum(data), sha1_regtype)
- 
-             tar.extract("ustar/symtype", TEMPDIR)
-             self.addCleanup(support.unlink, os.path.join(TEMPDIR, "ustar/symtype"))
-             with open(os.path.join(TEMPDIR, "ustar/symtype"), "rb") as f:
-                 data = f.read()
--            self.assertEqual(md5sum(data), md5_regtype)
-+            self.assertEqual(sha1sum(data), sha1_regtype)
- 
-     def test_extractall(self):
-         # Test if extractall() correctly restores directory permissions
-@@ -687,7 +687,7 @@ def test_fileobj_regular_file(self):
-             data = fobj.read()
-         self.assertEqual(len(data), tarinfo.size,
-                 "regular file extraction failed")
--        self.assertEqual(md5sum(data), md5_regtype,
-+        self.assertEqual(sha1sum(data), sha1_regtype,
-                 "regular file extraction failed")
- 
-     def test_provoke_stream_error(self):
-@@ -799,8 +799,8 @@ class MemberReadTest(ReadTest, unittest.TestCase):
-     def _test_member(self, tarinfo, chksum=None, **kwargs):
-         if chksum is not None:
-             with self.tar.extractfile(tarinfo) as f:
--                self.assertEqual(md5sum(f.read()), chksum,
--                        "wrong md5sum for %s" % tarinfo.name)
-+                self.assertEqual(sha1sum(f.read()), chksum,
-+                        "wrong sha1sum for %s" % tarinfo.name)
- 
-         kwargs["mtime"] = 0o7606136617
-         kwargs["uid"] = 1000
-@@ -815,11 +815,11 @@ def _test_member(self, tarinfo, chksum=None, **kwargs):
- 
-     def test_find_regtype(self):
-         tarinfo = self.tar.getmember("ustar/regtype")
--        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
-+        self._test_member(tarinfo, size=7011, chksum=sha1_regtype)
- 
-     def test_find_conttype(self):
-         tarinfo = self.tar.getmember("ustar/conttype")
--        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
-+        self._test_member(tarinfo, size=7011, chksum=sha1_regtype)
- 
-     def test_find_dirtype(self):
-         tarinfo = self.tar.getmember("ustar/dirtype")
-@@ -851,28 +851,28 @@ def test_find_fifotype(self):
- 
-     def test_find_sparse(self):
-         tarinfo = self.tar.getmember("ustar/sparse")
--        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
-+        self._test_member(tarinfo, size=86016, chksum=sha1_sparse)
- 
-     def test_find_gnusparse(self):
-         tarinfo = self.tar.getmember("gnu/sparse")
--        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
-+        self._test_member(tarinfo, size=86016, chksum=sha1_sparse)
- 
-     def test_find_gnusparse_00(self):
-         tarinfo = self.tar.getmember("gnu/sparse-0.0")
--        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
-+        self._test_member(tarinfo, size=86016, chksum=sha1_sparse)
- 
-     def test_find_gnusparse_01(self):
-         tarinfo = self.tar.getmember("gnu/sparse-0.1")
--        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
-+        self._test_member(tarinfo, size=86016, chksum=sha1_sparse)
- 
-     def test_find_gnusparse_10(self):
-         tarinfo = self.tar.getmember("gnu/sparse-1.0")
--        self._test_member(tarinfo, size=86016, chksum=md5_sparse)
-+        self._test_member(tarinfo, size=86016, chksum=sha1_sparse)
- 
-     def test_find_umlauts(self):
-         tarinfo = self.tar.getmember("ustar/umlauts-"
-                                      "\xc4\xd6\xdc\xe4\xf6\xfc\xdf")
--        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
-+        self._test_member(tarinfo, size=7011, chksum=sha1_regtype)
- 
-     def test_find_ustar_longname(self):
-         name = "ustar/" + "12345/" * 39 + "1234567/longname"
-@@ -880,7 +880,7 @@ def test_find_ustar_longname(self):
- 
-     def test_find_regtype_oldv7(self):
-         tarinfo = self.tar.getmember("misc/regtype-old-v7")
--        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
-+        self._test_member(tarinfo, size=7011, chksum=sha1_regtype)
- 
-     def test_find_pax_umlauts(self):
-         self.tar.close()
-@@ -888,7 +888,7 @@ def test_find_pax_umlauts(self):
-                                 encoding="iso8859-1")
-         tarinfo = self.tar.getmember("pax/umlauts-"
-                                      "\xc4\xd6\xdc\xe4\xf6\xfc\xdf")
--        self._test_member(tarinfo, size=7011, chksum=md5_regtype)
-+        self._test_member(tarinfo, size=7011, chksum=sha1_regtype)
- 
- 
- class LongnameTest:
-@@ -950,8 +950,8 @@ def _test_sparse_file(self, name):
-         filename = os.path.join(TEMPDIR, name)
-         with open(filename, "rb") as fobj:
-             data = fobj.read()
--        self.assertEqual(md5sum(data), md5_sparse,
--                "wrong md5sum for %s" % name)
-+        self.assertEqual(sha1sum(data), sha1_sparse,
-+                "wrong sha1sum for %s" % name)
- 
-         if self._fs_supports_holes():
-             s = os.stat(filename)
-@@ -2431,7 +2431,7 @@ def _test_link_extraction(self, name):
-         self.tar.extract(name, TEMPDIR)
-         with open(os.path.join(TEMPDIR, name), "rb") as f:
-             data = f.read()
--        self.assertEqual(md5sum(data), md5_regtype)
-+        self.assertEqual(sha1sum(data), sha1_regtype)
- 
-     # See issues #1578269, #8879, and #17689 for some history on these skips
-     @unittest.skipIf(hasattr(os.path, "islink"),
-
-From 4e35a5240d0bf99b60a76d3d25a82f9b8c901d59 Mon Sep 17 00:00:00 2001
+From 264c6eed5a5d060fe7bad7e4410d920cecbb083c Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 5 Aug 2019 16:37:12 +0200
 Subject: [PATCH 23/36] test_tools: Skip md5sum tests in FIPS mode
@@ -3221,10 +3706,10 @@ Subject: [PATCH 23/36] test_tools: Skip md5sum tests in FIPS mode
  1 file changed, 4 insertions(+)
 
 diff --git a/Lib/test/test_tools/test_md5sum.py b/Lib/test/test_tools/test_md5sum.py
-index fb565b73778f..7028a4dc2143 100644
+index fb565b73778..7028a4dc214 100644
 --- a/Lib/test/test_tools/test_md5sum.py
 +++ b/Lib/test/test_tools/test_md5sum.py
-@@ -4,11 +4,15 @@
+@@ -4,11 +4,15 @@ import os
  import unittest
  from test import support
  from test.support.script_helper import assert_python_ok, assert_python_failure
@@ -3240,70 +3725,21 @@ index fb565b73778f..7028a4dc2143 100644
  class MD5SumTests(unittest.TestCase):
      @classmethod
      def setUpClass(cls):
+-- 
+2.21.0
 
-From 82d94582bf36170c924b26f33b56c6177a1e30f7 Mon Sep 17 00:00:00 2001
-From: Petr Viktorin <pviktori@redhat.com>
-Date: Mon, 5 Aug 2019 16:43:13 +0200
-Subject: [PATCH 24/36] test_urllib2_localnet: Skip tests of md5 auth
 
----
- Lib/test/test_urllib2_localnet.py | 1 +
- 1 file changed, 1 insertion(+)
-
-diff --git a/Lib/test/test_urllib2_localnet.py b/Lib/test/test_urllib2_localnet.py
-index ef0091c49300..2d0d62f610ef 100644
---- a/Lib/test/test_urllib2_localnet.py
-+++ b/Lib/test/test_urllib2_localnet.py
-@@ -317,6 +317,7 @@ def test_basic_auth_httperror(self):
-         self.assertRaises(urllib.error.HTTPError, urllib.request.urlopen, self.server_url)
- 
- 
-+@unittest.skipIf(hashlib.get_fips_mode(), "md5 digest auth unacceptable in FIPS mode")
- @unittest.skipUnless(threading, "Threading required for this test.")
- class ProxyAuthTests(unittest.TestCase):
-     URL = "http://localhost"
-
-From 78d82fdbe050e6fb27f5d736f3030357046cb60e Mon Sep 17 00:00:00 2001
-From: Petr Viktorin <pviktori@redhat.com>
-Date: Mon, 5 Aug 2019 16:45:21 +0200
-Subject: [PATCH 25/36] test_uuid: Skip uuid3 test
-
----
- Lib/test/test_uuid.py | 2 ++
- 1 file changed, 2 insertions(+)
-
-diff --git a/Lib/test/test_uuid.py b/Lib/test/test_uuid.py
-index aa3de74cef0a..a4ec69058889 100644
---- a/Lib/test/test_uuid.py
-+++ b/Lib/test/test_uuid.py
-@@ -6,6 +6,7 @@
- import shutil
- import subprocess
- import uuid
-+import hashlib
- 
- def importable(name):
-     try:
-@@ -366,6 +367,7 @@ def test_uuid1(self):
-         equal(((u.clock_seq_hi_variant & 0x3f) << 8) |
-                          u.clock_seq_low, 0x3fff)
- 
-+    @unittest.skipIf(hashlib.get_fips_mode(), "uuid3 (md5-based) unacceptable in FIPS mode")
-     def test_uuid3(self):
-         equal = self.assertEqual
- 
-
-From c7bfe61f072475b900bb68c824aa0b1fa696a975 Mon Sep 17 00:00:00 2001
+From c5373f5e7ae4ecfe8337ee3c73b594b5f0ebb411 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 5 Aug 2019 17:21:16 +0200
-Subject: [PATCH 26/36] _hashopenssl: Include hash name in the error message
+Subject: [PATCH 24/36] _hashopenssl: Include hash name in the error message
 
 ---
  Modules/_hashopenssl.c | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/Modules/_hashopenssl.c b/Modules/_hashopenssl.c
-index 7dfd70822b99..0563473c627e 100644
+index 7dfd70822b9..0563473c627 100644
 --- a/Modules/_hashopenssl.c
 +++ b/Modules/_hashopenssl.c
 @@ -431,7 +431,7 @@ EVPnew(PyObject *name_obj,
@@ -3324,11 +3760,14 @@ index 7dfd70822b99..0563473c627e 100644
          goto end;
      }
  
+-- 
+2.21.0
 
-From 5c732e6288270c247cc443fe2c2fd4fb4d95442b Mon Sep 17 00:00:00 2001
+
+From c3f9e194eb5f86ebec4db2820b8968d6896abc8b Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 5 Aug 2019 18:23:57 +0200
-Subject: [PATCH 27/36] Make hashlib tests pass in FIPS mode (with some hashlib
+Subject: [PATCH 25/36] Make hashlib tests pass in FIPS mode (with some hashlib
  changes)
 
 ---
@@ -3338,7 +3777,7 @@ Subject: [PATCH 27/36] Make hashlib tests pass in FIPS mode (with some hashlib
  3 files changed, 78 insertions(+), 21 deletions(-)
 
 diff --git a/Lib/hashlib.py b/Lib/hashlib.py
-index ca1dd2022515..d3344f60b2ea 100644
+index ca1dd202251..d3344f60b2e 100644
 --- a/Lib/hashlib.py
 +++ b/Lib/hashlib.py
 @@ -155,7 +155,18 @@ def __hash_new(name, data=b'', **kwargs):
@@ -3374,10 +3813,10 @@ index ca1dd2022515..d3344f60b2ea 100644
          # If the _hashlib module (OpenSSL) doesn't support the named
          # hash, try using our builtin implementations.
 diff --git a/Lib/test/test_hashlib.py b/Lib/test/test_hashlib.py
-index 645a3d01b91d..30b6abcbef90 100644
+index e57c93b42f5..9745bfd6fa2 100644
 --- a/Lib/test/test_hashlib.py
 +++ b/Lib/test/test_hashlib.py
-@@ -29,6 +29,11 @@
+@@ -31,6 +31,11 @@ COMPILED_WITH_PYDEBUG = hasattr(sys, 'gettotalrefcount')
  c_hashlib = import_fresh_module('hashlib', fresh=['_hashlib'])
  py_hashlib = import_fresh_module('hashlib', blocked=['_hashlib'])
  
@@ -3389,7 +3828,7 @@ index 645a3d01b91d..30b6abcbef90 100644
  try:
      import _blake2
  except ImportError:
-@@ -84,6 +89,11 @@ class HashLibTestCase(unittest.TestCase):
+@@ -86,6 +91,11 @@ class HashLibTestCase(unittest.TestCase):
      # Issue #14693: fallback modules are always compiled under POSIX
      _warn_on_extension_import = os.name == 'posix' or COMPILED_WITH_PYDEBUG
  
@@ -3401,7 +3840,7 @@ index 645a3d01b91d..30b6abcbef90 100644
      def _conditional_import_module(self, module_name):
          """Import a module and return a reference to it or None on failure."""
          try:
-@@ -91,8 +101,20 @@ def _conditional_import_module(self, module_name):
+@@ -93,8 +103,20 @@ class HashLibTestCase(unittest.TestCase):
          except ModuleNotFoundError as error:
              if self._warn_on_extension_import:
                  warnings.warn('Did a C extension fail to compile? %s' % error)
@@ -3422,7 +3861,7 @@ index 645a3d01b91d..30b6abcbef90 100644
      def __init__(self, *args, **kwargs):
          algorithms = set()
          for algorithm in self.supported_hash_names:
-@@ -179,15 +201,13 @@ def test_hash_array(self):
+@@ -182,15 +204,13 @@ class HashLibTestCase(unittest.TestCase):
          a = array.array("b", range(10))
          for cons in self.hash_constructors:
              c = cons(a)
@@ -3440,7 +3879,7 @@ index 645a3d01b91d..30b6abcbef90 100644
              set(_algo for _algo in self.supported_hash_names
                    if _algo.islower()))
  
-@@ -199,6 +219,12 @@ def test_unknown_hash(self):
+@@ -202,6 +222,12 @@ class HashLibTestCase(unittest.TestCase):
          self.assertRaises(ValueError, hashlib.new, 'spam spam spam spam spam')
          self.assertRaises(TypeError, hashlib.new, 1)
  
@@ -3453,7 +3892,7 @@ index 645a3d01b91d..30b6abcbef90 100644
      def test_get_builtin_constructor(self):
          get_builtin_constructor = getattr(hashlib,
                                            '__get_builtin_constructor')
-@@ -228,9 +254,7 @@ def test_get_builtin_constructor(self):
+@@ -231,9 +257,7 @@ class HashLibTestCase(unittest.TestCase):
      def test_hexdigest(self):
          for cons in self.hash_constructors:
              h = cons()
@@ -3464,7 +3903,7 @@ index 645a3d01b91d..30b6abcbef90 100644
                  self.assertIsInstance(h.digest(16), bytes)
                  self.assertEqual(hexstr(h.digest(16)), h.hexdigest(16))
              else:
-@@ -242,9 +266,7 @@ def test_digest_length_overflow(self):
+@@ -245,9 +269,7 @@ class HashLibTestCase(unittest.TestCase):
          large_sizes = (2**29, 2**32-10, 2**32+10, 2**61, 2**64-10, 2**64+10)
          for cons in self.hash_constructors:
              h = cons()
@@ -3475,7 +3914,7 @@ index 645a3d01b91d..30b6abcbef90 100644
                  continue
              for digest in h.digest, h.hexdigest:
                  with self.assertRaises((ValueError, OverflowError)):
-@@ -275,9 +297,7 @@ def test_large_update(self):
+@@ -278,9 +300,7 @@ class HashLibTestCase(unittest.TestCase):
              m1.update(bees)
              m1.update(cees)
              m1.update(dees)
@@ -3486,7 +3925,7 @@ index 645a3d01b91d..30b6abcbef90 100644
                  args = (16,)
              else:
                  args = ()
-@@ -346,7 +366,8 @@ def check_no_unicode(self, algorithm_name):
+@@ -349,7 +369,8 @@ class HashLibTestCase(unittest.TestCase):
              self.assertRaises(TypeError, hash_object_constructor, 'spam')
  
      def test_no_unicode(self):
@@ -3496,7 +3935,7 @@ index 645a3d01b91d..30b6abcbef90 100644
          self.check_no_unicode('sha1')
          self.check_no_unicode('sha224')
          self.check_no_unicode('sha256')
-@@ -389,7 +410,8 @@ def check_blocksize_name(self, name, block_size=0, digest_size=0,
+@@ -392,7 +413,8 @@ class HashLibTestCase(unittest.TestCase):
              self.assertIn(name.split("_")[0], repr(m))
  
      def test_blocksize_name(self):
@@ -3506,7 +3945,7 @@ index 645a3d01b91d..30b6abcbef90 100644
          self.check_blocksize_name('sha1', 64, 20)
          self.check_blocksize_name('sha224', 64, 28)
          self.check_blocksize_name('sha256', 64, 32)
-@@ -429,22 +451,27 @@ def test_blocksize_name_blake2(self):
+@@ -432,22 +454,27 @@ class HashLibTestCase(unittest.TestCase):
          self.check_blocksize_name('blake2b', 128, 64)
          self.check_blocksize_name('blake2s', 64, 32)
  
@@ -3534,7 +3973,7 @@ index 645a3d01b91d..30b6abcbef90 100644
      @unittest.skipIf(sys.maxsize < _4G - 1, 'test cannot run on 32-bit systems')
      @bigmemtest(size=_4G - 1, memuse=1, dry_run=False)
      def test_case_md5_uintmax(self, size):
-@@ -826,14 +853,16 @@ def test_gil(self):
+@@ -829,14 +856,16 @@ class HashLibTestCase(unittest.TestCase):
              m = cons(b'x' * gil_minsize)
              m.update(b'1')
  
@@ -3556,7 +3995,7 @@ index 645a3d01b91d..30b6abcbef90 100644
      @unittest.skipUnless(threading, 'Threading required for this test.')
      @support.reap_threads
 diff --git a/Modules/_hashopenssl.c b/Modules/_hashopenssl.c
-index 0563473c627e..e330423e2662 100644
+index 0563473c627..e330423e266 100644
 --- a/Modules/_hashopenssl.c
 +++ b/Modules/_hashopenssl.c
 @@ -256,11 +256,25 @@ EVP_update(EVPobject *self, PyObject *args)
@@ -3585,107 +4024,14 @@ index 0563473c627e..e330423e2662 100644
      {NULL, NULL}  /* sentinel */
  };
  
+-- 
+2.21.0
 
-From 9f8dde4113dc93248ed376f17ceef349bcd2f855 Mon Sep 17 00:00:00 2001
-From: Petr Viktorin <pviktori@redhat.com>
-Date: Mon, 5 Aug 2019 19:12:38 +0200
-Subject: [PATCH 28/36] Fixups
 
-- Adjust error message of the original hmac.HMAC class
-- Don't duplicate a atest name
----
- Lib/hmac.py           | 2 +-
- Lib/test/test_hmac.py | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
-
-diff --git a/Lib/hmac.py b/Lib/hmac.py
-index 7af94c39ed63..33b5be613d96 100644
---- a/Lib/hmac.py
-+++ b/Lib/hmac.py
-@@ -41,7 +41,7 @@ def __init__(self, key, msg = None, digestmod = None):
-         """
-         if _hashlib.get_fips_mode():
-             raise ValueError(
--                'hmac.HMAC is not available in FIPS mode. '
-+                'This class is not available in FIPS mode. '
-                 + 'Use hmac.new().'
-             )
- 
-diff --git a/Lib/test/test_hmac.py b/Lib/test/test_hmac.py
-index 6f53a6d1fd5b..17ffcf37eb14 100644
---- a/Lib/test/test_hmac.py
-+++ b/Lib/test/test_hmac.py
-@@ -389,7 +389,7 @@ def test_realcopy(self):
-         self.assertTrue(id(h1.outer) != id(h2.outer),
-             "No real copy of the attribute 'outer'.")
- 
--    def test_realcopy(self):
-+    def test_realcopy_by_digest(self):
-         # Testing if the copy method created a real copy.
-         h1 = hmac.HMAC(b"key", digestmod="sha1")
-         h2 = h1.copy()
-
-From 0056a10cb639a97b6deac312752be9ed0f19f2cf Mon Sep 17 00:00:00 2001
-From: Petr Viktorin <pviktori@redhat.com>
-Date: Mon, 19 Aug 2019 13:59:40 +0200
-Subject: [PATCH 29/36] Make uuid.uuid3 work (using libuuid via ctypes)
-
----
- Lib/test/test_uuid.py | 1 -
- Lib/uuid.py           | 9 +++++++++
- 2 files changed, 9 insertions(+), 1 deletion(-)
-
-diff --git a/Lib/test/test_uuid.py b/Lib/test/test_uuid.py
-index a4ec69058889..17e03388ce7b 100644
---- a/Lib/test/test_uuid.py
-+++ b/Lib/test/test_uuid.py
-@@ -367,7 +367,6 @@ def test_uuid1(self):
-         equal(((u.clock_seq_hi_variant & 0x3f) << 8) |
-                          u.clock_seq_low, 0x3fff)
- 
--    @unittest.skipIf(hashlib.get_fips_mode(), "uuid3 (md5-based) unacceptable in FIPS mode")
-     def test_uuid3(self):
-         equal = self.assertEqual
- 
-diff --git a/Lib/uuid.py b/Lib/uuid.py
-index db8b2ef94ed4..42291ff5e0d6 100644
---- a/Lib/uuid.py
-+++ b/Lib/uuid.py
-@@ -476,6 +476,7 @@ def _netbios_getnode():
- # If ctypes is available, use it to find system routines for UUID generation.
- # XXX This makes the module non-thread-safe!
- _uuid_generate_time = _UuidCreate = None
-+_uuid_generate_md5 = None
- try:
-     import ctypes, ctypes.util
-     import sys
-@@ -492,6 +493,8 @@ def _netbios_getnode():
-             continue
-         if hasattr(lib, 'uuid_generate_time'):
-             _uuid_generate_time = lib.uuid_generate_time
-+            # The library that has uuid_generate_time should have md5 too.
-+            _uuid_generate_md5 = getattr(lib, 'uuid_generate_md5')
-             break
-     del _libnames
- 
-@@ -614,6 +617,12 @@ def uuid1(node=None, clock_seq=None):
- 
- def uuid3(namespace, name):
-     """Generate a UUID from the MD5 hash of a namespace UUID and a name."""
-+    if _uuid_generate_md5:
-+        name_b = bytes(name, "utf-8")
-+        _buffer = ctypes.create_string_buffer(16)
-+        _uuid_generate_md5(_buffer, namespace.bytes, name_b, len(name_b))
-+        return UUID(bytes=bytes_(_buffer.raw))
-+
-     from hashlib import md5
-     hash = md5(namespace.bytes + bytes(name, "utf-8")).digest()
-     return UUID(bytes=hash[:16], version=3)
-
-From 27805c1110b734c5aa039443f4cf217f0d2da44d Mon Sep 17 00:00:00 2001
+From a40d1cb8672bc2c5403b6e9ff6eaa3324282de09 Mon Sep 17 00:00:00 2001
 From: Lumir Balhar <lbalhar@redhat.com>
 Date: Wed, 14 Aug 2019 14:43:07 +0200
-Subject: [PATCH 30/36] distutils upload: only add md5 if available, but
+Subject: [PATCH 26/36] distutils upload: only add md5 if available, but
  *always* use sha256
 
 ---
@@ -3694,10 +4040,10 @@ Subject: [PATCH 30/36] distutils upload: only add md5 if available, but
  2 files changed, 10 insertions(+), 7 deletions(-)
 
 diff --git a/Lib/distutils/command/upload.py b/Lib/distutils/command/upload.py
-index 0edb39efd4cb..170acb3d6b65 100644
+index 0edb39efd4c..170acb3d6b6 100644
 --- a/Lib/distutils/command/upload.py
 +++ b/Lib/distutils/command/upload.py
-@@ -102,6 +102,7 @@ def upload_file(self, command, pyversion, filename):
+@@ -102,6 +102,7 @@ class upload(PyPIRCCommand):
              'content': (os.path.basename(filename),content),
              'filetype': command,
              'pyversion': pyversion,
@@ -3705,7 +4051,7 @@ index 0edb39efd4cb..170acb3d6b65 100644
  
              # additional meta-data
              'metadata_version': '1.0',
-@@ -124,7 +125,7 @@ def upload_file(self, command, pyversion, filename):
+@@ -124,7 +125,7 @@ class upload(PyPIRCCommand):
              digest = hashlib.md5(content).hexdigest()
          except ValueError as e:
              msg = 'calculating md5 checksum failed: %s' % e
@@ -3715,10 +4061,10 @@ index 0edb39efd4cb..170acb3d6b65 100644
                  # this really shouldn't fail
                  raise
 diff --git a/Lib/distutils/tests/test_upload.py b/Lib/distutils/tests/test_upload.py
-index b4b64e97737d..f720a7905dd8 100644
+index b4b64e97737..f720a7905dd 100644
 --- a/Lib/distutils/tests/test_upload.py
 +++ b/Lib/distutils/tests/test_upload.py
-@@ -132,10 +132,11 @@ def test_upload(self):
+@@ -132,10 +132,11 @@ class uploadTestCase(BasePyPIRCCommandTestCase):
          # what did we send ?
          headers = dict(self.last_open.req.headers)
          if hashlib.get_fips_mode():
@@ -3733,7 +4079,7 @@ index b4b64e97737d..f720a7905dd8 100644
          content_type = headers['Content-type']
          self.assertTrue(content_type.startswith('multipart/form-data'))
          self.assertEqual(self.last_open.req.get_method(), 'POST')
-@@ -172,10 +173,11 @@ def test_upload_correct_cr(self):
+@@ -172,10 +173,11 @@ class uploadTestCase(BasePyPIRCCommandTestCase):
  
          headers = dict(self.last_open.req.headers)
          if hashlib.get_fips_mode():
@@ -3748,11 +4094,14 @@ index b4b64e97737d..f720a7905dd8 100644
          self.assertIn(b'long description\r', self.last_open.req.data)
  
      def test_upload_fails(self):
+-- 
+2.21.0
 
-From 584d432c6a3e987fdd661e994626befaed523a40 Mon Sep 17 00:00:00 2001
+
+From e0d2cca338186bbc5cb9c67bb4402dec38fed5a7 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 26 Aug 2019 15:55:48 +0200
-Subject: [PATCH 31/36] Add the usedforsecurity argument back
+Subject: [PATCH 27/36] Add the usedforsecurity argument back
 
 ---
  Lib/hashlib.py         |  4 ++-
@@ -3760,7 +4109,7 @@ Subject: [PATCH 31/36] Add the usedforsecurity argument back
  2 files changed, 65 insertions(+), 21 deletions(-)
 
 diff --git a/Lib/hashlib.py b/Lib/hashlib.py
-index d3344f60b2ea..cd3b035b1d76 100644
+index d3344f60b2e..cd3b035b1d7 100644
 --- a/Lib/hashlib.py
 +++ b/Lib/hashlib.py
 @@ -174,7 +174,9 @@ def __hash_new(name, data=b'', **kwargs):
@@ -3775,7 +4124,7 @@ index d3344f60b2ea..cd3b035b1d76 100644
              retval._set_name(orig_name)
          return retval
 diff --git a/Modules/_hashopenssl.c b/Modules/_hashopenssl.c
-index e330423e2662..b621c330c32d 100644
+index e330423e266..b621c330c32 100644
 --- a/Modules/_hashopenssl.c
 +++ b/Modules/_hashopenssl.c
 @@ -318,6 +318,25 @@ EVP_repr(EVPobject *self)
@@ -3951,11 +4300,14 @@ index e330423e2662..b621c330c32d 100644
          PyDoc_STR("Returns a " #NAME \
                    " hash object; optionally initialized with a string") \
      },
+-- 
+2.21.0
 
-From 07c8dd0441a76fe841461a1b81d4c7f9c697d643 Mon Sep 17 00:00:00 2001
+
+From 0d169ad7d9aa48bdb3313b6d72682d097dc9dea5 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 26 Aug 2019 18:59:15 +0200
-Subject: [PATCH 32/36] Add no-op usedforsecurity argument to internal hash
+Subject: [PATCH 28/36] Add no-op usedforsecurity argument to internal hash
  implementations
 
 ---
@@ -3967,7 +4319,7 @@ Subject: [PATCH 32/36] Add no-op usedforsecurity argument to internal hash
  5 files changed, 31 insertions(+), 18 deletions(-)
 
 diff --git a/Modules/_blake2/blake2b_impl.c b/Modules/_blake2/blake2b_impl.c
-index f6bfce823b8f..ae9d244200ab 100644
+index f6bfce823b8..ae9d244200a 100644
 --- a/Modules/_blake2/blake2b_impl.c
 +++ b/Modules/_blake2/blake2b_impl.c
 @@ -87,6 +87,8 @@ _blake2.blake2b.__new__ as py_blake2b_new
@@ -3991,7 +4343,7 @@ index f6bfce823b8f..ae9d244200ab 100644
      BLAKE2bObject *self = NULL;
      Py_buffer buf;
 diff --git a/Modules/_blake2/blake2s_impl.c b/Modules/_blake2/blake2s_impl.c
-index 28ae5b651019..bf80d6b7428c 100644
+index 28ae5b65101..bf80d6b7428 100644
 --- a/Modules/_blake2/blake2s_impl.c
 +++ b/Modules/_blake2/blake2s_impl.c
 @@ -87,6 +87,8 @@ _blake2.blake2s.__new__ as py_blake2s_new
@@ -4015,7 +4367,7 @@ index 28ae5b651019..bf80d6b7428c 100644
      BLAKE2sObject *self = NULL;
      Py_buffer buf;
 diff --git a/Modules/_blake2/clinic/blake2b_impl.c.h b/Modules/_blake2/clinic/blake2b_impl.c.h
-index 9b2965eb6b31..9688c04dda80 100644
+index 9b2965eb6b3..9688c04dda8 100644
 --- a/Modules/_blake2/clinic/blake2b_impl.c.h
 +++ b/Modules/_blake2/clinic/blake2b_impl.c.h
 @@ -5,7 +5,8 @@ preserve
@@ -4069,7 +4421,7 @@ index 9b2965eb6b31..9688c04dda80 100644
 -/*[clinic end generated code: output=0eb559f418fc0a21 input=a9049054013a1b77]*/
 +/*[clinic end generated code: output=d5f214b052c75135 input=a9049054013a1b77]*/
 diff --git a/Modules/_blake2/clinic/blake2s_impl.c.h b/Modules/_blake2/clinic/blake2s_impl.c.h
-index 42b87b7099df..5653e93044d1 100644
+index 42b87b7099d..5653e93044d 100644
 --- a/Modules/_blake2/clinic/blake2s_impl.c.h
 +++ b/Modules/_blake2/clinic/blake2s_impl.c.h
 @@ -5,7 +5,8 @@ preserve
@@ -4123,7 +4475,7 @@ index 42b87b7099df..5653e93044d1 100644
 -/*[clinic end generated code: output=13d4b08ea9ee2d62 input=a9049054013a1b77]*/
 +/*[clinic end generated code: output=2373a3b3fa542e89 input=a9049054013a1b77]*/
 diff --git a/Modules/_sha3/sha3module.c b/Modules/_sha3/sha3module.c
-index 2783a75644fc..62db9cb5616f 100644
+index 2783a75644f..62db9cb5616 100644
 --- a/Modules/_sha3/sha3module.c
 +++ b/Modules/_sha3/sha3module.c
 @@ -185,6 +185,11 @@ py_sha3_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
@@ -4138,29 +4490,32 @@ index 2783a75644fc..62db9cb5616f 100644
      if (!_PyArg_NoKeywords(type->tp_name, kwargs)) {
          return NULL;
      }
+-- 
+2.21.0
 
-From 595066f4993f94838f53f06b2729739f30a60eb8 Mon Sep 17 00:00:00 2001
+
+From c451744d82f78f42bfa947b782a24ff7c8c6ad9d Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 26 Aug 2019 19:09:39 +0200
-Subject: [PATCH 33/36] Test the usedforsecurity flag
+Subject: [PATCH 29/36] Test the usedforsecurity flag
 
 ---
  Lib/test/test_hashlib.py | 82 ++++++++++++++++++++++++++--------------
  1 file changed, 54 insertions(+), 28 deletions(-)
 
 diff --git a/Lib/test/test_hashlib.py b/Lib/test/test_hashlib.py
-index 30b6abcbef90..b359c4fb14a9 100644
+index 9745bfd6fa2..19a2fbdf294 100644
 --- a/Lib/test/test_hashlib.py
 +++ b/Lib/test/test_hashlib.py
-@@ -22,6 +22,7 @@
- from test import support
+@@ -24,6 +24,7 @@ from test import support
  from test.support import _4G, bigmemtest, import_fresh_module
+ from test.support import requires_hashdigest
  from http.client import HTTPException
 +from functools import partial
  
  # Were we compiled --with-pydebug or with #define Py_DEBUG?
  COMPILED_WITH_PYDEBUG = hasattr(sys, 'gettotalrefcount')
-@@ -30,8 +31,10 @@
+@@ -32,8 +33,10 @@ c_hashlib = import_fresh_module('hashlib', fresh=['_hashlib'])
  py_hashlib = import_fresh_module('hashlib', blocked=['_hashlib'])
  
  if hashlib.get_fips_mode():
@@ -4172,7 +4527,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
      FIPS_DISABLED = set()
  
  try:
-@@ -76,6 +79,15 @@ def read_vectors(hash_name):
+@@ -78,6 +81,15 @@ def read_vectors(hash_name):
              yield parts
  
  
@@ -4188,7 +4543,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
  class HashLibTestCase(unittest.TestCase):
      supported_hash_names = ( 'md5', 'MD5', 'sha1', 'SHA1',
                               'sha224', 'SHA224', 'sha256', 'SHA256',
-@@ -91,8 +103,6 @@ class HashLibTestCase(unittest.TestCase):
+@@ -93,8 +105,6 @@ class HashLibTestCase(unittest.TestCase):
  
      if hashlib.get_fips_mode():
          shakes = set()
@@ -4197,7 +4552,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
  
      def _conditional_import_module(self, module_name):
          """Import a module and return a reference to it or None on failure."""
-@@ -118,7 +128,8 @@ def _has_shake_extras(self, hasher):
+@@ -120,7 +130,8 @@ class HashLibTestCase(unittest.TestCase):
      def __init__(self, *args, **kwargs):
          algorithms = set()
          for algorithm in self.supported_hash_names:
@@ -4207,7 +4562,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
  
          _blake2 = self._conditional_import_module('_blake2')
          if _blake2:
-@@ -128,15 +139,21 @@ def __init__(self, *args, **kwargs):
+@@ -130,15 +141,21 @@ class HashLibTestCase(unittest.TestCase):
          for algorithm in algorithms:
              self.constructors_to_test[algorithm] = set()
  
@@ -4230,8 +4585,8 @@ index 30b6abcbef90..b359c4fb14a9 100644
 +            _add_constructor(algorithm, _test_algorithm_via_hashlib_new)
  
          _hashlib = self._conditional_import_module('_hashlib')
-         if _hashlib:
-@@ -147,7 +164,7 @@ def _test_algorithm_via_hashlib_new(data=None, _alg=algorithm, **kwargs):
+         self._hashlib = _hashlib
+@@ -150,7 +167,7 @@ class HashLibTestCase(unittest.TestCase):
              for algorithm, constructors in self.constructors_to_test.items():
                  constructor = getattr(_hashlib, 'openssl_'+algorithm, None)
                  if constructor:
@@ -4240,7 +4595,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
  
          def add_builtin_constructor(name):
              constructor = getattr(hashlib, "__get_builtin_constructor")(name)
-@@ -207,7 +224,7 @@ def test_hash_array(self):
+@@ -210,7 +227,7 @@ class HashLibTestCase(unittest.TestCase):
                  c.hexdigest()
  
      def test_algorithms_guaranteed(self):
@@ -4249,7 +4604,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
              set(_algo for _algo in self.supported_hash_names
                    if _algo.islower()))
  
-@@ -283,7 +300,9 @@ def test_name_attribute(self):
+@@ -286,7 +303,9 @@ class HashLibTestCase(unittest.TestCase):
                  self.assertIn(h.name, self.supported_hash_names)
              else:
                  self.assertNotIn(h.name, self.supported_hash_names)
@@ -4260,7 +4615,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
  
      def test_large_update(self):
          aas = b'a' * 128
-@@ -325,13 +344,15 @@ def check(self, name, data, hexdigest, shake=False, **kwargs):
+@@ -328,13 +347,15 @@ class HashLibTestCase(unittest.TestCase):
          self.assertGreaterEqual(len(constructors), 2)
          for hash_object_constructor in constructors:
              if (
@@ -4279,7 +4634,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
                      if length > m.digest_size:
                          # OpenSSL doesn't give long digests
                          return
-@@ -348,7 +369,7 @@ def check(self, name, data, hexdigest, shake=False, **kwargs):
+@@ -351,7 +372,7 @@ class HashLibTestCase(unittest.TestCase):
                      % (name, hash_object_constructor,
                         computed, len(data), hexdigest))
              if shake:
@@ -4288,7 +4643,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
                      computed = m.digest()[:length]
                  else:
                      computed = m.digest(length)
-@@ -366,8 +387,7 @@ def check_no_unicode(self, algorithm_name):
+@@ -369,8 +390,7 @@ class HashLibTestCase(unittest.TestCase):
              self.assertRaises(TypeError, hash_object_constructor, 'spam')
  
      def test_no_unicode(self):
@@ -4298,7 +4653,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
          self.check_no_unicode('sha1')
          self.check_no_unicode('sha224')
          self.check_no_unicode('sha256')
-@@ -394,10 +414,10 @@ def check_blocksize_name(self, name, block_size=0, digest_size=0,
+@@ -397,10 +417,10 @@ class HashLibTestCase(unittest.TestCase):
          for hash_object_constructor in constructors:
              m = hash_object_constructor()
              self.assertEqual(m.block_size, block_size)
@@ -4311,7 +4666,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
                      self.assertEqual(len(m.digest(digest_length)),
                                      digest_length)
                      self.assertEqual(len(m.hexdigest(digest_length)),
-@@ -432,7 +452,7 @@ def check_sha3(self, name, capacity, rate, suffix):
+@@ -435,7 +455,7 @@ class HashLibTestCase(unittest.TestCase):
          for hash_object_constructor in constructors:
              m = hash_object_constructor()
              self.assertEqual(capacity + rate, 1600)
@@ -4320,7 +4675,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
                  self.assertEqual(m._capacity_bits, capacity)
                  self.assertEqual(m._rate_bits, rate)
                  self.assertEqual(m._suffix, suffix)
-@@ -451,31 +471,27 @@ def test_blocksize_name_blake2(self):
+@@ -454,31 +474,27 @@ class HashLibTestCase(unittest.TestCase):
          self.check_blocksize_name('blake2b', 128, 64)
          self.check_blocksize_name('blake2s', 64, 32)
  
@@ -4358,7 +4713,7 @@ index 30b6abcbef90..b359c4fb14a9 100644
  
      # use the three examples from Federal Information Processing Standards
      # Publication 180-1, Secure Hash Standard,  1995 April 17
-@@ -901,6 +917,16 @@ def hash_in_chunks(chunk_size):
+@@ -904,6 +920,16 @@ class HashLibTestCase(unittest.TestCase):
  
          self.assertEqual(expected_hash, hasher.hexdigest())
  
@@ -4375,8 +4730,179 @@ index 30b6abcbef90..b359c4fb14a9 100644
  
  class KDFTests(unittest.TestCase):
  
+-- 
+2.21.0
 
-From 723bfe45d5a7666a75a12633b21a9f153805eccf Mon Sep 17 00:00:00 2001
+
+From 327707f185572cf13da66851e0af824a81d65aa9 Mon Sep 17 00:00:00 2001
+From: Petr Viktorin <pviktori@redhat.com>
+Date: Thu, 29 Aug 2019 10:25:28 +0200
+Subject: [PATCH 30/36] Skip error checking in _hashlib.get_fips_mode
+
+Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1745499
+---
+ Modules/_hashopenssl.c | 30 ++++++++++++++++--------------
+ 1 file changed, 16 insertions(+), 14 deletions(-)
+
+diff --git a/Modules/_hashopenssl.c b/Modules/_hashopenssl.c
+index b621c330c32..6bfb12c5618 100644
+--- a/Modules/_hashopenssl.c
++++ b/Modules/_hashopenssl.c
+@@ -1021,20 +1021,22 @@ static PyObject *
+ _hashlib_get_fips_mode_impl(PyObject *module)
+ /*[clinic end generated code: output=ad8a7793310d3f98 input=f42a2135df2a5e11]*/
+ {
+-    int result = FIPS_mode();
+-    if (result == 0) {
+-        // "If the library was built without support of the FIPS Object Module,
+-        // then the function will return 0 with an error code of
+-        // CRYPTO_R_FIPS_MODE_NOT_SUPPORTED (0x0f06d065)."
+-        // But 0 is also a valid result value.
+-
+-        unsigned long errcode = ERR_peek_last_error();
+-        if (errcode) {
+-            _setException(PyExc_ValueError);
+-            return NULL;
+-        }
+-    }
+-    return PyLong_FromLong(result);
++    // XXX: This function skips error checking.
++    // This is only appropriate for RHEL.
++
++    // From the OpenSSL docs:
++    // "If the library was built without support of the FIPS Object Module,
++    // then the function will return 0 with an error code of
++    // CRYPTO_R_FIPS_MODE_NOT_SUPPORTED (0x0f06d065)."
++    // In RHEL:
++    // * we do build with FIPS, so the function always succeeds
++    // * even if it didn't, people seem used to errors being left on the
++    //   OpenSSL error stack.
++
++    // For more info, see:
++    //  https://bugzilla.redhat.com/show_bug.cgi?id=1745499
++
++    return PyLong_FromLong(FIPS_mode());
+ }
+ 
+ 
+-- 
+2.21.0
+
+
+From 695039674b78b19d9ff26d637c11acea99c44807 Mon Sep 17 00:00:00 2001
+From: Petr Viktorin <pviktori@redhat.com>
+Date: Thu, 10 Oct 2019 13:04:50 +0200
+Subject: [PATCH 31/36] Skip error checking in _Py_hashlib_fips_error
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1760106
+---
+ Include/_hashopenssl.h | 12 +++---------
+ 1 file changed, 3 insertions(+), 9 deletions(-)
+
+diff --git a/Include/_hashopenssl.h b/Include/_hashopenssl.h
+index 47ed0030422..d4cbdef984d 100644
+--- a/Include/_hashopenssl.h
++++ b/Include/_hashopenssl.h
+@@ -42,16 +42,10 @@ static int
+ _Py_hashlib_fips_error(PyObject *exc, char *name) {
+     int result = FIPS_mode();
+     if (result == 0) {
+-        // "If the library was built without support of the FIPS Object Module,
+-        // then the function will return 0 with an error code of
+-        // CRYPTO_R_FIPS_MODE_NOT_SUPPORTED (0x0f06d065)."
+-        // But 0 is also a valid result value.
++        // XXX: This function skips error checking.
++        // This is only appropriate for RHEL.
++        // See _hashlib.get_fips_mode for details.
+ 
+-        unsigned long errcode = ERR_peek_last_error();
+-        if (errcode) {
+-            _setException(exc);
+-            return 1;
+-        }
+         return 0;
+     }
+     PyErr_Format(exc, "%s is not available in FIPS mode", name);
+-- 
+2.21.0
+
+
+From 0f9008e92b62f5f22e2bfd0a73d5325d16eedf6f Mon Sep 17 00:00:00 2001
+From: Charalampos Stratakis <cstratak@redhat.com>
+Date: Thu, 21 Nov 2019 00:20:09 +0100
+Subject: [PATCH 32/36] Use usedforsecurity=False in uuid
+
+Partially backport commit 7cad53e6b084435a220e6604010f1fa5778bd0b1
+only for uuid
+---
+ Lib/uuid.py | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/Lib/uuid.py b/Lib/uuid.py
+index db8b2ef94ed..7e680a24d06 100644
+--- a/Lib/uuid.py
++++ b/Lib/uuid.py
+@@ -615,8 +615,11 @@ def uuid1(node=None, clock_seq=None):
+ def uuid3(namespace, name):
+     """Generate a UUID from the MD5 hash of a namespace UUID and a name."""
+     from hashlib import md5
+-    hash = md5(namespace.bytes + bytes(name, "utf-8")).digest()
+-    return UUID(bytes=hash[:16], version=3)
++    digest = md5(
++        namespace.bytes + bytes(name, "utf-8"),
++        usedforsecurity=False
++    ).digest()
++    return UUID(bytes=digest[:16], version=3)
+ 
+ def uuid4():
+     """Generate a random UUID."""
+-- 
+2.21.0
+
+
+From 75829df72b65fb573f3b310033978e493ff700b4 Mon Sep 17 00:00:00 2001
+From: Petr Viktorin <pviktori@redhat.com>
+Date: Mon, 5 Aug 2019 19:12:38 +0200
+Subject: [PATCH 33/36] Fixups
+
+- Adjust error message of the original hmac.HMAC class
+- Don't duplicate a test name
+---
+ Lib/hmac.py           | 2 +-
+ Lib/test/test_hmac.py | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Lib/hmac.py b/Lib/hmac.py
+index 7af94c39ed6..33b5be613d9 100644
+--- a/Lib/hmac.py
++++ b/Lib/hmac.py
+@@ -41,7 +41,7 @@ class HMAC:
+         """
+         if _hashlib.get_fips_mode():
+             raise ValueError(
+-                'hmac.HMAC is not available in FIPS mode. '
++                'This class is not available in FIPS mode. '
+                 + 'Use hmac.new().'
+             )
+ 
+diff --git a/Lib/test/test_hmac.py b/Lib/test/test_hmac.py
+index 5b090727ef6..449b1366314 100644
+--- a/Lib/test/test_hmac.py
++++ b/Lib/test/test_hmac.py
+@@ -401,7 +401,7 @@ class CopyTestCase(unittest.TestCase):
+         self.assertTrue(id(h1.outer) != id(h2.outer),
+             "No real copy of the attribute 'outer'.")
+ 
+-    def test_realcopy(self):
++    def test_realcopy_by_digest(self):
+         # Testing if the copy method created a real copy.
+         h1 = hmac.HMAC(b"key", digestmod="sha1")
+         h2 = h1.copy()
+-- 
+2.21.0
+
+
+From 86f1f161b5aab08975379dbae6ebac08a697e3d7 Mon Sep 17 00:00:00 2001
 From: Petr Viktorin <pviktori@redhat.com>
 Date: Mon, 26 Aug 2019 19:39:48 +0200
 Subject: [PATCH 34/36] Don't re-export get_fips_mode from hashlib
@@ -4389,18 +4915,18 @@ Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1745685
  Lib/hmac.py                        |  6 +++---
  Lib/test/test_fips.py              |  6 +++---
  Lib/test/test_hashlib.py           | 16 +++++++++-------
- Lib/test/test_hmac.py              | 15 ++++++++-------
- Lib/test/test_logging.py           |  3 ++-
- Lib/test/test_smtplib.py           |  7 ++++---
+ Lib/test/test_hmac.py              |  8 +++++---
+ Lib/test/test_logging.py           |  1 +
+ Lib/test/test_smtplib.py           |  4 +++-
  Lib/test/test_tools/test_md5sum.py |  4 ++--
- Lib/test/test_urllib2_localnet.py  |  3 ++-
- 11 files changed, 50 insertions(+), 41 deletions(-)
+ Lib/test/test_urllib2_localnet.py  |  1 +
+ 11 files changed, 44 insertions(+), 33 deletions(-)
 
 diff --git a/Lib/distutils/command/upload.py b/Lib/distutils/command/upload.py
-index 170acb3d6b65..d0a4aee001ea 100644
+index 170acb3d6b6..d0a4aee001e 100644
 --- a/Lib/distutils/command/upload.py
 +++ b/Lib/distutils/command/upload.py
-@@ -126,7 +126,8 @@ def upload_file(self, command, pyversion, filename):
+@@ -126,7 +126,8 @@ class upload(PyPIRCCommand):
          except ValueError as e:
              msg = 'calculating md5 checksum failed: %s' % e
              self.announce(msg, log.INFO)
@@ -4411,10 +4937,10 @@ index 170acb3d6b65..d0a4aee001ea 100644
                  raise
          else:
 diff --git a/Lib/distutils/tests/test_upload.py b/Lib/distutils/tests/test_upload.py
-index f720a7905dd8..a198b213577b 100644
+index f720a7905dd..a198b213577 100644
 --- a/Lib/distutils/tests/test_upload.py
 +++ b/Lib/distutils/tests/test_upload.py
-@@ -4,6 +4,7 @@
+@@ -4,6 +4,7 @@ import unittest
  import unittest.mock as mock
  from urllib.request import HTTPError
  import hashlib
@@ -4422,7 +4948,7 @@ index f720a7905dd8..a198b213577b 100644
  
  from test.support import run_unittest
  
-@@ -131,7 +132,7 @@ def test_upload(self):
+@@ -131,7 +132,7 @@ class uploadTestCase(BasePyPIRCCommandTestCase):
  
          # what did we send ?
          headers = dict(self.last_open.req.headers)
@@ -4431,7 +4957,7 @@ index f720a7905dd8..a198b213577b 100644
              # only sha256 hash is used
              self.assertEqual(headers['Content-length'], '2197')
          else:
-@@ -172,7 +173,7 @@ def test_upload_correct_cr(self):
+@@ -172,7 +173,7 @@ class uploadTestCase(BasePyPIRCCommandTestCase):
          cmd.run()
  
          headers = dict(self.last_open.req.headers)
@@ -4441,10 +4967,10 @@ index f720a7905dd8..a198b213577b 100644
              self.assertEqual(headers['Content-length'], '2207')
          else:
 diff --git a/Lib/hashlib.py b/Lib/hashlib.py
-index cd3b035b1d76..3e9a4aa27a79 100644
+index cd3b035b1d7..3e9a4aa27a7 100644
 --- a/Lib/hashlib.py
 +++ b/Lib/hashlib.py
-@@ -68,13 +68,13 @@
+@@ -68,13 +68,13 @@ __all__ = __always_supported + ('new', 'algorithms_guaranteed',
                                  'algorithms_available', 'pbkdf2_hmac')
  
  try:
@@ -4461,7 +4987,7 @@ index cd3b035b1d76..3e9a4aa27a79 100644
      __builtin_constructor_cache = {}
  
      def __get_builtin_constructor(name):
-@@ -121,7 +121,7 @@ def __get_builtin_constructor(name):
+@@ -121,7 +121,7 @@ if not get_fips_mode():
  
  
  def __get_openssl_constructor(name):
@@ -4515,7 +5041,7 @@ index cd3b035b1d76..3e9a4aa27a79 100644
              raise
          return __get_builtin_constructor(name)(data)
  
-@@ -197,7 +197,7 @@ def __hash_new(name, data=b'', **kwargs):
+@@ -197,7 +197,7 @@ try:
      algorithms_available = algorithms_available.union(
              _hashlib.openssl_md_meth_names)
  except ImportError:
@@ -4524,7 +5050,7 @@ index cd3b035b1d76..3e9a4aa27a79 100644
          raise
      new = __py_new
      __get_hash = __get_builtin_constructor
-@@ -225,5 +225,6 @@ def __hash_new(name, data=b'', **kwargs):
+@@ -225,5 +225,6 @@ for __func_name in __always_supported:
  # Cleanup locals()
  del __always_supported, __func_name, __get_hash
  del __hash_new, __get_openssl_constructor
@@ -4533,10 +5059,10 @@ index cd3b035b1d76..3e9a4aa27a79 100644
      del __py_new
 +del _hashlib_get_fips_mode
 diff --git a/Lib/hmac.py b/Lib/hmac.py
-index 33b5be613d96..ca83d9dc0d35 100644
+index 33b5be613d9..ca83d9dc0d3 100644
 --- a/Lib/hmac.py
 +++ b/Lib/hmac.py
-@@ -39,7 +39,7 @@ def __init__(self, key, msg = None, digestmod = None):
+@@ -39,7 +39,7 @@ class HMAC:
  
          Note: key and msg must be a bytes or bytearray objects.
          """
@@ -4545,7 +5071,7 @@ index 33b5be613d96..ca83d9dc0d35 100644
              raise ValueError(
                  'This class is not available in FIPS mode. '
                  + 'Use hmac.new().'
-@@ -97,7 +97,7 @@ def name(self):
+@@ -97,7 +97,7 @@ class HMAC:
      def update(self, msg):
          """Update this hashing object with the string msg.
          """
@@ -4554,7 +5080,7 @@ index 33b5be613d96..ca83d9dc0d35 100644
              raise ValueError('hmac.HMAC is not available in FIPS mode')
          self.inner.update(msg)
  
-@@ -167,7 +167,7 @@ def __new__(cls, key, msg = None, digestmod = None):
+@@ -167,7 +167,7 @@ class HMAC_openssl(_hmacopenssl.HMAC):
          return result
  
  
@@ -4564,10 +5090,10 @@ index 33b5be613d96..ca83d9dc0d35 100644
  
  
 diff --git a/Lib/test/test_fips.py b/Lib/test/test_fips.py
-index 34812e6098ae..86e61e29c0b4 100644
+index 34812e6098a..86e61e29c0b 100644
 --- a/Lib/test/test_fips.py
 +++ b/Lib/test/test_fips.py
-@@ -6,7 +6,7 @@
+@@ -6,7 +6,7 @@ import hashlib, _hashlib
  
  class HashlibFipsTests(unittest.TestCase):
  
@@ -4576,7 +5102,7 @@ index 34812e6098ae..86e61e29c0b4 100644
      def test_fips_imports(self):
          """blake2s and blake2b should fail to import in FIPS mode
          """
-@@ -30,7 +30,7 @@ def compare_hashes(self, python_hash, openssl_hash):
+@@ -30,7 +30,7 @@ class HashlibFipsTests(unittest.TestCase):
  
          self.assertEqual(m, h)
  
@@ -4585,7 +5111,7 @@ index 34812e6098ae..86e61e29c0b4 100644
      def test_blake2_hashes(self):
          self.compare_hashes(hashlib.blake2b(b'abc'), _hashlib.openssl_blake2b(b'abc'))
          self.compare_hashes(hashlib.blake2s(b'abc'), _hashlib.openssl_blake2s(b'abc'))
-@@ -41,7 +41,7 @@ def test_sha3_hashes(self):
+@@ -41,7 +41,7 @@ class HashlibFipsTests(unittest.TestCase):
          self.compare_hashes(hashlib.sha3_384(b'abc'), _hashlib.openssl_sha3_384(b'abc'))
          self.compare_hashes(hashlib.sha3_512(b'abc'), _hashlib.openssl_sha3_512(b'abc'))
  
@@ -4595,10 +5121,10 @@ index 34812e6098ae..86e61e29c0b4 100644
          self.compare_hashes(hashlib.shake_128(b'abc'), _hashlib.openssl_shake_128(b'abc'))
          self.compare_hashes(hashlib.shake_256(b'abc'), _hashlib.openssl_shake_256(b'abc'))
 diff --git a/Lib/test/test_hashlib.py b/Lib/test/test_hashlib.py
-index b359c4fb14a9..eadfb7968be8 100644
+index 19a2fbdf294..a6f9a353fd1 100644
 --- a/Lib/test/test_hashlib.py
 +++ b/Lib/test/test_hashlib.py
-@@ -30,7 +30,9 @@
+@@ -32,7 +32,9 @@ COMPILED_WITH_PYDEBUG = hasattr(sys, 'gettotalrefcount')
  c_hashlib = import_fresh_module('hashlib', fresh=['_hashlib'])
  py_hashlib = import_fresh_module('hashlib', blocked=['_hashlib'])
  
@@ -4609,7 +5135,7 @@ index b359c4fb14a9..eadfb7968be8 100644
      FIPS_UNAVAILABLE = {'blake2b', 'blake2s'}
      FIPS_DISABLED = {'md5', 'MD5', *FIPS_UNAVAILABLE}
  else:
-@@ -101,7 +103,7 @@ class HashLibTestCase(unittest.TestCase):
+@@ -103,7 +105,7 @@ class HashLibTestCase(unittest.TestCase):
      # Issue #14693: fallback modules are always compiled under POSIX
      _warn_on_extension_import = os.name == 'posix' or COMPILED_WITH_PYDEBUG
  
@@ -4618,7 +5144,7 @@ index b359c4fb14a9..eadfb7968be8 100644
          shakes = set()
  
      def _conditional_import_module(self, module_name):
-@@ -112,7 +114,7 @@ def _conditional_import_module(self, module_name):
+@@ -114,7 +116,7 @@ class HashLibTestCase(unittest.TestCase):
              if self._warn_on_extension_import:
                  warnings.warn('Did a C extension fail to compile? %s' % error)
          except ImportError as error:
@@ -4627,7 +5153,7 @@ index b359c4fb14a9..eadfb7968be8 100644
                  raise
          return None
  
-@@ -236,12 +238,12 @@ def test_unknown_hash(self):
+@@ -239,12 +241,12 @@ class HashLibTestCase(unittest.TestCase):
          self.assertRaises(ValueError, hashlib.new, 'spam spam spam spam spam')
          self.assertRaises(TypeError, hashlib.new, 1)
  
@@ -4642,7 +5168,7 @@ index b359c4fb14a9..eadfb7968be8 100644
      def test_get_builtin_constructor(self):
          get_builtin_constructor = getattr(hashlib,
                                            '__get_builtin_constructor')
-@@ -430,7 +432,7 @@ def check_blocksize_name(self, name, block_size=0, digest_size=0,
+@@ -433,7 +435,7 @@ class HashLibTestCase(unittest.TestCase):
              self.assertIn(name.split("_")[0], repr(m))
  
      def test_blocksize_name(self):
@@ -4651,7 +5177,7 @@ index b359c4fb14a9..eadfb7968be8 100644
              self.check_blocksize_name('md5', 64, 16)
          self.check_blocksize_name('sha1', 64, 20)
          self.check_blocksize_name('sha224', 64, 28)
-@@ -917,7 +919,7 @@ def hash_in_chunks(chunk_size):
+@@ -920,7 +922,7 @@ class HashLibTestCase(unittest.TestCase):
  
          self.assertEqual(expected_hash, hasher.hexdigest())
  
@@ -4661,145 +5187,91 @@ index b359c4fb14a9..eadfb7968be8 100644
          """Make sure usedforsecurity flag isn't copied to other contexts"""
          for i in range(3):
 diff --git a/Lib/test/test_hmac.py b/Lib/test/test_hmac.py
-index 17ffcf37eb14..7fbbe057d736 100644
+index 449b1366314..35b893509cb 100644
 --- a/Lib/test/test_hmac.py
 +++ b/Lib/test/test_hmac.py
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,7 @@ import hmac
  import hashlib
  import unittest
  import warnings
 +from _hashlib import get_fips_mode
  
+ from test.support import requires_hashdigest
  
- def ignore_warning(func):
-@@ -17,7 +18,7 @@ def wrapper(*args, **kwargs):
- 
- class TestVectorsTestCase(unittest.TestCase):
- 
--    @unittest.skipIf(hashlib.get_fips_mode(), 'md5 unacceptable in FIPS mode.')
-+    @unittest.skipIf(get_fips_mode(), 'md5 unacceptable in FIPS mode.')
-     def test_md5_vectors(self):
-         # Test the HMAC module against test vectors from the RFC.
- 
-@@ -243,7 +244,7 @@ def test_sha384_rfc4231(self):
+@@ -250,7 +251,7 @@ class TestVectorsTestCase(unittest.TestCase):
      def test_sha512_rfc4231(self):
          self._rfc4231_test_cases(hashlib.sha512, 'sha512', 64, 128)
  
 -    @unittest.skipIf(hashlib.get_fips_mode(), 'MockCrazyHash unacceptable in FIPS mode.')
 +    @unittest.skipIf(get_fips_mode(), 'MockCrazyHash unacceptable in FIPS mode.')
+     @requires_hashdigest('sha256')
      def test_legacy_block_size_warnings(self):
          class MockCrazyHash(object):
-             """Ain't no block_size attribute here."""
-@@ -266,7 +267,7 @@ def digest(self):
+@@ -274,6 +275,7 @@ class TestVectorsTestCase(unittest.TestCase):
                  hmac.HMAC(b'a', b'b', digestmod=MockCrazyHash)
                  self.fail('Expected warning about small block_size')
  
--    @unittest.skipIf(hashlib.get_fips_mode(), 'md5 is not default in FIPS mode.')
 +    @unittest.skipIf(get_fips_mode(), 'md5 is not default in FIPS mode.')
      def test_with_digestmod_warning(self):
          with self.assertWarns(PendingDeprecationWarning):
              key = b"\x0b" * 16
-@@ -278,7 +279,7 @@ def test_with_digestmod_warning(self):
- 
- class ConstructorTestCase(unittest.TestCase):
- 
--    @unittest.skipIf(hashlib.get_fips_mode(), 'md5 is not default in FIPS mode.')
-+    @unittest.skipIf(get_fips_mode(), 'md5 is not default in FIPS mode.')
-     @ignore_warning
-     def test_normal(self):
-         # Standard constructor call.
-@@ -343,7 +344,7 @@ def test_withmodule(self):
- 
- class SanityTestCase(unittest.TestCase):
- 
--    @unittest.skipIf(hashlib.get_fips_mode(), "md5 is not default in FIPS mode")
-+    @unittest.skipIf(get_fips_mode(), "md5 is not default in FIPS mode")
-     @ignore_warning
-     def test_default_is_md5(self):
-         # Testing if HMAC defaults to MD5 algorithm.
-@@ -365,7 +366,7 @@ def test_exercise_all_methods(self):
+@@ -375,7 +377,7 @@ class SanityTestCase(unittest.TestCase):
  
  class CopyTestCase(unittest.TestCase):
  
 -    @unittest.skipIf(hashlib.get_fips_mode(), "Internal attributes unavailable in FIPS mode")
 +    @unittest.skipIf(get_fips_mode(), "Internal attributes unavailable in FIPS mode")
+     @requires_hashdigest('sha256')
      def test_attributes(self):
          # Testing if attributes are of same type.
-         h1 = hmac.HMAC(b"key", digestmod="sha1")
-@@ -377,7 +378,7 @@ def test_attributes(self):
+@@ -388,7 +390,7 @@ class CopyTestCase(unittest.TestCase):
          self.assertEqual(type(h1.outer), type(h2.outer),
              "Types of outer don't match.")
  
 -    @unittest.skipIf(hashlib.get_fips_mode(), "Internal attributes unavailable in FIPS mode")
 +    @unittest.skipIf(get_fips_mode(), "Internal attributes unavailable in FIPS mode")
+     @requires_hashdigest('sha256')
      def test_realcopy(self):
          # Testing if the copy method created a real copy.
-         h1 = hmac.HMAC(b"key", digestmod="sha1")
 diff --git a/Lib/test/test_logging.py b/Lib/test/test_logging.py
-index 0b229465983c..0028ae05a1b5 100644
+index d5c63b483ee..45b72e3bc7e 100644
 --- a/Lib/test/test_logging.py
 +++ b/Lib/test/test_logging.py
-@@ -47,6 +47,7 @@
+@@ -46,6 +46,7 @@ import time
+ import unittest
  import warnings
  import weakref
- import hashlib
-+from _hashlib import get_fips_mode
- 
++
  try:
      import threading
-@@ -1817,7 +1818,7 @@ def handle_request(self, request):
-         request.end_headers()
-         self.handled.set()
- 
--    @unittest.skipIf(hashlib.get_fips_mode(), 'Hangs in FIPS mode.')
-+    @unittest.skipIf(get_fips_mode(), 'Hangs in FIPS mode.')
-     def test_output(self):
-         # The log message sent to the HTTPHandler is properly received.
-         logger = logging.getLogger("http")
+     # The following imports are needed only for tests which
 diff --git a/Lib/test/test_smtplib.py b/Lib/test/test_smtplib.py
-index 150e9fbcf053..987b114f99ef 100644
+index 64b3201254a..704b2bc0d35 100644
 --- a/Lib/test/test_smtplib.py
 +++ b/Lib/test/test_smtplib.py
-@@ -16,6 +16,7 @@
+@@ -16,6 +16,8 @@ import time
+ import select
  import errno
  import textwrap
- import hashlib
++import hashlib
 +from _hashlib import get_fips_mode
  
  import unittest
  from test import support, mock_socket
-@@ -969,7 +970,7 @@ def testAUTH_LOGIN(self):
-         self.assertEqual(resp, (235, b'Authentication Succeeded'))
-         smtp.close()
+@@ -980,7 +982,7 @@ class SMTPSimTests(unittest.TestCase):
  
--    @unittest.skipIf(hashlib.get_fips_mode(), "md5 auth unacceptable in FIPS mode")
-+    @unittest.skipIf(get_fips_mode(), "md5 auth unacceptable in FIPS mode")
-     def testAUTH_CRAM_MD5(self):
-         self.serv.add_feature("AUTH CRAM-MD5")
-         smtp = smtplib.SMTP(HOST, self.port, local_hostname='localhost', timeout=15)
-@@ -977,7 +978,7 @@ def testAUTH_CRAM_MD5(self):
-         self.assertEqual(resp, (235, b'Authentication Succeeded'))
-         smtp.close()
- 
--    @unittest.skipIf(hashlib.get_fips_mode(), "md5 auth unacceptable in FIPS mode")
-+    @unittest.skipIf(get_fips_mode(), "md5 auth unacceptable in FIPS mode")
      def testAUTH_multiple(self):
          # Test that multiple authentication methods are tried.
-         self.serv.add_feature("AUTH BOGUS PLAIN LOGIN CRAM-MD5")
-@@ -986,7 +987,7 @@ def testAUTH_multiple(self):
+-        self.serv.add_feature("AUTH BOGUS PLAIN LOGIN CRAM-MD5")
++        self.serv.add_feature("AUTH BOGUS PLAIN LOGIN")
+         smtp = smtplib.SMTP(HOST, self.port, local_hostname='localhost', timeout=15)
+         resp = smtp.login(sim_auth[0], sim_auth[1])
          self.assertEqual(resp, (235, b'Authentication Succeeded'))
-         smtp.close()
- 
--    @unittest.skipIf(hashlib.get_fips_mode(), "md5 auth unacceptable in FIPS mode")
-+    @unittest.skipIf(get_fips_mode(), "md5 auth unacceptable in FIPS mode")
-     def test_auth_function(self):
-         supported = {'CRAM-MD5', 'PLAIN', 'LOGIN'}
-         for mechanism in supported:
 diff --git a/Lib/test/test_tools/test_md5sum.py b/Lib/test/test_tools/test_md5sum.py
-index 7028a4dc2143..3ba1ca0f146c 100644
+index 7028a4dc214..3ba1ca0f146 100644
 --- a/Lib/test/test_tools/test_md5sum.py
 +++ b/Lib/test/test_tools/test_md5sum.py
-@@ -4,13 +4,13 @@
+@@ -4,13 +4,13 @@ import os
  import unittest
  from test import support
  from test.support.script_helper import assert_python_ok, assert_python_failure
@@ -4816,10 +5288,10 @@ index 7028a4dc2143..3ba1ca0f146c 100644
  
  class MD5SumTests(unittest.TestCase):
 diff --git a/Lib/test/test_urllib2_localnet.py b/Lib/test/test_urllib2_localnet.py
-index 2d0d62f610ef..84831ab2ac0e 100644
+index 895f97cc09a..b4fb13ad092 100644
 --- a/Lib/test/test_urllib2_localnet.py
 +++ b/Lib/test/test_urllib2_localnet.py
-@@ -6,6 +6,7 @@
+@@ -6,6 +6,7 @@ import urllib.request
  import http.server
  import unittest
  import hashlib
@@ -4827,99 +5299,273 @@ index 2d0d62f610ef..84831ab2ac0e 100644
  
  from test import support
  
-@@ -317,7 +318,7 @@ def test_basic_auth_httperror(self):
-         self.assertRaises(urllib.error.HTTPError, urllib.request.urlopen, self.server_url)
- 
- 
--@unittest.skipIf(hashlib.get_fips_mode(), "md5 digest auth unacceptable in FIPS mode")
-+@unittest.skipIf(get_fips_mode(), "md5 digest auth unacceptable in FIPS mode")
- @unittest.skipUnless(threading, "Threading required for this test.")
- class ProxyAuthTests(unittest.TestCase):
-     URL = "http://localhost"
+-- 
+2.21.0
 
-From 60afcf719206757577b6fc8c6ea119e02130a0f4 Mon Sep 17 00:00:00 2001
-From: Petr Viktorin <pviktori@redhat.com>
-Date: Thu, 29 Aug 2019 10:25:28 +0200
-Subject: [PATCH 35/36] Skip error checking in _hashlib.get_fips_mode
 
-Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1745499
+From 3538f31cc15c633f1df2d6ed18471c1f771c4a52 Mon Sep 17 00:00:00 2001
+From: Christian Heimes <christian@python.org>
+Date: Wed, 20 Nov 2019 10:59:25 +0100
+Subject: [PATCH 35/36] Use FIPS compliant CSPRNG
+
+Kernel's getrandom() source is not yet FIPS compliant. Use OpenSSL's
+DRBG in FIPS mode and disable os.getrandom() function.
+
+Signed-off-by: Christian Heimes <christian@python.org>
 ---
- Modules/_hashopenssl.c | 30 ++++++++++++++++--------------
- 1 file changed, 16 insertions(+), 14 deletions(-)
+ Lib/test/test_os.py   |  5 +++
+ Makefile.pre.in       |  2 +-
+ Modules/posixmodule.c |  8 +++++
+ Python/random.c       | 75 +++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 89 insertions(+), 1 deletion(-)
 
-diff --git a/Modules/_hashopenssl.c b/Modules/_hashopenssl.c
-index b621c330c32d..6bfb12c5618b 100644
---- a/Modules/_hashopenssl.c
-+++ b/Modules/_hashopenssl.c
-@@ -1021,20 +1021,22 @@ static PyObject *
- _hashlib_get_fips_mode_impl(PyObject *module)
- /*[clinic end generated code: output=ad8a7793310d3f98 input=f42a2135df2a5e11]*/
- {
--    int result = FIPS_mode();
--    if (result == 0) {
--        // "If the library was built without support of the FIPS Object Module,
--        // then the function will return 0 with an error code of
--        // CRYPTO_R_FIPS_MODE_NOT_SUPPORTED (0x0f06d065)."
--        // But 0 is also a valid result value.
--
--        unsigned long errcode = ERR_peek_last_error();
--        if (errcode) {
--            _setException(PyExc_ValueError);
--            return NULL;
--        }
--    }
--    return PyLong_FromLong(result);
-+    // XXX: This function skips error checking.
-+    // This is only appropriate for RHEL.
+diff --git a/Lib/test/test_os.py b/Lib/test/test_os.py
+index 7a839c83fe4..91816afa47d 100644
+--- a/Lib/test/test_os.py
++++ b/Lib/test/test_os.py
+@@ -1362,6 +1362,11 @@ class GetRandomTests(unittest.TestCase):
+                 raise unittest.SkipTest("getrandom() syscall fails with ENOSYS")
+             else:
+                 raise
++        except ValueError as exc:
++            if exc.args[0] == "getrandom is not FIPS compliant":
++                raise unittest.SkipTest("Skip in FIPS mode")
++            else:
++                raise
+ 
+     def test_getrandom_type(self):
+         data = os.getrandom(16)
+diff --git a/Makefile.pre.in b/Makefile.pre.in
+index d15d93509d1..40502fc36d6 100644
+--- a/Makefile.pre.in
++++ b/Makefile.pre.in
+@@ -112,7 +112,7 @@ CFLAGSFORSHARED=@CFLAGSFORSHARED@
+ # C flags used for building the interpreter object files
+ PY_CORE_CFLAGS=	$(PY_CFLAGS) $(PY_CFLAGS_NODIST) $(PY_CPPFLAGS) $(CFLAGSFORSHARED) -DPy_BUILD_CORE
+ # Linker flags used for building the interpreter object files
+-PY_CORE_LDFLAGS=$(PY_LDFLAGS) $(PY_LDFLAGS_NODIST)
++PY_CORE_LDFLAGS=$(PY_LDFLAGS) $(PY_LDFLAGS_NODIST) -lcrypto
+ # Strict or non-strict aliasing flags used to compile dtoa.c, see above
+ CFLAGS_ALIASING=@CFLAGS_ALIASING@
+ 
+diff --git a/Modules/posixmodule.c b/Modules/posixmodule.c
+index 776a3d249a8..647dbd3b4d6 100644
+--- a/Modules/posixmodule.c
++++ b/Modules/posixmodule.c
+@@ -397,6 +397,9 @@ static int win32_can_symlink = 0;
+ #define MODNAME "posix"
+ #endif
+ 
++/* for FIPS check in os.getrandom() */
++#include <openssl/crypto.h>
 +
-+    // From the OpenSSL docs:
-+    // "If the library was built without support of the FIPS Object Module,
-+    // then the function will return 0 with an error code of
-+    // CRYPTO_R_FIPS_MODE_NOT_SUPPORTED (0x0f06d065)."
-+    // In RHEL:
-+    // * we do build with FIPS, so the function always succeeds
-+    // * even if it didn't, people seem used to errors being left on the
-+    //   OpenSSL error stack.
+ #ifdef MS_WINDOWS
+ /* defined in fileutils.c */
+ PyAPI_FUNC(void) _Py_time_t_to_FILE_TIME(time_t, int, FILETIME *);
+@@ -12196,6 +12199,11 @@ os_getrandom_impl(PyObject *module, Py_ssize_t size, int flags)
+         return posix_error();
+     }
+ 
++    if (FIPS_mode()) {
++        PyErr_SetString(PyExc_ValueError, "getrandom is not FIPS compliant");
++        return NULL;
++    }
 +
-+    // For more info, see:
-+    //  https://bugzilla.redhat.com/show_bug.cgi?id=1745499
-+
-+    return PyLong_FromLong(FIPS_mode());
+     bytes = PyBytes_FromStringAndSize(NULL, size);
+     if (bytes == NULL) {
+         PyErr_NoMemory();
+diff --git a/Python/random.c b/Python/random.c
+index d4747d61eb8..ab3cee29a39 100644
+--- a/Python/random.c
++++ b/Python/random.c
+@@ -410,6 +410,77 @@ dev_urandom_close(void)
  }
+ #endif /* !MS_WINDOWS */
  
++#include <openssl/crypto.h>
++#include <openssl/err.h>
++#include <openssl/rand.h>
++
++#if (OPENSSL_VERSION_NUMBER < 0x10101000L) || defined(LIBRESSL_VERSION_NUMBER)
++#  error "py_openssl_drbg_urandom requires OpenSSL 1.1.1 for fork safety"
++#endif
++
++static void
++py_openssl_set_exception(PyObject* exc) {
++    unsigned long errcode;
++    const char *lib, *func, *reason;
++
++    errcode = ERR_peek_last_error();
++    if (!errcode) {
++        PyErr_SetString(exc, "unknown reasons");
++    }
++    ERR_clear_error();
++
++    lib = ERR_lib_error_string(errcode);
++    func = ERR_func_error_string(errcode);
++    reason = ERR_reason_error_string(errcode);
++
++    if (lib && func) {
++        PyErr_Format(exc, "[%s: %s] %s", lib, func, reason);
++    }
++    else if (lib) {
++        PyErr_Format(exc, "[%s] %s", lib, reason);
++    }
++    else {
++        PyErr_SetString(exc, reason);
++    }
++}
++
++static int
++py_openssl_drbg_urandom(char *buffer, Py_ssize_t size, int raise)
++{
++    int res;
++    static int init = 0;
++
++    if (!init) {
++        init = 1;
++        res = OPENSSL_init_crypto(OPENSSL_INIT_ATFORK, NULL);
++        if (res == 0) {
++            if (raise) {
++                py_openssl_set_exception(PyExc_RuntimeError);
++            }
++            return 0;
++        }
++    }
++
++    if (size > INT_MAX) {
++        if (raise) {
++            PyErr_Format(PyExc_OverflowError,
++                         "RAND_bytes() size is limited to 2GB.");
++        }
++        return -1;
++    }
++
++    res = RAND_bytes((unsigned char*)buffer, (int)size);
++
++    if (res == 1) {
++        return 1;
++    } else {
++        if (raise) {
++            py_openssl_set_exception(PyExc_RuntimeError);
++        }
++        return 0;
++    }
++}
++
  
-From 68b3c51d9c7d6bb635174e8d02db5c73ab521ea0 Mon Sep 17 00:00:00 2001
-From: Petr Viktorin <pviktori@redhat.com>
-Date: Thu, 10 Oct 2019 13:04:50 +0200
-Subject: [PATCH] Skip error checking in _Py_hashlib_fips_error
-
-https://bugzilla.redhat.com/show_bug.cgi?id=1760106
----
- Include/_hashopenssl.h | 12 +++---------
- 1 file changed, 3 insertions(+), 9 deletions(-)
-
-diff --git a/Include/_hashopenssl.h b/Include/_hashopenssl.h
-index 47ed003042209..d4cbdef984d83 100644
---- a/Include/_hashopenssl.h
-+++ b/Include/_hashopenssl.h
-@@ -42,16 +42,10 @@ static int
- _Py_hashlib_fips_error(PyObject *exc, char *name) {
-     int result = FIPS_mode();
-     if (result == 0) {
--        // "If the library was built without support of the FIPS Object Module,
--        // then the function will return 0 with an error code of
--        // CRYPTO_R_FIPS_MODE_NOT_SUPPORTED (0x0f06d065)."
--        // But 0 is also a valid result value.
-+        // XXX: This function skips error checking.
-+        // This is only appropriate for RHEL.
-+        // See _hashlib.get_fips_mode for details.
- 
--        unsigned long errcode = ERR_peek_last_error();
--        if (errcode) {
--            _setException(exc);
--            return 1;
--        }
+ /* Fill buffer with pseudo-random bytes generated by a linear congruent
+    generator (LCG):
+@@ -494,6 +565,10 @@ pyurandom(void *buffer, Py_ssize_t size, int blocking, int raise)
          return 0;
      }
-     PyErr_Format(exc, "%s is not available in FIPS mode", name);
+ 
++    if (FIPS_mode()) {
++        return py_openssl_drbg_urandom(buffer, size, raise);
++    }
++
+ #ifdef MS_WINDOWS
+     return win32_urandom((unsigned char *)buffer, size, raise);
+ #else
+-- 
+2.21.0
+
+
+From ed4103bbd15a09bff4fb94a38d1b3f02df5e7c96 Mon Sep 17 00:00:00 2001
+From: Charalampos Stratakis <cstratak@redhat.com>
+Date: Thu, 28 Nov 2019 17:26:02 +0100
+Subject: [PATCH 36/36] Fixups for FIPS compliant CSPRNG
+
+---
+ Lib/test/test_os.py |  3 ++-
+ Python/random.c     | 33 +++------------------------------
+ 2 files changed, 5 insertions(+), 31 deletions(-)
+
+diff --git a/Lib/test/test_os.py b/Lib/test/test_os.py
+index 91816afa47d..f2572bb6c44 100644
+--- a/Lib/test/test_os.py
++++ b/Lib/test/test_os.py
+@@ -27,6 +27,7 @@ import time
+ import unittest
+ import uuid
+ import warnings
++from _hashlib import get_fips_mode
+ from test import support
+ try:
+     import threading
+@@ -1363,7 +1364,7 @@ class GetRandomTests(unittest.TestCase):
+             else:
+                 raise
+         except ValueError as exc:
+-            if exc.args[0] == "getrandom is not FIPS compliant":
++            if get_fips_mode() and exc.args[0] == "getrandom is not FIPS compliant":
+                 raise unittest.SkipTest("Skip in FIPS mode")
+             else:
+                 raise
+diff --git a/Python/random.c b/Python/random.c
+index ab3cee29a39..222d651407c 100644
+--- a/Python/random.c
++++ b/Python/random.c
+@@ -410,40 +410,13 @@ dev_urandom_close(void)
+ }
+ #endif /* !MS_WINDOWS */
+ 
+-#include <openssl/crypto.h>
+-#include <openssl/err.h>
+ #include <openssl/rand.h>
++#include <_hashopenssl.h>
+ 
+ #if (OPENSSL_VERSION_NUMBER < 0x10101000L) || defined(LIBRESSL_VERSION_NUMBER)
+ #  error "py_openssl_drbg_urandom requires OpenSSL 1.1.1 for fork safety"
+ #endif
+ 
+-static void
+-py_openssl_set_exception(PyObject* exc) {
+-    unsigned long errcode;
+-    const char *lib, *func, *reason;
+-
+-    errcode = ERR_peek_last_error();
+-    if (!errcode) {
+-        PyErr_SetString(exc, "unknown reasons");
+-    }
+-    ERR_clear_error();
+-
+-    lib = ERR_lib_error_string(errcode);
+-    func = ERR_func_error_string(errcode);
+-    reason = ERR_reason_error_string(errcode);
+-
+-    if (lib && func) {
+-        PyErr_Format(exc, "[%s: %s] %s", lib, func, reason);
+-    }
+-    else if (lib) {
+-        PyErr_Format(exc, "[%s] %s", lib, reason);
+-    }
+-    else {
+-        PyErr_SetString(exc, reason);
+-    }
+-}
+-
+ static int
+ py_openssl_drbg_urandom(char *buffer, Py_ssize_t size, int raise)
+ {
+@@ -455,7 +428,7 @@ py_openssl_drbg_urandom(char *buffer, Py_ssize_t size, int raise)
+         res = OPENSSL_init_crypto(OPENSSL_INIT_ATFORK, NULL);
+         if (res == 0) {
+             if (raise) {
+-                py_openssl_set_exception(PyExc_RuntimeError);
++                _setException(PyExc_RuntimeError);
+             }
+             return 0;
+         }
+@@ -475,7 +448,7 @@ py_openssl_drbg_urandom(char *buffer, Py_ssize_t size, int raise)
+         return 1;
+     } else {
+         if (raise) {
+-            py_openssl_set_exception(PyExc_RuntimeError);
++            _setException(PyExc_RuntimeError);
+         }
+         return 0;
+     }
+-- 
+2.21.0
 
