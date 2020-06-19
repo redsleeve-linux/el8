@@ -1,5 +1,5 @@
 diff --git a/tests/auto/qhelpcontentmodel/tst_qhelpcontentmodel.cpp b/tests/auto/qhelpcontentmodel/tst_qhelpcontentmodel.cpp
-index 63ee55c..09dfa2e 100644
+index 039ea2f..514578a 100644
 --- a/tests/auto/qhelpcontentmodel/tst_qhelpcontentmodel.cpp
 +++ b/tests/auto/qhelpcontentmodel/tst_qhelpcontentmodel.cpp
 @@ -84,12 +84,12 @@ private:
@@ -19,7 +19,7 @@ index 63ee55c..09dfa2e 100644
      QFile f(m_colFile);
      f.setPermissions(QFile::WriteUser|QFile::ReadUser);
 diff --git a/tests/auto/qhelpenginecore/tst_qhelpenginecore.cpp b/tests/auto/qhelpenginecore/tst_qhelpenginecore.cpp
-index 4793250..2398e83 100644
+index ba2b153..7f42a8e 100644
 --- a/tests/auto/qhelpenginecore/tst_qhelpenginecore.cpp
 +++ b/tests/auto/qhelpenginecore/tst_qhelpenginecore.cpp
 @@ -81,14 +81,14 @@ private:
@@ -100,7 +100,7 @@ index 4793250..2398e83 100644
      QCOMPARE(c.documentationFileName(QLatin1String("trolltech.com.3-3-8.qmake")),
 -        QString(m_path + "/data/qmake-3.3.8.qch"));
 +        QString(m_path + "qmake-3.3.8.qch"));
-     QCOMPARE(c.documentationFileName(QLatin1String("trolltech.com.1-0-0.test")),
+     QCOMPARE(c.documentationFileName(QLatin1String("trolltech.com.1.0.0.test")),
 -        QString(m_path + "/data/test.qch"));
 +        QString(m_path + "test.qch"));
      QCOMPARE(c.documentationFileName(QLatin1String("trolltech.com.empty")),
@@ -108,7 +108,7 @@ index 4793250..2398e83 100644
  }
 @@ -367,7 +367,7 @@ void tst_QHelpEngineCore::fileData()
      QCOMPARE(ba.size(), 0);
-     ba = help.fileData(QUrl("qthelp://trolltech.com.1-0-0.test/testFolder/test.html"));
+     ba = help.fileData(QUrl("qthelp://trolltech.com.1.0.0.test/testFolder/test.html"));
      QTextStream s(ba, QIODevice::ReadOnly|QIODevice::Text);
 -    QFile f(m_path + "/data/test.html");
 +    QFile f(m_path + "test.html");
@@ -128,7 +128,7 @@ index 4793250..2398e83 100644
  }
  
 diff --git a/tests/auto/qhelpgenerator/tst_qhelpgenerator.cpp b/tests/auto/qhelpgenerator/tst_qhelpgenerator.cpp
-index 10cfff9..fdb3b93 100644
+index 47a879d..99f4615 100644
 --- a/tests/auto/qhelpgenerator/tst_qhelpgenerator.cpp
 +++ b/tests/auto/qhelpgenerator/tst_qhelpgenerator.cpp
 @@ -57,8 +57,8 @@ private:
@@ -167,8 +167,8 @@ index 10cfff9..fdb3b93 100644
      if (!data.readData(inputFile))
          QFAIL("Cannot read qhp file!");
  
-     QHelpGenerator generator1;
-     QHelpGenerator generator2;
+     HelpGenerator generator1;
+     HelpGenerator generator2;
 -    QString outputFile1 = path + QLatin1String("/data/test1.qch");
 -    QString outputFile2 = path + QLatin1String("/data/test2.qch");
 +    QString outputFile1 = path + QLatin1String("test1.qch");
@@ -177,7 +177,7 @@ index 10cfff9..fdb3b93 100644
      QCOMPARE(generator2.generate(&data, outputFile2), true);
  
 diff --git a/tests/auto/qhelpindexmodel/tst_qhelpindexmodel.cpp b/tests/auto/qhelpindexmodel/tst_qhelpindexmodel.cpp
-index 494355c..4e1c015 100644
+index 713c229..65ee62f 100644
 --- a/tests/auto/qhelpindexmodel/tst_qhelpindexmodel.cpp
 +++ b/tests/auto/qhelpindexmodel/tst_qhelpindexmodel.cpp
 @@ -84,12 +84,12 @@ private:
@@ -197,7 +197,7 @@ index 494355c..4e1c015 100644
      QFile f(m_colFile);
      f.setPermissions(QFile::WriteUser|QFile::ReadUser);
 diff --git a/tests/auto/qhelpprojectdata/tst_qhelpprojectdata.cpp b/tests/auto/qhelpprojectdata/tst_qhelpprojectdata.cpp
-index 3686416..bb507fa 100644
+index a09135d..d59a3fc 100644
 --- a/tests/auto/qhelpprojectdata/tst_qhelpprojectdata.cpp
 +++ b/tests/auto/qhelpprojectdata/tst_qhelpprojectdata.cpp
 @@ -52,8 +52,8 @@ private:

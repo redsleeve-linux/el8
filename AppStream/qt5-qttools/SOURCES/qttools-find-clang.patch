@@ -1,8 +1,8 @@
-diff --git a/mkspecs/features/qt_find_clang.prf b/mkspecs/features/qt_find_clang.prf
-index 583cf0e..361ba85 100644
---- a/mkspecs/features/qt_find_clang.prf
-+++ b/mkspecs/features/qt_find_clang.prf
-@@ -72,7 +72,7 @@ for(_, $$list(_)) { # just a way to break easily
+diff --git a/src/qdoc/configure.pri b/src/qdoc/configure.pri
+index 17008c3..8a6f01a 100644
+--- a/src/qdoc/configure.pri
++++ b/src/qdoc/configure.pri
+@@ -109,7 +109,7 @@ defineTest(qtConfTest_libclang) {
          output = $$system("$$llvm_config --version 2>/dev/null")
          CLANG_VERSION = $$extractVersion($$output)
      } else {

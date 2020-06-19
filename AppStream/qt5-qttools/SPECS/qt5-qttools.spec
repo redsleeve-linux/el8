@@ -1,12 +1,11 @@
 %global qt_module qttools
 
-%global qdoc 1
 %global build_tests 1
 
 Summary: Qt5 - QtTool components
 Name:    qt5-qttools
-Version: 5.11.1
-Release: 9%{?dist}.0.1
+Version: 5.12.5
+Release: 1%{?dist}
 
 License: LGPLv3 or LGPLv2
 Url:     http://www.qt.io
@@ -43,11 +42,9 @@ BuildRequires: qt5-qtbase-private-devel
 BuildRequires: qt5-qtbase-static >= %{version}
 # libQt5DBus.so.5(Qt_5_PRIVATE_API)
 %{?_qt5:Requires: %{_qt5}%{?_isa} = %{_qt5_version}}
-%if 0%{?qdoc}
 # for qdoc
 BuildRequires: clang
 BuildRequires: clang-devel
-%endif
 BuildRequires: qt5-qtdeclarative-static >= %{version}
 BuildRequires: pkgconfig(Qt5Qml)
 
@@ -196,7 +193,7 @@ export LLVM_INSTALL_DIR=/usr
 
 %{qmake_qt5}
 
-make %{?_smp_mflags}
+%make_build
 
 %if 0%{?build_tests}
 make sub-tests %{?_smp_mflags} -k ||:
@@ -207,22 +204,15 @@ make install INSTALL_ROOT=%{buildroot}
 
 %if 0%{?build_tests}
 # Install tests for gating
-pushd tests
-make install INSTALL_ROOT=%{buildroot}
-popd
-
-mkdir -p %{buildroot}%{_qt5_libdir}/qt5/tests/tst_{lconvert,qhelpcontentmodel,qhelpenginecore,qhelpgenerator,qhelpindexmodel,qhelpprojectdata}/data
-mkdir -p %{buildroot}%{_qt5_libdir}/qt5/tests/tst_{lrelease,lupdate,qtattributionsscanner}/testdata
-# FIXME install doesn't seem to work well with directories
-cp -r tests/auto/linguist/lconvert/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_lconvert/data
-cp -r tests/auto/linguist/lrelease/testdata/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_lrelease/testdata
-cp -r tests/auto/linguist/lupdate/testdata/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_lupdate/testdata
-cp -r tests/auto/qhelpcontentmodel/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpcontentmodel/data
-cp -r tests/auto/qhelpenginecore/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpenginecore/data
-cp -r tests/auto/qhelpgenerator/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpgenerator/data
-cp -r tests/auto/qhelpindexmodel/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpindexmodel/data
-cp -r tests/auto/qhelpprojectdata/data/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qhelpprojectdata/data
-cp -r tests/auto/qtattributionsscanner/testdata/* %{buildroot}%{_qt5_libdir}/qt5/tests/tst_qtattributionsscanner/testdata
+mkdir -p %{buildroot}%{_qt5_libdir}/qt5
+find ./tests -not -path '*/\.*' -type d | while read LINE
+do
+    mkdir -p "%{buildroot}%{_qt5_libdir}/qt5/$LINE"
+done
+find ./tests -not -path '*/\.*' -not -name 'uic_wrapper.sh' -not -name 'Makefile' -not -name 'target_wrapper.sh' -type f | while read LINE
+do
+    cp -r --parents "$LINE" %{buildroot}%{_qt5_libdir}/qt5/
+done
 %endif
 
 # Add desktop files, --vendor=... helps avoid possible conflicts with qt3/qt4
@@ -363,11 +353,11 @@ fi
 %endif
 
 %files -n qt5-doctools
-%if 0%{?qdoc}
 %{_bindir}/qdoc*
 %{_qt5_bindir}/qdoc*
-%endif
+%{_bindir}/qdistancefieldgenerator*
 %{_bindir}/qhelpgenerator*
+%{_qt5_bindir}/qdistancefieldgenerator*
 %{_qt5_bindir}/qhelpgenerator*
 %{_bindir}/qtattributionsscanner-qt5
 %{_qt5_bindir}/qtattributionsscanner*
@@ -457,13 +447,13 @@ fi
 %files devel
 %{_bindir}/pixeltool*
 %{_bindir}/qcollectiongenerator*
-%{_bindir}/qhelpconverter*
+#%{_bindir}/qhelpconverter*
 %{_bindir}/qtdiag*
 %{_bindir}/qtplugininfo*
 %{_qt5_bindir}/pixeltool*
 %{_qt5_bindir}/qtdiag*
 %{_qt5_bindir}/qcollectiongenerator*
-%{_qt5_bindir}/qhelpconverter*
+#%{_qt5_bindir}/qhelpconverter*
 %{_qt5_bindir}/qtplugininfo*
 %{_qt5_headerdir}/QtDesigner/
 %{_qt5_headerdir}/QtDesignerComponents/
@@ -473,12 +463,15 @@ fi
 %{_qt5_libdir}/libQt5Designer*.so
 %{_qt5_libdir}/libQt5Help.prl
 %{_qt5_libdir}/libQt5Help.so
+%{_qt5_libdir}/Qt5UiPlugin.la
+%{_qt5_libdir}/libQt5UiPlugin.prl
 %{_qt5_libdir}/cmake/Qt5Designer/Qt5DesignerConfig*.cmake
 %dir %{_qt5_libdir}/cmake/Qt5Help/
 %{_qt5_libdir}/cmake/Qt5Help/Qt5HelpConfig*.cmake
 %{_qt5_libdir}/cmake/Qt5UiPlugin/
 %{_qt5_libdir}/pkgconfig/Qt5Designer.pc
 %{_qt5_libdir}/pkgconfig/Qt5Help.pc
+%{_qt5_libdir}/pkgconfig/Qt5UiPlugin.pc
 %{_qt5_archdatadir}/mkspecs/modules/qt_lib_designer.pri
 %{_qt5_archdatadir}/mkspecs/modules/qt_lib_designer_private.pri
 %{_qt5_archdatadir}/mkspecs/modules/qt_lib_designercomponents_private.pri
@@ -507,6 +500,10 @@ fi
 %endif
 
 %changelog
+* Thu Nov 07 2019 Jan Grulich <jgrulich@redhat.com> - 5.12.5-1
+- 5.12.5
+  Resolves: bz#1733152
+
 * Fri Jun 07 2019 Jan Grulich <jgrulich@redhat.com> - 5.11.1-9
 - Fix unit tests for gating
   Resolves: bz#1681905
