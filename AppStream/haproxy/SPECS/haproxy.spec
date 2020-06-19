@@ -7,8 +7,8 @@
 %global _hardened_build 1
 
 Name:           haproxy
-Version:        1.8.15
-Release:        5%{?dist}.redsleeve
+Version:        1.8.23
+Release:        3%{?dist}
 Summary:        HAProxy reverse proxy for high availability environments
 
 Group:          System Environment/Daemons
@@ -23,6 +23,7 @@ Source4:        %{name}.sysconfig
 Source5:        halog.1
 
 Patch0:		bz1664533-fix-handling-priority-flag-HTTP2-decoder.patch
+Patch1:		bz1819519-fix-handling-hpack-zero-bytes-overwrite.patch
 
 BuildRequires:  lua-devel
 BuildRequires:  pcre-devel
@@ -53,6 +54,7 @@ availability environments. Indeed, it can:
 %prep
 %setup -q
 %patch0 -p1
+%patch1 -p1
 
 %build
 regparm_opts=
@@ -60,7 +62,7 @@ regparm_opts=
 regparm_opts="USE_REGPARM=1"
 %endif
 
-%{__make} %{?_smp_mflags} CPU="generic" TARGET="linux2628" USE_OPENSSL=1 USE_PCRE=1 USE_ZLIB=1 USE_LUA=1 USE_CRYPT_H=1 USE_SYSTEMD=1 USE_LINUX_TPROXY=1 USE_GETADDRINFO=1 ${regparm_opts} ADDINC="%{optflags}" ADDLIB="%{__global_ldflags} -latomic"
+%{__make} %{?_smp_mflags} CPU="generic" TARGET="linux2628" USE_OPENSSL=1 USE_PCRE=1 USE_ZLIB=1 USE_LUA=1 USE_CRYPT_H=1 USE_SYSTEMD=1 USE_LINUX_TPROXY=1 USE_GETADDRINFO=1 ${regparm_opts} ADDINC="%{optflags}" ADDLIB="%{__global_ldflags}"
 
 pushd contrib/halog
 %{__make} ${halog} OPTIMIZE="%{optflags} %{build_ldflags}" LDFLAGS=
@@ -138,8 +140,17 @@ exit 0
 %{_mandir}/man1/*
 
 %changelog
-* Sat May 25 2019 Jacco Ligthart <jacco@redsleeve.org> - 1.8.15-5.redsleeve
-- added -latomic
+* Wed Apr 01 2020 Ryan O'Hara <rohara@redhat.com> - 1.8.23-3
+- Fix hapack zero byte input causing overwrite (CVE-2020-11100, #1819519)
+
+* Fri Dec 13 2019 Ryan O'Hara <rohara@redhat.com> - 1.8.23-2
+- Consider exist status 143 as success (#1778844)
+
+* Mon Dec 02 2019 Ryan O'Hara <rohara@redhat.com> - 1.8.23-1
+- Update to 1.8.23 (#1774745)
+
+* Fri Jul 19 2019 Ryan O'Hara <rohara@redhat.com> - 1.8.15-6
+- Add gating tests (#1682106)
 
 * Wed Jan 09 2019 Ryan O'Hara <rohara@redhat.com> - 1.8.15-5
 - Resolve CVE-2018-20615 (#1664533)
