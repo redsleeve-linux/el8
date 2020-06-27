@@ -1,0 +1,87 @@
+From 8720f4f288b12b8c89c6e237560986334c0949fa Mon Sep 17 00:00:00 2001
+From: Maxim Chicherin <maximc@mellanox.com>
+Date: Mon, 19 Aug 2019 13:59:56 +0300
+Subject: [PATCH rdma-core 05/13] pyverbs: Fix CQ and PD assignment in QPAttr
+
+[ Upstream commit d2c24c0d6514678cc8d56f8f2e28fcd6c2e68bbd ]
+
+Fixed CQs assignment in QPInitAttr, QPInitAttrEx and QP objects:
+Receive cq parameter was assigned to send_cq attribute in InitAttr
+objects, and in QP rcq and scq attributes was not initialized properly.
+Fixed PD assignment in QPInitAttrEx object:
+In QPInitAttrEx pd pointer was not initialized with PD.pd pointer.
+
+Fixes: 6d97a4af97b8 ("pyverbs: Avoid casting pointers to object type")
+Signed-off-by: Maxim Chicherin <maximc@mellanox.com>
+Signed-off-by: Leon Romanovsky <leonro@mellanox.com>
+Signed-off-by: Nicolas Morey-Chaisemartin <nmoreychaisemartin@suse.com>
+---
+ pyverbs/qp.pyx | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
+ mode change 100644 => 100755 pyverbs/qp.pyx
+
+diff --git a/pyverbs/qp.pyx b/pyverbs/qp.pyx
+old mode 100644
+new mode 100755
+index 576c0135..60973ca4
+--- a/pyverbs/qp.pyx
++++ b/pyverbs/qp.pyx
+@@ -104,9 +104,9 @@ cdef class QPInitAttr(PyverbsObject):
+         self.attr.qp_context = <void*>qp_context
+         if scq is not None:
+             if type(scq) is CQ:
+-                self.attr.send_cq = (<CQ>rcq).cq
++                self.attr.send_cq = (<CQ>scq).cq
+             elif type(scq) is CQEX:
+-                self.attr.send_cq = (<CQEX>rcq).ibv_cq
++                self.attr.send_cq = (<CQEX>scq).ibv_cq
+             else:
+                 raise PyverbsUserError('Expected CQ/CQEX, got {t}'.\
+                                        format(t=type(scq)))
+@@ -221,9 +221,9 @@ cdef class QPInitAttrEx(PyverbsObject):
+         _copy_caps(cap, self)
+         if scq is not None:
+             if type(scq) is CQ:
+-                self.attr.send_cq = (<CQ>rcq).cq
++                self.attr.send_cq = (<CQ>scq).cq
+             elif type(scq) is CQEX:
+-                self.attr.send_cq = (<CQEX>rcq).ibv_cq
++                self.attr.send_cq = (<CQEX>scq).ibv_cq
+             else:
+                 raise PyverbsUserError('Expected CQ/CQEX, got {t}'.\
+                                        format(t=type(scq)))
+@@ -251,7 +251,7 @@ cdef class QPInitAttrEx(PyverbsObject):
+         self.attr.comp_mask = comp_mask
+         if pd is not None:
+             self._pd = pd
+-            self.attr.pd = <v.ibv_pd*>pd.pd
++            self.attr.pd = pd.pd
+         self.attr.create_flags = create_flags
+         self.attr.max_tso_header = max_tso_header
+         self.attr.source_qpn = source_qpn
+@@ -815,18 +815,20 @@ cdef class QP(PyverbsCM):
+             if type(init_attr.send_cq) == CQ:
+                 cq = <CQ>init_attr.send_cq
+                 cq.add_ref(self)
++                self.scq = cq
+             else:
+                 cqex = <CQEX>init_attr.send_cq
+                 cqex.add_ref(self)
+-            self.scq = cq
++                self.scq = cqex
+         if init_attr.send_cq != init_attr.recv_cq and init_attr.recv_cq is not None:
+             if type(init_attr.recv_cq) == CQ:
+                 cq = <CQ>init_attr.recv_cq
+                 cq.add_ref(self)
++                self.rcq = cq
+             else:
+                 cqex = <CQEX>init_attr.recv_cq
+                 cqex.add_ref(self)
+-            self.rcq = cq
++                self.rcq = cqex
+ 
+     def _create_qp(self, PD pd, QPInitAttr attr):
+         self.qp = v.ibv_create_qp(pd.pd, &attr.attr)
+-- 
+2.20.1
+

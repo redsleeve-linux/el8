@@ -1,0 +1,47 @@
+From 981c7553f55c8200e00e845224b283059dc07c92 Mon Sep 17 00:00:00 2001
+From: Alex Vesker <valex@mellanox.com>
+Date: Sun, 6 Oct 2019 11:22:37 +0300
+Subject: [PATCH rdma-core 07/13] mlx5: Allow insertion of duplicate rules
+ using DR API
+
+[ Upstream commit b7c0d4d4611ac14f18024a6388d75f672aa7457a ]
+
+Duplicate rules were not allowed to be configured with SW steering,
+unlike when working over root, fix to allow that.
+
+This functionality is useful for replacing rules without dropping
+packets.
+
+Fixes: a91e8c2bbedf ('mlx5: Expose steering rule functionality')
+Signed-off-by: Alex Vesker <valex@mellanox.com>
+Reviewed-by: Erez Shitrit <erezsh@mellanox.com>
+Signed-off-by: Yishai Hadas <yishaih@mellanox.com>
+Signed-off-by: Nicolas Morey-Chaisemartin <nmoreychaisemartin@suse.com>
+---
+ providers/mlx5/dr_rule.c | 10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/providers/mlx5/dr_rule.c b/providers/mlx5/dr_rule.c
+index 1b873744..1e2d1813 100644
+--- a/providers/mlx5/dr_rule.c
++++ b/providers/mlx5/dr_rule.c
+@@ -815,12 +815,10 @@ again:
+ 			 * it means that all the previous stes are the same,
+ 			 * if so, this rule is duplicated.
+ 			 */
+-			if (dr_ste_is_last_in_rule(nic_matcher, matched_ste->ste_chain_location)) {
+-				dr_dbg(dmn, "Duplicate rule inserted, aborting\n");
+-				errno = EINVAL;
+-				return NULL;
+-			}
+-			return matched_ste;
++			if (!dr_ste_is_last_in_rule(nic_matcher, ste_location))
++				return matched_ste;
++
++			dr_dbg(dmn, "Duplicate rule inserted\n");
+ 		}
+ 
+ 		if (!skip_rehash && dr_rule_need_enlarge_hash(cur_htbl, dmn, nic_dmn)) {
+-- 
+2.20.1
+

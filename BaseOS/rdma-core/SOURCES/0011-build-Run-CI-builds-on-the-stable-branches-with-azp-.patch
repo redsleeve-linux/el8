@@ -1,0 +1,37 @@
+From 0f5201694034518656eb07f4ee2060c39c6255ce Mon Sep 17 00:00:00 2001
+From: Jason Gunthorpe <jgg@mellanox.com>
+Date: Thu, 7 Nov 2019 13:38:04 -0400
+Subject: [PATCH rdma-core 11/13] build: Run CI builds on the stable branches
+ with azp support
+
+[ Upstream commit 5770331de18e98449840238300a0bf4a436d2ee3 ]
+
+v25 is the oldest stable branch that supports azp, before that travis is
+required.
+
+Signed-off-by: Jason Gunthorpe <jgg@mellanox.com>
+---
+ buildlib/azure-pipelines.yml | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/buildlib/azure-pipelines.yml b/buildlib/azure-pipelines.yml
+index 4eef7408..031824b2 100644
+--- a/buildlib/azure-pipelines.yml
++++ b/buildlib/azure-pipelines.yml
+@@ -2,6 +2,13 @@
+ 
+ trigger:
+   - master
++  - stable-v4*
++  - stable-v3*
++  - stable-v29
++  - stable-v28
++  - stable-v27
++  - stable-v26
++  - stable-v25
+ pr:
+   - master
+ 
+-- 
+2.20.1
+

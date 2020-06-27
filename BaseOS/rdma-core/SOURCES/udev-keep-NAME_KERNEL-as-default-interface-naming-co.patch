@@ -1,0 +1,24 @@
+From fd9b3596cb1a21e54ffb102392178b6bd5d14c78 Mon Sep 17 00:00:00 2001
+From: Jarod Wilson <jarod@redhat.com>
+Date: Wed, 21 Aug 2019 17:09:13 -0400
+Subject: [PATCH rdma-core] udev: keep NAME_KERNEL as default interface
+ naming convention
+
+Signed-off-by: Jarod Wilson <jarod@redhat.com>
+---
+ kernel-boot/rdma-persistent-naming.rules | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel-boot/rdma-persistent-naming.rules b/kernel-boot/rdma-persistent-naming.rules
+index 9b61e163..a561746b 100644
+--- a/kernel-boot/rdma-persistent-naming.rules
++++ b/kernel-boot/rdma-persistent-naming.rules
+@@ -25,4 +25,4 @@
+ #   Device type = RoCE
+ #   mlx5_0 -> rocex525400c0fe123455
+ #
+-ACTION=="add", SUBSYSTEM=="infiniband", PROGRAM="rdma_rename %k NAME_FALLBACK"
++ACTION=="add", SUBSYSTEM=="infiniband", PROGRAM="rdma_rename %k NAME_KERNEL"
+-- 
+2.20.1
+

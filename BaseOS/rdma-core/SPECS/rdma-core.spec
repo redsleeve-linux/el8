@@ -1,6 +1,6 @@
 Name: rdma-core
-Version: 22.3
-Release: 1%{?dist}
+Version: 26.0
+Release: 8%{?dist}
 Summary: RDMA core userspace libraries and daemons
 
 %ifnarch %{arm}
@@ -17,9 +17,25 @@ Source: https://github.com/linux-rdma/rdma-core/releases/download/v%{version}/%{
 Source1: ibdev2netdev
 Patch1: redhat-kernel-init-libi40iw-no-longer-tech-preview.patch
 Patch2: i40iw-autoload-breaks-suspend.patch
-Patch3: 0001-Update-kernel-headers.patch
-Patch4: 0002-bnxt_re-lib-Enable-Broadcom-s-57500-RoCE-adapter.patch
-Patch5: 0003-mlx5-Add-new-device-IDs.patch
+Patch3: udev-keep-NAME_KERNEL-as-default-interface-naming-co.patch
+# stable-vX patches
+Patch101: 0001-ABI-Files.patch
+Patch102: 0002-build-Do-not-enable-Wredundant-decls-twice.patch
+Patch103: 0003-man-Fix-wrong-field-in-ibv_wr_post-s-man-page.patch
+Patch104: 0004-pyverbs-Fix-WC-creation-process.patch
+Patch105: 0005-pyverbs-Fix-CQ-and-PD-assignment-in-QPAttr.patch
+Patch106: 0006-verbs-Set-missing-errno-in-ibv_cmd_reg_mr.patch
+Patch107: 0007-mlx5-Allow-insertion-of-duplicate-rules-using-DR-API.patch
+Patch108: 0008-cxgb4-free-appropriate-pointer-in-error-case.patch
+Patch109: 0009-cxgb4-always-query-device-before-initializing-chip-v.patch
+Patch110: 0010-buildlib-Remove-travis-CI.patch
+Patch111: 0011-build-Run-CI-builds-on-the-stable-branches-with-azp-.patch
+Patch112: 0012-build-Update-ABI-files.patch
+# libbnxt_re support for some new device ids and generation id
+Patch201: 0001-bnxt_re-lib-Add-remaining-pci-ids-for-gen-P5-devices.patch
+Patch202: 0002-bnxt_re-lib-Recognize-additional-5750x-device-ID-s.patch
+# Fix an ibacm segment fault issue
+Patch301: 0001-ibacm-Do-not-open-non-InfiniBand-device.patch
 # Do not build static libs by default.
 %define with_static %{?_with_static: 1} %{?!_with_static: 0}
 
@@ -30,6 +46,7 @@ BuildRequires: libudev-devel
 BuildRequires: pkgconfig
 BuildRequires: pkgconfig(libnl-3.0)
 BuildRequires: pkgconfig(libnl-route-3.0)
+BuildRequires: python3-docutils
 %ifarch %{valgrind_arches}
 BuildRequires: valgrind-devel
 %endif
@@ -50,10 +67,12 @@ Obsoletes: rdma-ndd < %{version}-%{release}
 # the ndd utility moved from infiniband-diags to rdma-core
 Conflicts: infiniband-diags <= 1.6.7
 Requires: pciutils
+# 32-bit arm is missing required arch-specific memory barriers,
+ExcludeArch: %{arm}
 
 # Since we recommend developers use Ninja, so should packagers, for consistency.
 %define CMAKE_FLAGS %{nil}
-%if 0%{?fedora} >= 23
+%if 0%{?fedora} >= 23 || 0%{?rhel} >= 8
 # Ninja was introduced in FC23
 BuildRequires: ninja-build
 %define CMAKE_FLAGS -GNinja
@@ -65,6 +84,8 @@ BuildRequires: make
 %define make_jobs make -v %{?_smp_mflags}
 %define cmake_install DESTDIR=%{buildroot} make install
 %endif
+
+BuildRequires: pandoc
 
 %description
 RDMA core userspace infrastructure and documentation, including kernel
@@ -92,6 +113,11 @@ Obsoletes: librdmacm-static < %{version}-%{release}
 Requires: ibacm = %{version}-%{release}
 Provides: ibacm-devel = %{version}-%{release}
 Obsoletes: ibacm-devel < %{version}-%{release}
+Requires: infiniband-diags = %{version}-%{release}
+Provides: infiniband-diags-devel = %{version}-%{release}
+Obsoletes: infiniband-diags-devel < %{version}-%{release}
+Provides: libibmad-devel = %{version}-%{release}
+Obsoletes: libibmad-devel < %{version}-%{release}
 Provides: libcxgb4-static = %{version}-%{release}
 Obsoletes: libcxgb4-static < %{version}-%{release}
 Provides: libhfi1-static = %{version}-%{release}
@@ -107,6 +133,20 @@ Obsoletes: libi40iw-devel-static < %{version}-%{release}
 
 %description devel
 RDMA core development libraries and headers.
+
+%package -n infiniband-diags
+Summary: InfiniBand Diagnostic Tools
+Requires: libibumad = %{version}-%{release}
+Provides: perl(IBswcountlimits)
+Provides: libibmad = %{version}-%{release}
+Obsoletes: libibmad < %{version}-%{release}
+Obsoletes: openib-diags < 1.3
+
+%description -n infiniband-diags
+This package provides IB diagnostic programs and scripts needed to diagnose an
+IB subnet.  infiniband-diags now also provides libibmad.  libibmad provides
+low layer IB functions for use by the IB diagnostic and management
+programs. These include MAD, SA, SMP, and other basic IB functions.
 
 %package -n libibverbs
 Summary: A library and drivers for direct userspace use of RDMA (InfiniBand/iWARP/RoCE) hardware
@@ -228,8 +268,21 @@ discover and use SCSI devices via the SCSI RDMA Protocol over InfiniBand.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
-%patch4 -p1
-%patch5 -p1
+%patch101 -p1
+%patch102 -p1
+%patch103 -p1
+%patch104 -p1
+%patch105 -p1
+%patch106 -p1
+%patch107 -p1
+%patch108 -p1
+%patch109 -p1
+%patch110 -p1
+%patch111 -p1
+%patch112 -p1
+%patch201 -p1
+%patch202 -p1
+%patch301 -p1
 
 %build
 
@@ -259,6 +312,8 @@ discover and use SCSI devices via the SCSI RDMA Protocol over InfiniBand.
          -DCMAKE_INSTALL_RUNDIR:PATH=%{_rundir} \
          -DCMAKE_INSTALL_DOCDIR:PATH=%{_docdir}/%{name}-%{version} \
          -DCMAKE_INSTALL_UDEV_RULESDIR:PATH=%{_udevrulesdir} \
+         -DCMAKE_INSTALL_PERLDIR:PATH=%{perl_vendorlib} \
+         -DWITH_IBDIAGS_COMPAT:BOOL=False \
 %if %{with_static}
          -DENABLE_STATIC=1 \
 %endif
@@ -319,16 +374,29 @@ rm -f %{buildroot}/%{_libdir}/libibverbs/libmthca-rdmav*.so
 rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/mthca.driver
 rm -f %{buildroot}/%{_libdir}/libibverbs/libipathverbs-rdmav*.so
 rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
+find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 
+# infiniband-diags
+%post -n infiniband-diags -p /sbin/ldconfig
+%postun -n infiniband-diags
+%ldconfig_postun
+
+# libibverbs
 %post -n libibverbs -p /sbin/ldconfig
-%postun -n libibverbs -p /sbin/ldconfig
+%postun -n libibverbs
+%ldconfig_postun
 
+# libibumad
 %post -n libibumad -p /sbin/ldconfig
-%postun -n libibumad -p /sbin/ldconfig
+%postun -n libibumad
+%ldconfig_postun
 
+# librdmacm
 %post -n librdmacm -p /sbin/ldconfig
-%postun -n librdmacm -p /sbin/ldconfig
+%postun -n librdmacm
+%ldconfig_postun
 
+# ibacm
 %post -n ibacm
 %systemd_post ibacm.service
 %preun -n ibacm
@@ -336,6 +404,7 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %postun -n ibacm
 %systemd_postun_with_restart ibacm.service
 
+# srp_daemon
 %post -n srp_daemon
 %systemd_post srp_daemon.service
 %preun -n srp_daemon
@@ -343,6 +412,7 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %postun -n srp_daemon
 %systemd_postun_with_restart srp_daemon.service
 
+# iwpmd
 %post -n iwpmd
 %systemd_post iwpmd.service
 %preun -n iwpmd
@@ -368,6 +438,7 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %{_unitdir}/rdma.service
 %dir %{dracutlibdir}/modules.d/05rdma
 %{dracutlibdir}/modules.d/05rdma/module-setup.sh
+%{_udevrulesdir}/../rdma_rename
 %{_udevrulesdir}/*
 %if 0%{?dma_coherent}
 %{sysmodprobedir}/libmlx4.conf
@@ -407,6 +478,53 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %endif
 %endif
 %{_mandir}/man7/rdma_cm.*
+%{_mandir}/man3/ibnd_*
+
+%files -n infiniband-diags
+%{_sbindir}/ibaddr
+%{_sbindir}/ibnetdiscover
+%{_sbindir}/ibping
+%{_sbindir}/ibportstate
+%{_sbindir}/ibroute
+%{_sbindir}/ibstat
+%{_sbindir}/ibsysstat
+%{_sbindir}/ibtracert
+%{_sbindir}/perfquery
+%{_sbindir}/sminfo
+%{_sbindir}/smpdump
+%{_sbindir}/smpquery
+%{_sbindir}/saquery
+%{_sbindir}/vendstat
+%{_sbindir}/iblinkinfo
+%{_sbindir}/ibqueryerrors
+%{_sbindir}/ibcacheedit
+%{_sbindir}/ibccquery
+%{_sbindir}/ibccconfig
+%{_sbindir}/dump_fts
+%{_sbindir}/ibhosts
+%{_sbindir}/ibswitches
+%{_sbindir}/ibnodes
+%{_sbindir}/ibrouters
+%{_sbindir}/ibfindnodesusing.pl
+%{_sbindir}/ibidsverify.pl
+%{_sbindir}/check_lft_balance.pl
+%{_sbindir}/dump_lfts.sh
+%{_sbindir}/dump_mfts.sh
+%{_sbindir}/ibstatus
+%{_libdir}/libibmad*.so.*
+%{_libdir}/libibnetdisc*.so.*
+%{_mandir}/man8/infiniband-diags*
+%{_mandir}/man8/check_lft_balance*
+%{_mandir}/man8/dump*
+%{_mandir}/man8/ib*
+%{_mandir}/man8/perfquery*
+%{_mandir}/man8/saquery*
+%{_mandir}/man8/sminfo*
+%{_mandir}/man8/smp*
+%{_mandir}/man8/vendstat*
+%{perl_vendorlib}/IBswcountlimits.pm
+%config(noreplace) %{_sysconfdir}/infiniband-diags/error_thresholds
+%config(noreplace) %{_sysconfdir}/infiniband-diags/ibdiag.conf
 
 %files -n libibverbs
 %dir %{_sysconfdir}/libibverbs.d
@@ -512,6 +630,45 @@ rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
 %doc %{_docdir}/%{name}-%{version}/ibsrpdm.md
 
 %changelog
+* Fri Feb 07 2020 Honggang Li <honli@redhat.com> - 26.0-8
+- Fix an ibacm segfault issue for dual port HCA support IB and Ethernet
+- Resolves: bz1793736
+
+* Tue Dec 17 2019 Honggang Li <honli@redhat.com> - 26.0-7
+- Build with Ninja.
+- Resolves: bz1783254
+
+* Fri Dec 13 2019 Honggang Li <honli@redhat.com> - 26.0-6
+- Remove dangling symlink
+- Resolves: bz1782828
+
+* Wed Dec 11 2019 Honggang Li <honli@redhat.com> - 26.0-5
+- Remove EFA driver
+- Fix rpm dependency issue
+- Resolves: bz1781454, bz1781457
+
+* Mon Dec 09 2019 Honggang Li <honli@redhat.com> - 26.0-4
+- libbnxt_re support for some new device ids and generation id
+- Resolves: bz1779948
+
+* Tue Nov 19 2019 Jarod Wilson <jarod@redhat.com> - 26.0-3
+- Make rdma-core-devel Obsoletes infiniband-diags due to man3/ibnd_*
+- Related: rhbz#1722257
+
+* Thu Nov 14 2019 Jarod Wilson <jarod@redhat.com> - 26.0-2
+- Add Obsoletes/Provides pair for infiniband-diags-devel
+- Pull in upstream stable-v26 branch patches
+- Fix %%postun scriptlet failures by removing superfluous -p options
+- Add new BuildRequires: on pandoc
+- Related: rhbz#1722257
+
+* Thu Nov 14 2019 Jarod Wilson <jarod@redhat.com> - 26.0-1
+- Update to upstream v26 release for features and fixes
+- Resolves: rhbz#1722257
+
+* Tue Jul 23 2019 Jarod Wilson <jarod@redhat.com> - 24.0-1
+- Update to upstream v24 release for features and fixes
+
 * Mon Jun 24 2019 Jarod Wilson <jarod@redhat.com> - 22.3-1
 - Update to upstream v22.3 stable release for fixes
 - Enable support for Broadcom 57500 hardware

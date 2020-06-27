@@ -1,0 +1,37 @@
+From 5639fce1322dd8ae1398f8a7f530197484fc1f9e Mon Sep 17 00:00:00 2001
+From: Shay Drory <shayd@mellanox.com>
+Date: Mon, 7 Oct 2019 12:09:05 +0300
+Subject: [PATCH rdma-core 06/13] verbs: Set missing errno in ibv_cmd_reg_mr
+
+[ Upstream commit f9e127a4bffa09ee72fc0ce92228296a4d1c1588 ]
+
+Set missing errno in ibv_cmd_reg_mr() when implicit MR is used.
+
+Fixes: d4021e743fda7 ("verbs: Fix implicit ODP MR support for 32 bit
+systems")
+Signed-off-by: Shay Drory <shayd@mellanox.com>
+Signed-off-by: Yishai Hadas <yishaih@mellanox.com>
+Signed-off-by: Nicolas Morey-Chaisemartin <nmoreychaisemartin@suse.com>
+---
+ libibverbs/cmd.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/libibverbs/cmd.c b/libibverbs/cmd.c
+index 3936e69b..26eaa479 100644
+--- a/libibverbs/cmd.c
++++ b/libibverbs/cmd.c
+@@ -340,8 +340,10 @@ int ibv_cmd_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
+ 	 * In that case set the value in the command to what kernel expects.
+ 	 */
+ 	if (access & IBV_ACCESS_ON_DEMAND) {
+-		if (length == SIZE_MAX && addr)
++		if (length == SIZE_MAX && addr) {
++			errno = EINVAL;
+ 			return EINVAL;
++		}
+ 		if (length == SIZE_MAX)
+ 			cmd->length = UINT64_MAX;
+ 	}
+-- 
+2.20.1
+

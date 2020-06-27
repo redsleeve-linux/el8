@@ -1,0 +1,45 @@
+From 3146dd6503fbb87b311caae47eeac739dc59bfd3 Mon Sep 17 00:00:00 2001
+From: Potnuri Bharat Teja <bharat@chelsio.com>
+Date: Mon, 4 Nov 2019 17:18:25 +0530
+Subject: [PATCH rdma-core 09/13] cxgb4: always query device before
+ initializing chip version
+
+[ Upstream commit df720f3658ca49aea89cb6e8f11980f30574d10a ]
+
+chip_version may be initialized wrongly if alloc_context() is
+invoked multiple times. therefore always query device to derive the
+correct chip_version.
+
+Fixes: c7e71b250268 ("cxgb4: fix chipversion initialization")
+Signed-off-by: Rahul Kundu <rahul.kundu@chelsio.com>
+Signed-off-by: Potnuri Bharat Teja <bharat@chelsio.com>
+Signed-off-by: Nicolas Morey-Chaisemartin <nmoreychaisemartin@suse.com>
+---
+ providers/cxgb4/dev.c | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/providers/cxgb4/dev.c b/providers/cxgb4/dev.c
+index 4d02c7a9..ecd87e6c 100644
+--- a/providers/cxgb4/dev.c
++++ b/providers/cxgb4/dev.c
+@@ -143,14 +143,11 @@ static struct verbs_context *c4iw_alloc_context(struct ibv_device *ibdev,
+ 	} 
+ 
+ 	verbs_set_ops(&context->ibv_ctx, &c4iw_ctx_common_ops);
++	if (ibv_cmd_query_device(&context->ibv_ctx.context, &attr,
++				 &raw_fw_ver, &qcmd, sizeof(qcmd)))
++		goto err_unmap;
+ 
+ 	if (!rhp->mmid2ptr) {
+-		int ret;
+-
+-		ret = ibv_cmd_query_device(&context->ibv_ctx.context, &attr,
+-					   &raw_fw_ver, &qcmd, sizeof(qcmd));
+-		if (ret)
+-			goto err_unmap;
+ 		rhp->max_mr = attr.max_mr;
+ 		rhp->mmid2ptr = calloc(attr.max_mr, sizeof(void *));
+ 		if (!rhp->mmid2ptr) {
+-- 
+2.20.1
+
