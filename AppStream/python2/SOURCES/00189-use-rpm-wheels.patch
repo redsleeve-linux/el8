@@ -18,10 +18,10 @@ index 5021ebf..29a7d1b 100644
  __all__ = ["version", "bootstrap"]
  
  
--_SETUPTOOLS_VERSION = "40.6.2"
+-_SETUPTOOLS_VERSION = "41.2.0"
 +_WHEEL_DIR = "/usr/share/python{}-wheels/".format(sys.version_info[0])
  
--_PIP_VERSION = "18.1"
+-_PIP_VERSION = "19.2.3"
 +def _get_most_recent_wheel_version(pkg):
 +    prefix = os.path.join(_WHEEL_DIR, "{}-".format(pkg))
 +    suffix = "-py2.py3-none-any.whl"

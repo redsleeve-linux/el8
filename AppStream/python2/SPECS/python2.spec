@@ -48,7 +48,7 @@
 %global with_systemtap 1
 
 # some arches don't have valgrind so we need to disable its support on them
-%ifnarch s390 %{mips} riscv64 %{arm}
+%ifnarch s390 %{mips} riscv64
 %global with_valgrind 1
 %else
 %global with_valgrind 0
@@ -103,8 +103,8 @@
 Summary: An interpreted, interactive, object-oriented programming language
 Name: %{python}
 # Remember to also rebase python2-docs when changing this:
-Version: 2.7.16
-Release: 12.redsleeve%{?dist}
+Version: 2.7.17
+Release: 1%{?dist}
 License: Python
 Group: Development/Languages
 Requires: %{python}-libs%{?_isa} = %{version}-%{release}
@@ -583,13 +583,6 @@ Patch146: 00146-hashlib-fips.patch
 # Sent upstream as http://bugs.python.org/issue14785
 Patch147: 00147-add-debug-malloc-stats.patch
 
-# 00153 #
-# Strip out lines of the form "warning: Unable to open ..." from gdb's stderr
-# when running test_gdb.py; also cope with change to gdb in F17 onwards in
-# which values are printed as "v@entry" rather than just "v":
-# Not yet sent upstream
-Patch153: 00153-fix-test_gdb-noise.patch
-
 # 00155 #
 # Avoid allocating thunks in ctypes unless absolutely necessary, to avoid
 # generating SELinux denials on "import ctypes" and "import uuid" when
@@ -602,22 +595,6 @@ Patch155: 00155-avoid-ctypes-thunks.patch
 # suite to ensure that it can load our -gdb.py script (rhbz#817072):
 # Not yet sent upstream
 Patch156: 00156-gdb-autoload-safepath.patch
-
-# 00157 #
-# Update uid/gid handling throughout the standard library: uid_t and gid_t are
-# unsigned 32-bit values, but existing code often passed them through C long
-# values, which are signed 32-bit values on 32-bit architectures, leading to
-# negative int objects for uid/gid values >= 2^31 on 32-bit architectures.
-#
-# Introduce _PyObject_FromUid/Gid to convert uid_t/gid_t values to python
-# objects, using int objects where the value will fit (long objects otherwise),
-# and _PyArg_ParseUid/Gid to convert int/long to uid_t/gid_t, with -1 allowed
-# as a special case (since this is given special meaning by the chown syscall)
-#
-# Update standard library to use this throughout for uid/gid values, so that
-# very large uid/gid values are round-trippable, and -1 remains usable.
-# (rhbz#697470)
-Patch157: 00157-uid-gid-overflows.patch
 
 # 00165 #
 # Backport to Python 2 from Python 3.3 of improvements to the "crypt" module
@@ -636,18 +613,6 @@ Patch165: 00165-crypt-module-salt-backport.patch
 #
 # Not yet sent upstream
 Patch167: 00167-disable-stack-navigation-tests-when-optimized-in-test_gdb.patch
-
-# 00168 #
-# Update distutils.sysconfig so that if CFLAGS is defined in the environment,
-# when building extension modules, it is appended to the full compilation
-# flags from Python's Makefile, rather than instead reducing the compilation
-# flags to the subset within OPT and adding it to those.
-#
-# In particular, this should ensure that "-fno-strict-aliasing" is used by
-# "python setup.py build" even when CFLAGS is defined in the environment.
-#
-# (rhbz#849994)
-Patch168: 00168-distutils-cflags.patch
 
 # 00170 #
 # In debug builds, try to print repr() when a C-level assert fails in the
@@ -700,12 +665,6 @@ Patch187: 00187-add-RPATH-to-pyexpat.patch
 # /usr/share/python2-wheels
 Patch189: 00189-use-rpm-wheels.patch
 
-# 00190 #
-# Fixes gdb py-bt command not to raise exception while processing
-# statements from eval
-# rhbz#1008154 (patch by Attila Fazekas)
-Patch190: 00190-gdb-py-bt-dont-raise-exception-from-eval.patch
-
 # 00191 #
 # Disabling NOOP test as it fails without internet connection
 Patch191: 00191-disable-NOOP.patch
@@ -735,44 +694,6 @@ Patch288: 00288-ambiguous-python-version-rpmbuild-warn.patch
 # Disable automatic detection for the nis module
 # (we handle it it in Setup.dist, see Patch0)
 Patch289: 00289-disable-nis-detection.patch
-
-# 00320 #
-# Security fix for CVE-2019-9636 and CVE-2019-10160: Information Disclosure due to urlsplit improper NFKC normalization
-# Fixed upstream: https://bugs.python.org/issue36216 and https://bugs.python.org/issue36742
-# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1689327
-Patch320: 00320-CVE-2019-9636-and-CVE-2019-10160.patch
-
-# 00323 #
-# Coverity scan fixes
-# Fixed upstream:
-# https://bugs.python.org/issue13096
-# https://bugs.python.org/issue36147
-# https://bugs.python.org/issue36179
-# https://bugs.python.org/issue36212
-# https://bugs.python.org/issue36289
-# https://bugs.python.org/issue36291
-# https://bugs.python.org/issue36186
-# https://bugs.python.org/issue18368
-# https://bugs.python.org/issue36367
-# https://bugs.python.org/issue36262
-# https://bugs.python.org/issue36459
-# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1690919
-Patch323: 00323-coverity-scan-fixes.patch
-
-# 00324 #
-# Disallow control chars in http URLs
-# Security fix for CVE-2019-9740 and CVE-2019-9947
-# Fixed upstream: https://bugs.python.org/issue30458
-# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1703539
-# and https://bugzilla.redhat.com/show_bug.cgi?id=1704367
-Patch324: 00324-disallow-control-chars-in-http-urls.patch
-
-# 00325 #
-# Unnecessary URL scheme exists to allow local_file:// reading file  in urllib
-# Security fix for CVE-2019-9948
-# Fixed upstream: https://bugs.python.org/issue35907
-# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1704176
-Patch325: 00325-CVE-2019-9948.patch
 
 # (New patches go here ^^^)
 #
@@ -1062,14 +983,11 @@ rm -r Modules/zlib || exit 1
 %endif
 %patch146 -p1
 %patch147 -p1
-%patch153 -p0
 %patch155 -p1
 %patch156 -p1
-%patch157 -p1
 %patch165 -p1
 mv Modules/cryptmodule.c Modules/_cryptmodule.c
 %patch167 -p1
-%patch168 -p1
 %patch170 -p1
 %patch174 -p1 -b .fix-for-usr-move
 %patch180 -p1
@@ -1082,16 +1000,11 @@ mv Modules/cryptmodule.c Modules/_cryptmodule.c
 rm Lib/ensurepip/_bundled/*.whl
 %endif
 
-%patch190 -p1
 %patch191 -p1
 %patch193 -p1
 %patch257 -p1
 %patch288 -p1
 %patch289 -p1
-%patch320 -p1
-%patch323 -p1
-%patch324 -p1
-%patch325 -p1
 
 # This shouldn't be necesarry, but is right now (2.2a3)
 find -name "*~" |xargs rm -f
@@ -2030,8 +1943,9 @@ fi
 # ======================================================
 
 %changelog
-* Wed Nov 13 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.7.16-12.redsleeve
-- disabled valgrind for arm
+* Wed Oct 23 2019 Charalampos Stratakis <cstratak@redhat.com> - 2.7.17-1
+- Update to 2.7.17
+Resolves: rhbz#1759944
 
 * Tue Sep 03 2019 Tomas Orsava <torsava@redhat.com> - 2.7.16-12
 - Adding FIPS compliance to Python 2 in RHEL8:
