@@ -139,47 +139,61 @@
 # In some cases, the arch used by the JDK does
 # not match _arch.
 # Also, in some cases, the machine name used by SystemTap
-# does not match that given by _build_cpu
+# does not match that given by _target_cpu
 %ifarch x86_64
 %global archinstall amd64
+%global stapinstall x86_64
 %endif
 %ifarch ppc
 %global archinstall ppc
+%global stapinstall powerpc
 %endif
 %ifarch %{ppc64be}
 %global archinstall ppc64
+%global stapinstall powerpc
 %endif
 %ifarch %{ppc64le}
 %global archinstall ppc64le
+%global stapinstall powerpc
 %endif
 %ifarch %{ix86}
 %global archinstall i386
+%global stapinstall i386
 %endif
 %ifarch ia64
 %global archinstall ia64
+%global stapinstall ia64
 %endif
 %ifarch s390
 %global archinstall s390
+%global stapinstall s390
 %endif
 %ifarch s390x
 %global archinstall s390x
+%global stapinstall s390
 %endif
 %ifarch %{arm}
 %global archinstall arm
+%global stapinstall arm
 %endif
 %ifarch %{aarch64}
 %global archinstall aarch64
+%global stapinstall arm64
 %endif
 # 32 bit sparc, optimized for v9
 %ifarch sparcv9
 %global archinstall sparc
+%global stapinstall %{_target_cpu}
 %endif
 # 64 bit sparc
 %ifarch sparc64
 %global archinstall sparcv9
+%global stapinstall %{_target_cpu}
 %endif
-%ifnarch %{jit_arches}
-%global archinstall %{_arch}
+# Need to support noarch for srpm build
+%ifarch noarch
+%global archinstall %{nil}
+%global stapinstall %{nil}
 %endif
 
 %ifarch %{jit_arches}
@@ -198,11 +212,13 @@
 # note, following three variables are sedded from update_sources if used correctly. Hardcode them rather there.
 %global shenandoah_project	aarch64-port
 %global shenandoah_repo		jdk8u-shenandoah
-%global shenandoah_revision    	aarch64-shenandoah-jdk8u232-b09
+%global shenandoah_revision    	aarch64-shenandoah-jdk8u252-b09
 # Define old aarch64/jdk8u tree variables for compatibility
 %global project         %{shenandoah_project}
 %global repo            %{shenandoah_repo}
 %global revision        %{shenandoah_revision}
+# Define IcedTea version used for SystemTap tapsets and desktop files
+%global icedteaver      3.15.0
 
 # e.g. aarch64-shenandoah-jdk8u212-b04-shenandoah-merge-2019-04-30 -> aarch64-shenandoah-jdk8u212-b04
 %global version_tag     %(VERSION=%{revision}; echo ${VERSION%%-shenandoah-merge*})
@@ -212,7 +228,7 @@
 %global updatever       %(VERSION=%{whole_update}; echo ${VERSION##*u})
 # eg jdk8u60-b27 -> b27
 %global buildver        %(VERSION=%{version_tag}; echo ${VERSION##*-})
-%global rpmrelease      2
+%global rpmrelease      3
 # Define milestone (EA for pre-releases, GA ("fcs") for releases)
 # Release will be (where N is usually a number starting at 1):
 # - 0.N%%{?extraver}%%{?dist} for EA releases,
@@ -266,10 +282,10 @@
 # and 32 bit architectures we place the tapsets under the arch
 # specific dir (note that systemtap will only pickup the tapset
 # for the primary arch for now). Systemtap uses the machine name
-# aka build_cpu as architecture specific directory name.
+# aka target_cpu as architecture specific directory name.
 %global tapsetroot /usr/share/systemtap
 %global tapsetdirttapset %{tapsetroot}/tapset/
-%global tapsetdir %{tapsetdirttapset}/%{_build_cpu}
+%global tapsetdir %{tapsetdirttapset}/%{stapinstall}
 %endif
 
 # not-duplicated scriptlets for normal/debug packages
@@ -562,6 +578,7 @@ exit 0
 %license %{buildoutputdir -- %{?1}}/images/%{jdkimage}/jre/ASSEMBLY_EXCEPTION
 %license %{buildoutputdir -- %{?1}}/images/%{jdkimage}/jre/LICENSE
 %license %{buildoutputdir -- %{?1}}/images/%{jdkimage}/jre/THIRD_PARTY_README
+%doc %{_defaultdocdir}/%{uniquejavadocdir -- %{?1}}/NEWS
 %dir %{_jvmdir}/%{sdkdir -- %{?1}}
 %{_jvmdir}/%{jrelnk -- %{?1}}
 %dir %{_jvmdir}/%{jredir -- %{?1}}/lib/security
@@ -989,7 +1006,7 @@ Provides: java-%{javaver}-%{origin}-accessibility = %{epoch}:%{version}-%{releas
 
 Name:    java-%{javaver}-%{origin}
 Version: %{javaver}.%{updatever}.%{buildver}
-Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}.redsleeve
+Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}
 # java-1.5.0-ibm from jpackage.org set Epoch to 1 for unknown reasons
 # and this change was brought into RHEL-4. java-1.5.0-ibm packages
 # also included the epoch in their virtual provides. This created a
@@ -1025,15 +1042,18 @@ URL:      http://openjdk.java.net/
 # FILE_NAME_ROOT=%%{shenandoah_project}-%%{shenandoah_repo}-${VERSION}
 # REPO_ROOT=<path to checked-out repository> generate_source_tarball.sh
 # where the source is obtained from http://hg.openjdk.java.net/%%{project}/%%{repo}
-Source0: %{shenandoah_project}-%{shenandoah_repo}-%{shenandoah_revision}.tar.xz
+Source0: %{shenandoah_project}-%{shenandoah_repo}-%{shenandoah_revision}-4curve.tar.xz
 
 # Custom README for -src subpackage
 Source2:  README.md
 
+# Release notes
+Source7: NEWS
 
-# run update_systemtap.sh to regenerate or update systemtap sources
-# update_package.sh contains hard-coded repos, revisions, tags, and projects to regenerate the source archives
-Source8: systemtap_3.2_tapsets_hg-icedtea8-9d464368e06d.tar.xz
+# Use 'icedtea_sync.sh' to update the following
+# They are based on code contained in the IcedTea project (3.x).
+# Systemtap tapsets. Zipped up to keep it small.
+Source8: tapsets-icedtea-%{icedteaver}.tar.xz
 
 # Desktop files. Adapted from IcedTea
 Source9: jconsole.desktop.in
@@ -1099,18 +1119,18 @@ Patch512: rh1649664-awt2dlibraries_compiled_with_no_strict_overflow.patch
 Patch523: pr2974-rh1337583-add_systemlineendings_option_to_keytool_and_use_line_separator_instead_of_crlf_in_pkcs10.patch
 # PR3083, RH1346460: Regression in SSL debug output without an ECC provider
 Patch528: pr3083-rh1346460-for_ssl_debug_return_null_instead_of_exception_when_theres_no_ecc_provider.patch
-# RH1566890: CVE-2018-3639
-Patch529: rh1566890-CVE_2018_3639-speculative_store_bypass.patch
-Patch531: rh1566890-CVE_2018_3639-speculative_store_bypass_toggle.patch
 # PR3601: Fix additional -Wreturn-type issues introduced by 8061651
 Patch530: pr3601-fix_additional_Wreturn_type_issues_introduced_by_8061651_for_prims_jvm_cpp.patch
 # PR2888: OpenJDK should check for system cacerts database (e.g. /etc/pki/java/cacerts)
 # PR3575, RH1567204: System cacerts database handling should not affect jssecacerts
 Patch539: pr2888-openjdk_should_check_for_system_cacerts_database_eg_etc_pki_java_cacerts.patch
 # PR3183, RH1340845: Support Fedora/RHEL8 system crypto policy
-Patch300: pr3183-rh1340845-support_fedora_rhel_system_crypto_policy.patch
+Patch400: pr3183-rh1340845-support_fedora_rhel_system_crypto_policy.patch
 # PR3655: Allow use of system crypto policy to be disabled by the user
-Patch301: pr3655-toggle_system_crypto_policy.patch
+Patch401: pr3655-toggle_system_crypto_policy.patch
+# RH1566890: CVE-2018-3639
+Patch529: rh1566890-CVE_2018_3639-speculative_store_bypass.patch
+Patch531: rh1566890-CVE_2018_3639-speculative_store_bypass_toggle.patch
 
 #############################################
 #
@@ -1145,7 +1165,7 @@ Patch107: s390-8214206_fix.patch
 # This fixes printf warnings that lead to build failure with -Werror=format-security from optflags
 Patch502: pr2462-resolve_disabled_warnings_for_libunpack_and_the_unpack200_binary.patch
 # S8154313: Generated javadoc scattered all over the place
-Patch400: jdk8154313-generated_javadoc_scattered_all_over_the_place.patch
+Patch578: jdk8154313-generated_javadoc_scattered_all_over_the_place.patch
 # PR3591: Fix for bug 3533 doesn't add -mstackrealign to JDK code
 Patch571: jdk8199936-pr3591-enable_mstackrealign_on_x86_linux_as_well_as_x86_mac_os_x_jdk.patch
 # 8143245, PR3548: Zero build requires disabled warnings
@@ -1160,6 +1180,11 @@ Patch102: jdk8203030-zero_s390_31_bit_size_t_type_conflicts_in_shared_code.patch
 Patch202: jdk8035341-allow_using_system_installed_libpng.patch
 # 8042159: Allow using a system-installed lcms2
 Patch203: jdk8042159-allow_using_system_installed_lcms2.patch
+# JDK-8165996, PR3506, RH1760437: PKCS11 using NSS throws an error regarding secmod.db when NSS uses sqlite
+# RPM version excludes binary diffs and a patch to PKCS11Test.java which creates a lengthy bug trail
+Patch579: jdk8165996-pr3506-rh1760437-nss_sqlite_db.patch
+# JDK-8195607, PR3776, RH1760437: sun/security/pkcs11/Secmod/TestNssDbSqlite.java failed with "NSS initialization failed" on NSS 3.34.1
+Patch580: jdk8195607-pr3776-rh1760437-nss_sqlite_db_config.patch
 
 #############################################
 #
@@ -1421,6 +1446,14 @@ See normal java-%{version}-openjdk-accessibility description.
 %endif
 
 %prep
+
+# Using the echo macro breaks rpmdev-bumpspec, as it parses the first line of stdout :-(
+%if 0%{?stapinstall:1}
+  echo "CPU: %{_target_cpu}, arch install directory: %{archinstall}, SystemTap install directory: %{stapinstall}"
+%else
+  %{error:Unrecognised architecture %{_target_cpu}}
+%endif
+
 if [ %{include_normal_build} -eq 0 -o  %{include_normal_build} -eq 1 ] ; then
   echo "include_normal_build is %{include_normal_build}"
 else
@@ -1471,8 +1504,8 @@ sh %{SOURCE12}
 %patch203
 
 # System security policy fixes
-%patch300
-%patch301
+%patch400
+%patch401
 
 %patch1
 %patch3
@@ -1493,16 +1526,18 @@ sh %{SOURCE12}
 %patch502
 %patch504
 %patch512
-%patch400
+%patch578
 %patch523
 %patch528
+%patch530
 %patch529
 %patch531
-%patch530
 %patch571
 %patch574
 %patch575
 %patch577
+%patch579
+%patch580
 
 # RPM-only fixes
 %patch539
@@ -1526,7 +1561,7 @@ cp -r tapset tapset%{debug_suffix}
 
 for suffix in %{build_loop} ; do
   for file in "tapset"$suffix/*.in; do
-    OUTPUT_FILE=`echo $file | sed -e "s:\.stp\.in$:%{version}-%{release}.%{_arch}.stp:g"`
+    OUTPUT_FILE=`echo $file | sed -e "s:\.stp\.in$:-%{version}-%{release}.%{_arch}.stp:g"`
     sed -e "s:@ABS_SERVER_LIBJVM_SO@:%{_jvmdir}/%{sdkdir -- $suffix}/jre/lib/%{archinstall}/server/libjvm.so:g" $file > $file.1
 # TODO find out which architectures other than i686 have a client vm
 %ifarch %{ix86}
@@ -1543,16 +1578,19 @@ done
 %endif
 
 # Prepare desktop files
+# The _X_ syntax indicates variables that are replaced by make upstream
+# The @X@ syntax indicates variables that are replaced by configure upstream
 for suffix in %{build_loop} ; do
 for file in %{SOURCE9} %{SOURCE10} ; do
     FILE=`basename $file | sed -e s:\.in$::g`
     EXT="${FILE##*.}"
     NAME="${FILE%.*}"
     OUTPUT_FILE=$NAME$suffix.$EXT
-    sed    -e  "s:@JAVA_HOME@:%{sdkbindir -- $suffix}:g" $file > $OUTPUT_FILE
-    sed -i -e  "s:@JRE_HOME@:%{jrebindir -- $suffix}:g" $OUTPUT_FILE
-    sed -i -e  "s:@ARCH@:%{version}-%{release}.%{_arch}$suffix:g" $OUTPUT_FILE
-    sed -i -e  "s:@JAVA_MAJOR_VERSION@:%{javaver}:g" $OUTPUT_FILE
+    sed    -e  "s:_SDKBINDIR_:%{sdkbindir -- $suffix}:g" $file > $OUTPUT_FILE
+    sed -i -e  "s:_JREBINDIR_:%{jrebindir -- $suffix}:g" $OUTPUT_FILE
+    sed -i -e  "s:@target_cpu@:%{_arch}:g" $OUTPUT_FILE
+    sed -i -e  "s:@OPENJDK_VER@:%{version}-%{release}.%{_arch}$suffix:g" $OUTPUT_FILE
+    sed -i -e  "s:@JAVA_VER@:%{javaver}:g" $OUTPUT_FILE
     sed -i -e  "s:@JAVA_VENDOR@:%{origin}:g" $OUTPUT_FILE
 done
 done
@@ -1590,7 +1628,8 @@ EXTRA_CPP_FLAGS="%ourcppflags"
 # fix rpmlint warnings
 EXTRA_CFLAGS="$EXTRA_CFLAGS -fno-strict-aliasing"
 %endif
-export EXTRA_CFLAGS
+EXTRA_ASFLAGS="${EXTRA_CFLAGS} -Wa,--generate-missing-build-notes=yes"
+export EXTRA_CFLAGS EXTRA_ASFLAGS
 
 (cd %{top_level_dir_name}/common/autoconf
  bash ./autogen.sh
@@ -1629,6 +1668,7 @@ bash ../../configure \
     --with-stdc++lib=dynamic \
     --with-extra-cxxflags="$EXTRA_CPP_FLAGS" \
     --with-extra-cflags="$EXTRA_CFLAGS" \
+    --with-extra-asflags="$EXTRA_ASFLAGS" \
     --with-extra-ldflags="%{ourldflags}" \
     --with-num-cores="$NUM_PROC"
 
@@ -1745,18 +1785,18 @@ done
 # Using line number 1 might cause build problems. See:
 # https://bugzilla.redhat.com/show_bug.cgi?id=1539664
 # https://bugzilla.redhat.com/show_bug.cgi?id=1538767
-#gdb -q "$JAVA_HOME/bin/java" <<EOF | tee gdb.out
-#handle SIGSEGV pass nostop noprint
-#handle SIGILL pass nostop noprint
-#set breakpoint pending on
-#break javaCalls.cpp:58
-#commands 1
-#backtrace
-#quit
-#end
-#run -version
-#EOF
-#grep 'JavaCallWrapper::JavaCallWrapper' gdb.out
+gdb -q "$JAVA_HOME/bin/java" <<EOF | tee gdb.out
+handle SIGSEGV pass nostop noprint
+handle SIGILL pass nostop noprint
+set breakpoint pending on
+break javaCalls.cpp:58
+commands 1
+backtrace
+quit
+end
+run -version
+EOF
+grep 'JavaCallWrapper::JavaCallWrapper' gdb.out
 
 # Check src.zip has all sources. See RHBZ#1130490
 jar -tf $JAVA_HOME/src.zip | grep 'sun.misc.Unsafe'
@@ -1851,6 +1891,11 @@ if ! echo $suffix | grep -q "debug" ; then
   built_doc_archive=`echo "jdk-%{javaver}_%{updatever}%{milestone_version}$suffix-%{buildver}-docs.zip" | sed  s/slowdebug/debug/`
   cp -a %{buildoutputdir -- $suffix}/bundles/$built_doc_archive  $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir -- $suffix}.zip
 fi
+
+# Install release notes
+commondocdir=${RPM_BUILD_ROOT}%{_defaultdocdir}/%{uniquejavadocdir -- $suffix}
+install -d -m 755 ${commondocdir}
+cp -a %{SOURCE7} ${commondocdir}
 
 # Install icons and menu entries
 for s in 16 24 32 48 ; do
@@ -2094,8 +2139,119 @@ require "copy_jdk_configs.lua"
 %endif
 
 %changelog
-* Sun Nov 17 2019 Jacco Ligthart <jacco@redsleeve.org> - 1:1.8.0.232.b09-2.redsleeve
-- removed the gdb section of the SPEC file
+* Sun Apr 19 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b09-3
+- Add release notes.
+- Resolves: rhbz#1810557
+
+* Sun Apr 19 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b09-2
+- Make use of --with-extra-asflags introduced in jdk8u252-b01.
+- Resolves: rhbz#1810557
+
+* Mon Apr 06 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b09-1
+- Update to aarch64-shenandoah-jdk8u252-b09.
+- Switch to GA mode for final release.
+- Resolves: rhbz#1810557
+
+* Wed Apr 01 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b08-0.1.ea
+- Update to aarch64-shenandoah-jdk8u252-b08.
+- Resolves: rhbz#1810557
+
+* Wed Apr 01 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b07-0.1.ea
+- Update to aarch64-shenandoah-jdk8u252-b07.
+- Resolves: rhbz#1810557
+
+* Wed Apr 01 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b06-0.1.ea
+- Update to aarch64-shenandoah-jdk8u252-b06.
+- Resolves: rhbz#1810557
+
+* Wed Apr 01 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b05-0.1.ea
+- Update to aarch64-shenandoah-jdk8u252-b05.
+- Resolves: rhbz#1810557
+
+* Wed Apr 01 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b04-0.1.ea
+- Update to aarch64-shenandoah-jdk8u252-b04.
+- Resolves: rhbz#1810557
+
+* Wed Apr 01 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b03-0.1.ea
+- Update to aarch64-shenandoah-jdk8u252-b03.
+- Adjust PR2974/RH1337583 & PR3083/RH1346460 following context changes in JDK-8230978
+- Resolves: rhbz#1810557
+
+* Wed Apr 01 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b02-0.1.ea
+- Update to aarch64-shenandoah-jdk8u252-b02.
+- Resolves: rhbz#1810557
+
+* Wed Apr 01 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.252.b01-0.1.ea
+- Update to aarch64-shenandoah-jdk8u252-b01.
+- Switch to EA mode.
+- Adjust JDK-8199936/PR3533 patch following JDK-8227397 configure change
+- Resolves: rhbz#1810557
+
+* Fri Mar 27 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b08-4
+- Need to support noarch for creating source RPMs for non-scratch builds.
+- Resolves: rhbz#1737112
+
+* Tue Mar 24 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b08-4
+- Introduce stapinstall variable to set SystemTap arch directory correctly (e.g. arm64 on aarch64)
+- Resolves: rhbz#1737112
+
+* Mon Feb 24 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b08-3
+- Add JDK-8165996/PR3506 & JDK-8195607/PR3776 to support NSS SQLite databases.
+- Resolves: rhbz#1760437
+
+* Sun Feb 23 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b08-2
+- Sync SystemTap & desktop files with upstream IcedTea release 3.15.0, removing previous workarounds
+- Resolves: rhbz#1737112
+
+* Sun Feb 23 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b08-2
+- Sync SystemTap & desktop files with upstream IcedTea release 3.11.0 using new script
+- Resolves: rhbz#1737112
+
+* Wed Jan 15 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b08-1
+- Update to aarch64-shenandoah-jdk8u242-b08.
+- Remove local copies of JDK-8031111 & JDK-8132111 as replaced by upstream versions.
+- Resolves: rhbz#1785753
+
+* Wed Jan 15 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b07-2
+- Add backports of JDK-8031111 & JDK-8132111 to fix TCK issue.
+- Resolves: rhbz#1785753
+
+* Mon Jan 13 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b07-1
+- Update to aarch64-shenandoah-jdk8u242-b07.
+- Switch to GA mode for final release.
+- Remove Shenandoah S390 patch which is now included upstream as JDK-8236829.
+- Resolves: rhbz#1785753
+
+* Sun Jan 05 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b05-0.1.ea
+- Update to aarch64-shenandoah-jdk8u242-b05.
+- Attempt to fix Shenandoah formatting failures on S390, introduced by JDK-8232102.
+- Revise b05 snapshot to include JDK-8236178.
+- Add additional Shenandoah formatting fixes revealed by successful -Wno-error=format run
+- Resolves: rhbz#1785753
+
+* Sat Jan 04 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.242.b01-0.1.ea
+- Update to aarch64-shenandoah-jdk8u242-b01.
+- Switch to EA mode.
+- Resolves: rhbz#1785753
+
+* Sat Jan 04 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b09-6
+- Update generate_source_tarball.sh script to use the PR3756 patch and retain the secp256k1 curve.
+- Regenerate source tarball using the updated script and add the -'4curve' suffix.
+- Resolves: rhbz#1746879
+
+* Thu Jan 02 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b09-5
+- Revert SSBD removal for now, until appropriate messaging has been decided.
+- Resolves: rhbz#1750419
+
+* Tue Dec 24 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b09-4
+- Remove CVE-2018-3639 mitigation due to performance regression and
+    OpenJDK position on speculative execution vulnerabilities.
+    https://mail.openjdk.java.net/pipermail/vuln-announce/2019-July/000002.html
+- Resolves: rhbz#1750419
+
+* Thu Nov 14 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b09-3
+- Bump release number for RHEL 8.2.0.
+- Resolves: rhbz#1753423
 
 * Fri Oct 25 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:1.8.0.232.b09-2
 - Disable FIPS mode support unless com.redhat.fips is set to "true".
