@@ -1,0 +1,123 @@
+diff --git a/modules/ssl/ssl_engine_config.c b/modules/ssl/ssl_engine_config.c
+index 1d201d9..0c4bf1f 100644
+--- a/modules/ssl/ssl_engine_config.c
++++ b/modules/ssl/ssl_engine_config.c
+@@ -75,6 +75,10 @@ SSLModConfigRec *ssl_config_global_create(server_rec *s)
+     mc->stapling_refresh_mutex = NULL;
+ #endif
+ 
++#ifdef HAVE_OPENSSL_KEYLOG
++    mc->keylog_file = NULL;
++#endif
++
+     apr_pool_userdata_set(mc, SSL_MOD_CONFIG_KEY,
+                           apr_pool_cleanup_null,
+                           pool);
+diff --git a/modules/ssl/ssl_engine_init.c b/modules/ssl/ssl_engine_init.c
+index ef631c1..b286053 100644
+--- a/modules/ssl/ssl_engine_init.c
++++ b/modules/ssl/ssl_engine_init.c
+@@ -437,6 +437,28 @@ apr_status_t ssl_init_Module(apr_pool_t *p, apr_pool_t *plog,
+     init_bio_methods();
+ #endif
+ 
++#ifdef HAVE_OPENSSL_KEYLOG
++    {
++        const char *logfn = getenv("SSLKEYLOGFILE");
++
++        if (logfn) {
++            rv = apr_file_open(&mc->keylog_file, logfn,
++                               APR_FOPEN_CREATE|APR_FOPEN_WRITE|APR_FOPEN_APPEND|APR_FOPEN_LARGEFILE,
++                               APR_FPROT_UREAD|APR_FPROT_UWRITE,
++                               mc->pPool);
++            if (rv) {
++                ap_log_error(APLOG_MARK, APLOG_NOTICE, rv, s, APLOGNO(10226)
++                             "Could not open log file '%s' configured via SSLKEYLOGFILE",
++                             logfn);
++                return rv;
++            }
++
++            ap_log_error(APLOG_MARK, APLOG_NOTICE, 0, s, APLOGNO(10227)
++                         "Init: Logging SSL private key material to %s", logfn);
++        }
++    }
++#endif
++    
+     return OK;
+ }
+ 
+@@ -796,6 +818,12 @@ static apr_status_t ssl_init_ctx_protocol(server_rec *s,
+      * https://github.com/openssl/openssl/issues/7178 */
+     SSL_CTX_clear_mode(ctx, SSL_MODE_AUTO_RETRY);
+ #endif
++
++#ifdef HAVE_OPENSSL_KEYLOG
++    if (mctx->sc->mc->keylog_file) {
++        SSL_CTX_set_keylog_callback(ctx, modssl_callback_keylog);
++    }
++#endif
+     
+     return APR_SUCCESS;
+ }
+diff --git a/modules/ssl/ssl_engine_kernel.c b/modules/ssl/ssl_engine_kernel.c
+index 6611610..7058865 100644
+--- a/modules/ssl/ssl_engine_kernel.c
++++ b/modules/ssl/ssl_engine_kernel.c
+@@ -2719,3 +2719,17 @@ int ssl_callback_SRPServerParams(SSL *ssl, int *ad, void *arg)
+ }
+ 
+ #endif /* HAVE_SRP */
++
++
++#ifdef HAVE_OPENSSL_KEYLOG
++/* Callback used with SSL_CTX_set_keylog_callback. */
++void modssl_callback_keylog(const SSL *ssl, const char *line)
++{
++    conn_rec *conn = SSL_get_app_data(ssl);
++    SSLSrvConfigRec *sc = mySrvConfig(conn->base_server);
++
++    if (sc && sc->mc->keylog_file) {
++        apr_file_printf(sc->mc->keylog_file, "%s\n", line);
++    }
++}
++#endif
+diff --git a/modules/ssl/ssl_private.h b/modules/ssl/ssl_private.h
+index 0fac5d1..2514407 100644
+--- a/modules/ssl/ssl_private.h
++++ b/modules/ssl/ssl_private.h
+@@ -250,6 +250,10 @@ void free_bio_methods(void);
+ #endif
+ #endif
+ 
++#if OPENSSL_VERSION_NUMBER >= 0x10101000L && !defined(LIBRESSL_VERSION_NUMBER)
++#define HAVE_OPENSSL_KEYLOG
++#endif
++
+ /* mod_ssl headers */
+ #include "ssl_util_ssl.h"
+ 
+@@ -617,6 +621,12 @@ typedef struct {
+     apr_global_mutex_t   *stapling_cache_mutex;
+     apr_global_mutex_t   *stapling_refresh_mutex;
+ #endif
++
++#ifdef HAVE_OPENSSL_KEYLOG
++    /* Used for logging if SSLKEYLOGFILE is set at startup. */
++    apr_file_t      *keylog_file;
++#endif
++
+ } SSLModConfigRec;
+ 
+ /** Structure representing configured filenames for certs and keys for
+@@ -970,6 +980,11 @@ int          ssl_stapling_init_cert(server_rec *, apr_pool_t *, apr_pool_t *,
+ int          ssl_callback_SRPServerParams(SSL *, int *, void *);
+ #endif
+ 
++#ifdef HAVE_OPENSSL_KEYLOG
++/* Callback used with SSL_CTX_set_keylog_callback. */
++void         modssl_callback_keylog(const SSL *ssl, const char *line);
++#endif
++
+ /**  I/O  */
+ void         ssl_io_filter_init(conn_rec *, request_rec *r, SSL *);
+ void         ssl_io_filter_register(apr_pool_t *);

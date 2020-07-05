@@ -1,0 +1,24 @@
+diff --git a/docs/conf/magic b/docs/conf/magic
+index 7c56119..bc891d9 100644
+--- a/docs/conf/magic
++++ b/docs/conf/magic
+@@ -87,7 +87,7 @@
+ # Microsoft WAVE format (*.wav)
+ # [GRR 950115:  probably all of the shorts and longs should be leshort/lelong]
+ #					Microsoft RIFF
+-0	string		RIFF		audio/unknown
++0	string		RIFF		
+ #					- WAVE format
+ >8	string		WAVE		audio/x-wav
+ # MPEG audio.
+--- a/modules/metadata/mod_mime_magic.c	2013/06/11 07:36:13	1491699
++++ b/modules/metadata/mod_mime_magic.c	2013/06/11 07:41:40	1491700
+@@ -606,7 +606,7 @@
+     /* high overhead for 1 char - just hope they don't do this much */
+     str[0] = c;
+     str[1] = '\0';
+-    return magic_rsl_add(r, str);
++    return magic_rsl_add(r, apr_pstrdup(r->pool, str));
+ }
+ 
+ /* allocate and copy a contiguous string from a result string list */

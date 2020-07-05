@@ -13,10 +13,10 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.37
-Release: 11%{?dist}.redsleeve
+Release: 21%{?dist}
 URL: https://httpd.apache.org/
 Source0: https://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: index.html
+Source1: centos-noindex-8.0.tar.gz
 Source2: httpd.logrotate
 Source3: instance.conf
 Source4: httpd-ssl-pass-dialog
@@ -43,7 +43,6 @@ Source25: 01-session.conf
 Source26: 10-listen443.conf
 Source27: httpd.socket
 Source28: 00-optional.conf
-Source29: 01-md.conf
 # Documentation
 Source30: README.confd
 Source31: README.confmod
@@ -55,6 +54,7 @@ Source41: htcacheclean.sysconf
 Source42: httpd-init.service
 Source43: httpd-ssl-gencerts
 Source44: httpd@.service
+Source45: config.layout
 
 # build/scripts patches
 # http://bugzilla.redhat.com/show_bug.cgi?id=1231924
@@ -63,7 +63,6 @@ Source44: httpd@.service
 Patch1: httpd-2.4.35-apachectl.patch
 Patch2: httpd-2.4.28-apxs.patch
 Patch3: httpd-2.4.35-deplibs.patch
-Patch4: httpd-2.4.35-layout.patch
 
 # Needed for socket activation and mod_systemd patch
 Patch19: httpd-2.4.35-detect-systemd.patch
@@ -87,6 +86,12 @@ Patch30: httpd-2.4.35-freebind.patch
 Patch31: httpd-2.4.35-r1830819+.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1638738
 Patch32: httpd-2.4.37-sslprotdefault.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1747898
+Patch33: httpd-2.4.37-mod-md-mod-ssl-hooks.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1725031
+Patch34: httpd-2.4.37-r1861793+.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1704317ě
+Patch35: httpd-2.4.37-sslkeylogfile-support.patch
 
 # Bug fixes
 # https://bugzilla.redhat.com/show_bug.cgi?id=1397243
@@ -98,14 +103,25 @@ Patch63: httpd-2.4.28-r1811831.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1602548
 Patch65: httpd-2.4.35-r1842888.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1653009
+# https://bugzilla.redhat.com/show_bug.cgi?id=1672977
+# https://bugzilla.redhat.com/show_bug.cgi?id=1673022
 Patch66: httpd-2.4.37-r1842929+.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1630432
 Patch67: httpd-2.4.35-r1825120.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1670716
 Patch68: httpd-2.4.37-fips-segfault.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=1672977
-Patch69: httpd-2.4.37-state-dir.patch
-
+# https://bugzilla.redhat.com/show_bug.cgi?id=1669221
+Patch70: httpd-2.4.37-r1840554.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1673022
+Patch71: httpd-2.4.37-mod-md-perms.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1724549
+Patch72: httpd-2.4.37-mod-mime-magic-strdup.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1724034
+Patch73: httpd-2.4.35-ocsp-wrong-ctx.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1633224
+Patch74: httpd-2.4.37-r1828172+.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1775158
+Patch75: httpd-2.4.37-r1870095+.patch
 
 # Security fixes
 Patch200: httpd-2.4.37-r1851471.patch
@@ -113,6 +129,14 @@ Patch200: httpd-2.4.37-r1851471.patch
 Patch201: httpd-2.4.37-CVE-2019-0211.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1695025
 Patch202: httpd-2.4.37-CVE-2019-0215.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1696141
+Patch203: httpd-2.4.37-CVE-2019-0217.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1696097
+Patch204: httpd-2.4.37-CVE-2019-0220.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1741860
+# https://bugzilla.redhat.com/show_bug.cgi?id=1741864
+# https://bugzilla.redhat.com/show_bug.cgi?id=1741868
+Patch205: httpd-2.4.34-CVE-2019-9511-and-9516-and-9517.patch
 
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -202,19 +226,6 @@ The mod_ssl module provides strong cryptography for the Apache Web
 server via the Secure Sockets Layer (SSL) and Transport Layer
 Security (TLS) protocols.
 
-%package -n mod_md
-Group: System Environment/Daemons
-Summary: Certificate provisioning using ACME for the Apache HTTP Server
-Requires: httpd = 0:%{version}-%{release}, httpd-mmn = %{mmnisa}
-BuildRequires: jansson-devel, libcurl-devel
-
-%description -n mod_md
-This module manages common properties of domains for one or more
-virtual hosts. Specifically it can use the ACME protocol (RFC Draft)
-to automate certificate provisioning. These will be configured for
-managed domains and their virtual hosts automatically. This includes
-renewal of certificates before they expire.
-
 %package -n mod_proxy_html
 Group: System Environment/Daemons
 Summary: HTML and XML content filters for the Apache HTTP Server
@@ -251,7 +262,6 @@ interface for storing and accessing per-user session data.
 %patch1 -p1 -b .apctl
 %patch2 -p1 -b .apxs
 %patch3 -p1 -b .deplibs
-%patch4 -p1 -b .layout
 
 %patch19 -p1 -b .detectsystemd
 %patch20 -p1 -b .export
@@ -267,6 +277,9 @@ interface for storing and accessing per-user session data.
 %patch30 -p1 -b .freebind
 %patch31 -p1 -b .r1830819+
 %patch32 -p1 -b .sslprotdefault
+%patch33 -p1 -b .mod-md-mod-ssl-hooks
+%patch34 -p1 -b .r1861793+
+%patch35 -p1 -b .sslkeylogfile-support
 
 %patch61 -p1 -b .r1738878
 %patch62 -p1 -b .r1633085
@@ -275,11 +288,19 @@ interface for storing and accessing per-user session data.
 %patch66 -p1 -b .r1842929+
 %patch67 -p1 -b .r1825120
 %patch68 -p1 -b .fipscore
-%patch69 -p1 -b .statedir
+%patch70 -p1 -b .r1840554
+%patch71 -p1 -b .modmdperms
+%patch72 -p1 -b .mimemagic
+%patch73 -p1 -b .ocspwrongctx
+%patch74 -p1 -b .r1828172+
+%patch75 -p1 -b .r1870095+
 
 %patch200 -p1 -b .r1851471
 %patch201 -p1 -b .CVE-2019-0211
 %patch202 -p1 -b .CVE-2019-0215
+%patch203 -p1 -b .CVE-2019-0217
+%patch204 -p1 -b .CVE-2019-0220
+%patch205 -p1 -b .CVE-2019-9511-and-9516-and-9517
 
 # Patch in the vendor string
 sed -i '/^#define PLATFORM/s/Unix/%{vstring}/' os/unix/os.h
@@ -306,6 +327,9 @@ if test "x${vmmn}" != "x%{mmn}"; then
    exit 1
 fi
 
+# Provide default layout
+cp $RPM_SOURCE_DIR/config.layout .
+
 sed '
 s,@MPM@,%{mpm},g
 s,@DOCROOT@,%{docroot},g
@@ -329,7 +353,7 @@ autoheader && autoconf || exit 1
 
 # Before configure; fix location of build dir in generated apxs
 %{__perl} -pi -e "s:\@exp_installbuilddir\@:%{_libdir}/httpd/build:g" \
-	support/apxs.in
+        support/apxs.in
 
 export CFLAGS=$RPM_OPT_FLAGS
 export LDFLAGS="-Wl,-z,relro,-z,now"
@@ -371,9 +395,11 @@ export LYNX_PATH=/usr/bin/links
         --enable-disk-cache \
         --enable-ldap --enable-authnz-ldap \
         --enable-cgid --enable-cgi \
+        --enable-cgid-fdpassing \
         --enable-authn-anon --enable-authn-alias \
         --disable-imagemap --disable-file-cache \
         --disable-http2 \
+        --disable-md \
         $*
 make %{?_smp_mflags}
 
@@ -399,8 +425,7 @@ install -m 644 $RPM_SOURCE_DIR/README.confmod \
     $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf.modules.d/README
 for f in 00-base.conf 00-mpm.conf 00-lua.conf 01-cgi.conf 00-dav.conf \
          00-proxy.conf 00-ssl.conf 01-ldap.conf 00-proxyhtml.conf \
-         01-ldap.conf 00-systemd.conf 01-session.conf 00-optional.conf \
-         01-md.conf; do
+         01-ldap.conf 00-systemd.conf 01-session.conf 00-optional.conf; do
   install -m 644 -p $RPM_SOURCE_DIR/$f \
         $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf.modules.d/$f
 done
@@ -479,8 +504,7 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-install -m 644 -p $RPM_SOURCE_DIR/index.html \
-        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
+tar xzf %{SOURCE1} -C $RPM_BUILD_ROOT%{contentdir}/noindex/ --strip-components=1
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -507,6 +531,7 @@ ln -s ../../pixmaps/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
+rmdir $RPM_BUILD_ROOT/etc/httpd/{state,run}
 ln -s ../..%{_localstatedir}/log/httpd $RPM_BUILD_ROOT/etc/httpd/logs
 ln -s ../..%{_localstatedir}/lib/httpd $RPM_BUILD_ROOT/etc/httpd/state
 ln -s /run/httpd $RPM_BUILD_ROOT/etc/httpd/run
@@ -515,11 +540,11 @@ ln -s ../..%{_libdir}/httpd/modules $RPM_BUILD_ROOT/etc/httpd/modules
 # install http-ssl-pass-dialog
 mkdir -p $RPM_BUILD_ROOT%{_libexecdir}
 install -m755 $RPM_SOURCE_DIR/httpd-ssl-pass-dialog \
-	$RPM_BUILD_ROOT%{_libexecdir}/httpd-ssl-pass-dialog
+        $RPM_BUILD_ROOT%{_libexecdir}/httpd-ssl-pass-dialog
 
 # install http-ssl-gencerts
 install -m755 $RPM_SOURCE_DIR/httpd-ssl-gencerts \
-	$RPM_BUILD_ROOT%{_libexecdir}/httpd-ssl-gencerts
+        $RPM_BUILD_ROOT%{_libexecdir}/httpd-ssl-gencerts
 
 # Install action scripts
 mkdir -p $RPM_BUILD_ROOT%{_libexecdir}/initscripts/legacy-actions/httpd
@@ -531,7 +556,7 @@ done
 # Install logrotate config
 mkdir -p $RPM_BUILD_ROOT/etc/logrotate.d
 install -m 644 -p $RPM_SOURCE_DIR/httpd.logrotate \
-	$RPM_BUILD_ROOT/etc/logrotate.d/httpd
+        $RPM_BUILD_ROOT/etc/logrotate.d/httpd
 
 # Install man pages
 install -d $RPM_BUILD_ROOT%{_mandir}/man8 $RPM_BUILD_ROOT%{_mandir}/man5
@@ -663,7 +688,6 @@ rm -rf $RPM_BUILD_ROOT
 %exclude %{_sysconfdir}/httpd/conf.modules.d/00-proxyhtml.conf
 %exclude %{_sysconfdir}/httpd/conf.modules.d/01-ldap.conf
 %exclude %{_sysconfdir}/httpd/conf.modules.d/01-session.conf
-%exclude %{_sysconfdir}/httpd/conf.modules.d/01-md.conf
 
 %config(noreplace) %{_sysconfdir}/sysconfig/htcacheclean
 %{_prefix}/lib/tmpfiles.d/httpd.conf
@@ -682,7 +706,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/httpd/modules/mod*.so
 %exclude %{_libdir}/httpd/modules/mod_auth_form.so
 %exclude %{_libdir}/httpd/modules/mod_ssl.so
-%exclude %{_libdir}/httpd/modules/mod_md.so
 %exclude %{_libdir}/httpd/modules/mod_*ldap.so
 %exclude %{_libdir}/httpd/modules/mod_proxy_html.so
 %exclude %{_libdir}/httpd/modules/mod_xml2enc.so
@@ -695,7 +718,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/index.html
+%{contentdir}/noindex/*
 
 %attr(0710,root,apache) %dir /run/httpd
 %attr(0700,apache,apache) %dir /run/httpd/htcacheclean
@@ -768,11 +791,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/httpd/modules/mod_auth_form.so
 %config(noreplace) %{_sysconfdir}/httpd/conf.modules.d/01-session.conf
 
-%files -n mod_md
-%defattr(-,root,root)
-%{_libdir}/httpd/modules/mod_md.so
-%config(noreplace) %{_sysconfdir}/httpd/conf.modules.d/01-md.conf
-
 %files devel
 %defattr(-,root,root)
 %{_includedir}/httpd
@@ -784,16 +802,56 @@ rm -rf $RPM_BUILD_ROOT
 %{_rpmconfigdir}/macros.d/macros.httpd
 
 %changelog
-* Fri Jun 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.4.37-11.el8.redsleeve
-- Rebranded for RedSleeve
-
-* Tue May 07 2019 CentOS Sources <bugs@centos.org> - 2.4.37-11.el8.centos
+* Tue Apr 28 2020 CentOS Sources <bugs@centos.org> - 2.4.37-21.el8.centos
 - Apply debranding changes
 
-* Wed Apr 03 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-11
-- Resolves: #1695431 - CVE-2019-0211 httpd: privilege escalation
+* Mon Dec 02 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-21
+- Resolves: #1775158 - POST request with TLS 1.3 PHA client auth fails:
+  Re-negotiation handshake failed: Client certificate missing
+
+* Sun Dec 01 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-20
+- Resolves: #1704317 - Add support for SSLKEYLOGFILE
+
+* Thu Nov 28 2019 Joe Orton <jorton@redhat.com> - 2.4.37-19
+- mod_cgid: enable fd passing (#1633224)
+
+* Mon Nov 18 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-18
+- Resolves: #1744121 - Unexpected OCSP in proxy SSL connection
+- Resolves: #1725031 - htpasswd: support SHA-x passwords for FIPS compatibility
+- Resolves: #1633224 - mod_cgid logging issues
+
+* Wed Oct 02 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-17
+- remove bundled mod_md module
+- Related: #1747898 - add mod_md package
+
+* Thu Aug 29 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-16
+- Resolves: #1744999 - CVE-2019-9511 httpd:2.4/mod_http2: HTTP/2: large amount
+  of data request leads to denial of service
+- Resolves: #1745086 - CVE-2019-9516 httpd:2.4/mod_http2: HTTP/2: 0-length
+  headers leads to denial of service
+- Resolves: #1745154 - CVE-2019-9517 httpd:2.4/mod_http2: HTTP/2: request for
+  large response leads to denial of service
+
+* Tue Jul 16 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-15
+- Resolves: #1730721 - absolute path used for default state and runtime dir by
+  default
+
+* Thu Jun 27 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-14
+- Resolves: #1724549 - httpd response contains garbage in Content-Type header
+
+* Wed Jun 12 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-13
+- Resolves: #1696142 - CVE-2019-0217 httpd:2.4/httpd: mod_auth_digest: access
+  control bypass due to race condition
+- Resolves: #1696097 - CVE-2019-0220 httpd:2.4/httpd: URL normalization
+  inconsistency
+- Resolves: #1669221 - `ExtendedStatus Off` directive when using mod_systemd
+  causes systemctl to hang
+- Resolves: #1673022 - httpd can not be started with mod_md enabled
+
+* Mon Apr 08 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-11
+- Resolves: #1695432 - CVE-2019-0211 httpd: privilege escalation
   from modules scripts
-- Resolves: #1696090 - CVE-2019-0215 httpd:2.4/httpd: mod_ssl: access control 
+- Resolves: #1696091 - CVE-2019-0215 httpd:2.4/httpd: mod_ssl: access control 
   bypass when using per-location client certification authentication
 
 * Wed Feb 06 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-10
