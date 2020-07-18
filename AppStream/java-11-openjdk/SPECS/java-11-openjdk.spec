@@ -21,6 +21,9 @@
 # Enable release builds by default on relevant arches.
 %bcond_without release
 
+# Workaround for stripping of debug symbols from static libraries
+%define __brp_strip_static_archive %{nil}
+
 # The -g flag says to use strip -g instead of full strip on DSOs or EXEs.
 # This fixes detailed NMT and other tools which need minimal debug info.
 # See: https://bugzilla.redhat.com/show_bug.cgi?id=1520879
@@ -59,8 +62,8 @@
 # the ghosts are here to allow installation via query like `dnf install /usr/bin/java`
 # you can list those files, with appropriate sections: cat *.spec | grep -e --install -e --slave -e post_ 
 # TODO - fix those hardcoded lists via single list
-# those files ,must *NOT* be ghosted for *slowdebug* packages
-# FIXME - if you are moving jshell or jlink or simialr, always modify all three sections
+# Those files must *NOT* be ghosted for *slowdebug* packages
+# FIXME - if you are moving jshell or jlink or similar, always modify all three sections
 # you can check via headless and devels:
 #    rpm -ql --noghost java-11-openjdk-headless-11.0.1.13-8.fc29.x86_64.rpm  | grep bin
 # == rpm -ql           java-11-openjdk-headless-slowdebug-11.0.1.13-8.fc29.x86_64.rpm  | grep bin
@@ -77,7 +80,7 @@
 %global ppc64le         ppc64le
 %global ppc64be         ppc64 ppc64p7
 %global multilib_arches %{power64} sparc64 x86_64
-%global jit_arches      %{ix86} x86_64 sparcv9 sparc64 %{aarch64} %{power64} s390x
+%global jit_arches      %{ix86} x86_64 sparcv9 sparc64 %{aarch64} %{power64} %{arm} s390x
 %global aot_arches      x86_64 %{aarch64}
 
 # By default, we build a debug build during main build on JIT architectures
@@ -121,12 +124,12 @@
 %endif
 
 %if %{bootstrap_build}
-%global release_targets bootcycle-images docs-zip
+%global release_targets bootcycle-images static-libs-image docs-zip
 %else
-%global release_targets images docs-zip
+%global release_targets images docs-zip static-libs-image
 %endif
 # No docs nor bootcycle for debug builds
-%global debug_targets images
+%global debug_targets images static-libs-image
 
 
 # Filter out flags from the optflags macro that cause problems with the OpenJDK build
@@ -147,50 +150,62 @@
 # In some cases, the arch used by the JDK does
 # not match _arch.
 # Also, in some cases, the machine name used by SystemTap
-# does not match that given by _build_cpu
+# does not match that given by _target_cpu
 %ifarch x86_64
 %global archinstall amd64
+%global stapinstall x86_64
 %endif
 %ifarch ppc
 %global archinstall ppc
+%global stapinstall powerpc
 %endif
 %ifarch %{ppc64be}
 %global archinstall ppc64
+%global stapinstall powerpc
 %endif
 %ifarch %{ppc64le}
 %global archinstall ppc64le
+%global stapinstall powerpc
 %endif
 %ifarch %{ix86}
 %global archinstall i686
+%global stapinstall i386
 %endif
 %ifarch ia64
 %global archinstall ia64
+%global stapinstall ia64
 %endif
 %ifarch s390
 %global archinstall s390
+%global stapinstall s390
 %endif
 %ifarch s390x
 %global archinstall s390x
+%global stapinstall s390
 %endif
 %ifarch %{arm}
 %global archinstall arm
+%global stapinstall arm
 %endif
 %ifarch %{aarch64}
 %global archinstall aarch64
+%global stapinstall arm64
 %endif
 # 32 bit sparc, optimized for v9
 %ifarch sparcv9
 %global archinstall sparc
+%global stapinstall %{_target_cpu}
 %endif
 # 64 bit sparc
 %ifarch sparc64
 %global archinstall sparcv9
+%global stapinstall %{_target_cpu}
 %endif
-%ifnarch %{jit_arches}
-%global archinstall %{_arch}
+# Need to support noarch for srpm build
+%ifarch noarch
+%global archinstall %{nil}
+%global stapinstall %{nil}
 %endif
-
-
 
 %ifarch %{jit_arches}
 %global with_systemtap 1
@@ -200,7 +215,7 @@
 
 # New Version-String scheme-style defines
 %global majorver 11
-%global securityver 5
+%global securityver 8
 # buildjdkver is usually same as %%{majorver},
 # but in time of bootstrap of next jdk, it is majorver-1, 
 # and this it is better to change it here, on single place
@@ -217,14 +232,17 @@
   %global lts_designator_zip ""
 %endif
 
+# Define IcedTea version used for SystemTap tapsets and desktop file
+%global icedteaver      3.15.0
+
 # Standard JPackage naming and versioning defines
 %global origin          openjdk
 %global origin_nice     OpenJDK
 %global top_level_dir_name   %{origin}
 %global minorver        0
 %global buildver        10
-%global rpmrelease      2
-#%%global tagsuffix      ""
+%global rpmrelease      0
+#%%global tagsuffix     %%{nil}
 # priority must be 8 digits in total; untill openjdk 1.8 we were using 18..... so when moving to 11 we had to add another digit
 %if %is_system_jdk
 %global priority %( printf '%02d%02d%02d%02d' %{majorver} %{minorver} %{securityver} %{buildver} )
@@ -256,8 +274,9 @@
 # parametrized macros are order-sensitive
 %global compatiblename  java-%{majorver}-%{origin}
 %global fullversion     %{compatiblename}-%{version}-%{release}
-# images stub
-%global jdkimage       jdk
+# images directories from upstream build
+%global jdkimage                jdk
+%global static_libs_image       static-libs
 # output dir stub
 %define buildoutputdir() %{expand:openjdk/build%{?1}}
 # we can copy the javadoc to not arched dir, or make it not noarch
@@ -293,6 +312,8 @@
 %define sdkbindir()     %{expand:%{_jvmdir}/%{sdkdir -- %{?1}}/bin}
 %define jrebindir()     %{expand:%{_jvmdir}/%{sdkdir -- %{?1}}/bin}
 
+%global alt_java_name     alt-java
+
 %global rpm_state_dir %{_localstatedir}/lib/rpm-state/
 
 %if %{with_systemtap}
@@ -303,10 +324,10 @@
 # and 32 bit architectures we place the tapsets under the arch
 # specific dir (note that systemtap will only pickup the tapset
 # for the primary arch for now). Systemtap uses the machine name
-# aka build_cpu as architecture specific directory name.
+# aka target_cpu as architecture specific directory name.
 %global tapsetroot /usr/share/systemtap
 %global tapsetdirttapset %{tapsetroot}/tapset/
-%global tapsetdir %{tapsetdirttapset}/%{_build_cpu}
+%global tapsetdir %{tapsetdirttapset}/%{stapinstall}
 %endif
 
 # not-duplicated scriptlets for normal/debug packages
@@ -338,6 +359,7 @@ ext=.gz
 alternatives \\
   --install %{_bindir}/java java %{jrebindir -- %{?1}}/java $PRIORITY  --family %{name}.%{_arch} \\
   --slave %{_jvmdir}/jre jre %{_jvmdir}/%{sdkdir -- %{?1}} \\
+  --slave %{_bindir}/%{alt_java_name} %{alt_java_name} %{jrebindir -- %{?1}}/%{alt_java_name} \\
   --slave %{_bindir}/jjs jjs %{jrebindir -- %{?1}}/jjs \\
   --slave %{_bindir}/keytool keytool %{jrebindir -- %{?1}}/keytool \\
   --slave %{_bindir}/pack200 pack200 %{jrebindir -- %{?1}}/pack200 \\
@@ -346,6 +368,8 @@ alternatives \\
   --slave %{_bindir}/unpack200 unpack200 %{jrebindir -- %{?1}}/unpack200 \\
   --slave %{_mandir}/man1/java.1$ext java.1$ext \\
   %{_mandir}/man1/java-%{uniquesuffix -- %{?1}}.1$ext \\
+  --slave %{_mandir}/man1/%{alt_java_name}.1$ext %{alt_java_name}.1$ext \\
+  %{_mandir}/man1/%{alt_java_name}-%{uniquesuffix -- %{?1}}.1$ext \\
   --slave %{_mandir}/man1/jjs.1$ext jjs.1$ext \\
   %{_mandir}/man1/jjs-%{uniquesuffix -- %{?1}}.1$ext \\
   --slave %{_mandir}/man1/keytool.1$ext keytool.1$ext \\
@@ -431,6 +455,7 @@ alternatives \\
   --slave %{_bindir}/jdb jdb %{sdkbindir -- %{?1}}/jdb \\
   --slave %{_bindir}/jdeps jdeps %{sdkbindir -- %{?1}}/jdeps \\
   --slave %{_bindir}/jdeprscan jdeprscan %{sdkbindir -- %{?1}}/jdeprscan \\
+  --slave %{_bindir}/jfr jfr %{sdkbindir -- %{?1}}/jfr \\
   --slave %{_bindir}/jimage jimage %{sdkbindir -- %{?1}}/jimage \\
   --slave %{_bindir}/jinfo jinfo %{sdkbindir -- %{?1}}/jinfo \\
   --slave %{_bindir}/jmap jmap %{sdkbindir -- %{?1}}/jmap \\
@@ -557,6 +582,7 @@ exit 0
 
 %define files_jre_headless() %{expand:
 %license %{_jvmdir}/%{sdkdir -- %{?1}}/legal
+%doc %{_defaultdocdir}/%{uniquejavadocdir -- %{?1}}/NEWS
 %dir %{_sysconfdir}/.java/.systemPrefs
 %dir %{_sysconfdir}/.java
 %dir %{_jvmdir}/%{sdkdir -- %{?1}}
@@ -564,6 +590,7 @@ exit 0
 %{_jvmdir}/%{jrelnk -- %{?1}}
 %dir %{_jvmdir}/%{sdkdir -- %{?1}}/bin
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/java
+%{_jvmdir}/%{sdkdir -- %{?1}}/bin/%{alt_java_name}
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/jjs
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/keytool
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/pack200
@@ -625,6 +652,7 @@ exit 0
 %{_jvmdir}/%{sdkdir -- %{?1}}/lib/jfr/default.jfc
 %{_jvmdir}/%{sdkdir -- %{?1}}/lib/jfr/profile.jfc
 %{_mandir}/man1/java-%{uniquesuffix -- %{?1}}.1*
+%{_mandir}/man1/%{alt_java_name}-%{uniquesuffix -- %{?1}}.1*
 %{_mandir}/man1/jjs-%{uniquesuffix -- %{?1}}.1*
 %{_mandir}/man1/keytool-%{uniquesuffix -- %{?1}}.1*
 %{_mandir}/man1/pack200-%{uniquesuffix -- %{?1}}.1*
@@ -673,6 +701,7 @@ exit 0
 %if %is_system_jdk
 %if %{is_release_build -- %{?1}}
 %ghost %{_bindir}/java
+%ghost %{_bindir}/%{alt_java_name}
 %ghost %{_jvmdir}/jre
 # https://bugzilla.redhat.com/show_bug.cgi?id=1312019
 %ghost %{_bindir}/jjs
@@ -700,6 +729,7 @@ exit 0
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/jdb
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/jdeps
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/jdeprscan
+%{_jvmdir}/%{sdkdir -- %{?1}}/bin/jfr
 %{_jvmdir}/%{sdkdir -- %{?1}}/bin/jimage
 # Zero and S390x don't have SA
 %ifarch %{jit_arches}
@@ -756,6 +786,7 @@ exit 0
 %if %{is_release_build -- %{?1}}
 %ghost %{_bindir}/javac
 %ghost %{_jvmdir}/java
+%ghost %{_jvmdir}/%{alt_java_name}
 %ghost %{_bindir}/jaotc
 %ghost %{_bindir}/jlink
 %ghost %{_bindir}/jmod
@@ -800,6 +831,25 @@ exit 0
 %define files_src() %{expand:
 %license %{_jvmdir}/%{sdkdir -- %{?1}}/legal
 %{_jvmdir}/%{sdkdir -- %{?1}}/lib/src.zip
+}
+
+%define files_static_libs() %{expand:
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libj2pkcs11.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libj2pcsc.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libnio.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libprefs.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libjava.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libjli.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libnet.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libjimage.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libjaas.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libfdlibm.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libj2gss.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libsunec.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libjsig.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libextnet.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libverify.a
+%{_jvmdir}/%{sdkdir -- %{?1}}/lib/libzip.a
 }
 
 %define files_javadoc() %{expand:
@@ -857,7 +907,9 @@ Requires: ca-certificates
 # Require javapackages-filesystem for ownership of /usr/lib/jvm/ and macros
 Requires: javapackages-filesystem
 # Require zone-info data provided by tzdata-java sub-package
-Requires: tzdata-java >= 2015d
+# 2020a required as of JDK-8243541 in 11.0.8+4
+Requires: tzdata-java >= 2020a
+# for support of kernel stream control
 # libsctp.so.1 is being `dlopen`ed on demand
 Requires: lksctp-tools%{?_isa}
 # tool to copy jdk's configs - should be Recommends only, but then only dnf/yum enforce it,
@@ -919,6 +971,11 @@ Provides: java-sdk%{?1} = %{epoch}:%{version}-%{release}
 %endif
 }
 
+%define java_static_libs_rpo() %{expand:
+Requires:         %{name}-devel%{?1}%{?_isa} = %{epoch}:%{version}-%{release}
+OrderWithRequires: %{name}-headless%{?1}%{?_isa} = %{epoch}:%{version}-%{release}
+}
+
 %define java_jmods_rpo() %{expand:
 # Requires devel package
 # as jmods are bytecode, they should be OK without any _isa
@@ -978,7 +1035,7 @@ Provides: java-src%{?1} = %{epoch}:%{version}-%{release}
 
 Name:    java-%{javaver}-%{origin}
 Version: %{newjavaver}.%{buildver}
-Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}.redsleeve
+Release: %{?eaprefix}%{rpmrelease}%{?extraver}%{?dist}
 # java-1.5.0-ibm from jpackage.org set Epoch to 1 for unknown reasons
 # and this change was brought into RHEL-4. java-1.5.0-ibm packages
 # also included the epoch in their virtual provides. This created a
@@ -1011,13 +1068,20 @@ License:  ASL 1.1 and ASL 2.0 and BSD and BSD with advertising and GPL+ and GPLv
 URL:      http://openjdk.java.net/
 
 
-# to regenerate source0 (jdk) and source8 (jdk's taspets) run update_package.sh
+# to regenerate source0 (jdk) run update_package.sh
 # update_package.sh contains hard-coded repos, revisions, tags, and projects to regenerate the source archives
-Source0: shenandoah-jdk%{majorver}-shenandoah-jdk-%{newjavaver}+%{buildver}%{?tagsuffix:-%{tagsuffix}}.tar.xz
-Source8: systemtap_3.2_tapsets_hg-icedtea8-9d464368e06d.tar.xz
+Source0: shenandoah-jdk%{majorver}-shenandoah-jdk-%{newjavaver}+%{buildver}%{?tagsuffix:-%{tagsuffix}}-4curve.tar.xz
+
+# Use 'icedtea_sync.sh' to update the following
+# They are based on code contained in the IcedTea project (3.x).
+# Systemtap tapsets. Zipped up to keep it small.
+Source8: tapsets-icedtea-%{icedteaver}.tar.xz
 
 # Desktop files. Adapted from IcedTea
 Source9: jconsole.desktop.in
+
+# Release notes
+Source10: NEWS
 
 # nss configuration file
 Source11: nss.cfg.in
@@ -1078,18 +1142,6 @@ Patch8: s390-8214206_fix.patch
 
 #############################################
 #
-# Patches appearing in 11.0.6
-#
-# This section includes patches which are present
-# in the listed OpenJDK 8u release and should be
-# able to be removed once that release is out
-# and used by this RPM.
-#############################################
-# JDK-8230923: SunJSSE is not properly initialized in FIPS mode from a configuration file
-Patch11: jdk8230923-fips_mode_initialisation_failure.patch
-
-#############################################
-#
 # JDK 9+ only patches
 #
 #############################################
@@ -1130,7 +1182,8 @@ BuildRequires: java-%{buildjdkver}-openjdk-devel
 %ifnarch %{jit_arches}
 BuildRequires: libffi-devel
 %endif
-BuildRequires: tzdata-java >= 2015d
+# 2020a required as of JDK-8243541 in 11.0.8+4
+BuildRequires: tzdata-java >= 2020a
 # Earlier versions have a bug in tree vectorization on PPC
 BuildRequires: gcc >= 4.8.3-8
 
@@ -1199,6 +1252,27 @@ Group:   Development/Tools
 
 %description devel-slowdebug
 The %{origin_nice} development tools %{majorver}.
+%{debug_warning}
+%endif
+
+%if %{include_normal_build}
+%package static-libs
+Summary: %{origin_nice} libraries for static linking %{majorver}
+
+%{java_static_libs_rpo %{nil}}
+
+%description static-libs
+The %{origin_nice} libraries for static linking %{majorver}.
+%endif
+
+%if %{include_debug_build}
+%package static-libs-slowdebug
+Summary: %{origin_nice} libraries for static linking %{majorver} %{debug_on}
+
+%{java_static_libs_rpo -- %{debug_suffix_unquoted}}
+
+%description static-libs-slowdebug
+The %{origin_nice} libraries for static linking %{majorver}.
 %{debug_warning}
 %endif
 
@@ -1299,6 +1373,14 @@ The %{origin_nice} %{majorver} API documentation compressed in single archive.
 %endif
 
 %prep
+
+# Using the echo macro breaks rpmdev-bumpspec, as it parses the first line of stdout :-(
+%if 0%{?stapinstall:1}
+  echo "CPU: %{_target_cpu}, arch install directory: %{archinstall}, SystemTap install directory: %{stapinstall}"
+%else
+  %{error:Unrecognised architecture %{_target_cpu}}
+%endif
+
 if [ %{include_normal_build} -eq 0 -o  %{include_normal_build} -eq 1 ] ; then
   echo "include_normal_build is %{include_normal_build}"
 else
@@ -1335,7 +1417,6 @@ pushd %{top_level_dir_name}
 %patch6 -p1
 %patch7 -p1
 %patch8 -p1
-%patch11 -p1
 popd # openjdk
 
 %patch1000
@@ -1351,7 +1432,7 @@ cp -r tapset tapset%{debug_suffix}
 
 for suffix in %{build_loop} ; do
   for file in "tapset"$suffix/*.in; do
-    OUTPUT_FILE=`echo $file | sed -e "s:\.stp\.in$:%{version}-%{release}.%{_arch}.stp:g"`
+    OUTPUT_FILE=`echo $file | sed -e "s:\.stp\.in$:-%{version}-%{release}.%{_arch}.stp:g"`
     sed -e "s:@ABS_SERVER_LIBJVM_SO@:%{_jvmdir}/%{sdkdir -- $suffix}/lib/server/libjvm.so:g" $file > $file.1
 # TODO find out which architectures other than i686 have a client vm
 %ifarch %{ix86}
@@ -1368,16 +1449,18 @@ done
 %endif
 
 # Prepare desktop files
+# The _X_ syntax indicates variables that are replaced by make upstream
+# The @X@ syntax indicates variables that are replaced by configure upstream
 for suffix in %{build_loop} ; do
 for file in %{SOURCE9}; do
     FILE=`basename $file | sed -e s:\.in$::g`
     EXT="${FILE##*.}"
     NAME="${FILE%.*}"
     OUTPUT_FILE=$NAME$suffix.$EXT
-    sed    -e  "s:@JAVA_HOME@:%{sdkbindir -- $suffix}:g" $file > $OUTPUT_FILE
-    sed -i -e  "s:@JRE_HOME@:%{jrebindir -- $suffix}:g" $OUTPUT_FILE
-    sed -i -e  "s:@ARCH@:%{version}-%{release}.%{_arch}$suffix:g" $OUTPUT_FILE
-    sed -i -e  "s:@JAVA_MAJOR_VERSION@:%{majorver}:g" $OUTPUT_FILE
+    sed    -e  "s:_SDKBINDIR_:%{sdkbindir -- $suffix}:g" $file > $OUTPUT_FILE
+    sed -i -e  "s:@target_cpu@:%{_arch}:g" $OUTPUT_FILE
+    sed -i -e  "s:@OPENJDK_VER@:%{version}-%{release}.%{_arch}$suffix:g" $OUTPUT_FILE
+    sed -i -e  "s:@JAVA_VER@:%{javaver}:g" $OUTPUT_FILE
     sed -i -e  "s:@JAVA_VENDOR@:%{origin}:g" $OUTPUT_FILE
 done
 done
@@ -1415,7 +1498,8 @@ EXTRA_CPP_FLAGS="%ourcppflags -std=gnu++98 -fno-delete-null-pointer-checks -fno-
 # fix rpmlint warnings
 EXTRA_CFLAGS="$EXTRA_CFLAGS -fno-strict-aliasing"
 %endif
-export EXTRA_CFLAGS
+EXTRA_ASFLAGS="${EXTRA_CFLAGS} -Wa,--generate-missing-build-notes=yes"
+export EXTRA_CFLAGS EXTRA_ASFLAGS
 
 for suffix in %{build_loop} ; do
 if [ "x$suffix" = "x" ] ; then
@@ -1454,6 +1538,7 @@ bash ../configure \
     --with-stdc++lib=dynamic \
     --with-extra-cxxflags="$EXTRA_CPP_FLAGS" \
     --with-extra-cflags="$EXTRA_CFLAGS" \
+    --with-extra-asflags="$EXTRA_ASFLAGS" \
     --with-extra-ldflags="%{ourldflags}" \
     --with-num-cores="$NUM_PROC" \
     --disable-javac-server \
@@ -1500,6 +1585,14 @@ install -m 644 nss.fips.cfg $JAVA_HOME/conf/security/
 rm $JAVA_HOME/lib/tzdb.dat
 ln -s %{_datadir}/javazi-1.8/tzdb.dat $JAVA_HOME/lib/tzdb.dat
 
+# Create fake alt-java as a placeholder for future alt-java
+pushd ${JAVA_HOME}
+cp -a bin/java bin/%{alt_java_name}
+# add alt-java man page
+echo "Hardened java binary recommended for launching untrusted code from the Web e.g. javaws" > man/man1/%{alt_java_name}.1
+cat man/man1/java.1 >> man/man1/%{alt_java_name}.1
+popd
+
 # build cycles
 done
 
@@ -1522,6 +1615,11 @@ $JAVA_HOME/bin/java --add-opens java.base/javax.crypto=ALL-UNNAMED TestCryptoLev
 # Check ECC is working
 $JAVA_HOME/bin/javac -d . %{SOURCE14}
 $JAVA_HOME/bin/java $(echo $(basename %{SOURCE14})|sed "s|\.java||")
+
+# Check debug symbols in static libraries (smoke test)
+export STATIC_LIBS_HOME=$(pwd)/%{buildoutputdir -- $suffix}/images/%{static_libs_image}
+readelf --debug-dump $STATIC_LIBS_HOME/lib/libfdlibm.a | grep w_remainder.c
+readelf --debug-dump $STATIC_LIBS_HOME/lib/libfdlibm.a | grep e_remainder.c
 
 # Check debug symbols are present and can identify code
 find "$JAVA_HOME" -iname '*.so' -print0 | while read -d $'\0' lib
@@ -1641,7 +1739,6 @@ pushd %{buildoutputdir $suffix}/images/%{jdkimage}
     ln -sf %{sdkdir -- $suffix} %{jrelnk -- $suffix}
   popd
 
-
   # Install man pages
   install -d -m 755 $RPM_BUILD_ROOT%{_mandir}/man1
   for manpage in man/man1/*
@@ -1656,6 +1753,9 @@ pushd %{buildoutputdir $suffix}/images/%{jdkimage}
   rm -rf $RPM_BUILD_ROOT%{_jvmdir}/%{sdkdir -- $suffix}/man
 
 popd
+# Install static libs artefacts
+cp -a %{buildoutputdir -- $suffix}/images/%{static_libs_image}/lib/*.a \
+  $RPM_BUILD_ROOT%{_jvmdir}/%{sdkdir -- $suffix}/lib
 
 
 if ! echo $suffix | grep -q "debug" ; then
@@ -1664,6 +1764,11 @@ if ! echo $suffix | grep -q "debug" ; then
   cp -a %{buildoutputdir $suffix}/images/docs $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir $suffix}
   cp -a %{buildoutputdir -- $suffix}/bundles/jdk-%{newjavaver}%{ea_designator_zip}+%{buildver}%{lts_designator_zip}-docs.zip $RPM_BUILD_ROOT%{_javadocdir}/%{uniquejavadocdir -- $suffix}.zip
 fi
+
+# Install release notes
+commondocdir=${RPM_BUILD_ROOT}%{_defaultdocdir}/%{uniquejavadocdir $suffix}
+install -d -m 755 ${commondocdir}
+cp -a %{SOURCE10} ${commondocdir}
 
 # Install icons and menu entries
 for s in 16 24 32 48 ; do
@@ -1834,6 +1939,9 @@ require "copy_jdk_configs.lua"
 %files devel
 %{files_devel %{nil}}
 
+%files static-libs
+%{files_static_libs %{nil}}
+
 %files jmods
 %{files_jmods %{nil}}
 
@@ -1864,6 +1972,9 @@ require "copy_jdk_configs.lua"
 %files devel-slowdebug
 %{files_devel -- %{debug_suffix_unquoted}}
 
+%files static-libs-slowdebug
+%{files_static_libs -- %{debug_suffix_unquoted}}
+
 %files jmods-slowdebug
 %{files_jmods -- %{debug_suffix_unquoted}}
 
@@ -1876,8 +1987,182 @@ require "copy_jdk_configs.lua"
 %endif
 
 %changelog
-* Sun Nov 17 2019 Jacco Ligthart <jacco@redsleeve.org> - 1:11.0.5.10-2.redsleeve
-- removed %{arm} from jit_arches
+* Sat Jul 11 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.10-0
+- Update to shenandoah-jdk-11.0.8+10 (GA)
+- Switch to GA mode for final release.
+- Update release notes with last minute fix (JDK-8248505).
+- This tarball is embargoed until 2020-07-14 @ 1pm PT.
+- Resolves: rhbz#1838811
+
+* Fri Jul 10 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.9-0.0.ea
+- Update to shenandoah-jdk-11.0.8+9 (EA)
+- Update release notes for 11.0.8 release.
+- This tarball is embargoed until 2020-07-14 @ 1pm PT.
+- Resolves: rhbz#1838811
+
+* Tue Jun 30 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.8-0.0.ea
+- Update to shenandoah-jdk-11.0.8+8 (EA)
+- Resolves: rhbz#1838811
+
+* Wed Jun 24 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.7-0.1.ea
+- java-11-openjdk doesn't have a JRE tree, so don't try and copy alt-java there...
+- Resolves: rhbz#1838811
+
+* Wed Jun 24 2020 Jiri Vanek <jvanek@redhat.com> - 1:11.0.8.7-0.1.ea
+- Create a copy of java as alt-java with alternatives and man pages
+- Resolves: rhbz#1838811
+
+* Tue Jun 23 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.7-0.0.ea
+- Update to shenandoah-jdk-11.0.8+7 (EA)
+- Resolves: rhbz#1838811
+
+* Thu Jun 18 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.6-0.0.ea
+- Update to shenandoah-jdk-11.0.8+6 (EA)
+- Resolves: rhbz#1838811
+
+* Tue Jun 09 2020 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.8.5-0.1.ea
+- Disable stripping of debug symbols for static libraries part of
+  the -static-libs sub-package.
+- Resolves: rhbz#1848701
+
+* Sun Jun 07 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.5-0.0.ea
+- Update to shenandoah-jdk-11.0.8+5 (EA)
+- Resolves: rhbz#1838811
+
+* Mon May 25 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.4-0.0.ea
+- Update to shenandoah-jdk-11.0.8+4 (EA)
+- Require tzdata 2020a due to resource changes in JDK-8243541
+- Resolves: rhbz#1838811
+
+* Mon May 25 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.3-0.0.ea
+- Update to shenandoah-jdk-11.0.8+3 (EA)
+- Resolves: rhbz#1838811
+
+* Mon May 25 2020 Severin Gehwolf <sgehwolf@redhat.com> - 1:11.0.8.2-0.1.ea
+- Build static-libs-image and add resulting files via -static-libs
+  sub-package.
+- Resolves: rhbz#1848701
+
+* Mon May 18 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.2-0.0.ea
+- Update to shenandoah-jdk-11.0.8+2 (EA)
+- Resolves: rhbz#1838811
+
+* Sun May 10 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.8.1-0.0.ea
+- Update to shenandoah-jdk-11.0.8+1 (EA)
+- Switch to EA mode for 11.0.8 pre-release builds.
+- Drop JDK-8237396 & JDK-8228407 backports now applied upstream.
+- Resolves: rhbz#1838811
+
+* Wed Apr 22 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.10-2
+- Add JDK-8228407 backport to resolve crashes during verification.
+- Resolves: rhbz#1810557
+
+* Wed Apr 22 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.10-2
+- Amend release notes, removing issue actually fixed in 11.0.6.
+- Resolves: rhbz#1810557
+
+* Wed Apr 22 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.10-2
+- Add release notes.
+- Resolves: rhbz#1810557
+
+* Wed Apr 22 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.10-2
+- Make use of --with-extra-asflags introduced in jdk-11.0.6+1.
+- Resolves: rhbz#1810557
+
+* Sun Apr 19 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.10-1
+- Update to shenandoah-jdk-11.0.7+10 (GA)
+- Switch to GA mode for final release.
+- Resolves: rhbz#1810557
+
+* Sun Apr 19 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.9-0.1.ea
+- Update to shenandoah-jdk-11.0.7+9 (EA)
+- Resolves: rhbz#1810557
+
+* Sun Apr 19 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.8-0.1.ea
+- Update to shenandoah-jdk-11.0.7+8 (EA)
+- Resolves: rhbz#1810557
+
+* Sat Apr 18 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.7-0.1.ea
+- Update to shenandoah-jdk-11.0.7+7 (EA)
+- Resolves: rhbz#1810557
+
+* Sat Apr 18 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.6-0.1.ea
+- Update to shenandoah-jdk-11.0.7+6 (EA)
+- Resolves: rhbz#1810557
+
+* Thu Apr 16 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.5-0.1.ea
+- Update to shenandoah-jdk-11.0.7+5 (EA)
+- Resolves: rhbz#1810557
+
+* Sat Apr 11 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.4-0.1.ea
+- Update to shenandoah-jdk-11.0.7+4 (EA)
+- Resolves: rhbz#1810557
+
+* Wed Apr 08 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.3-0.1.ea
+- Update to shenandoah-jdk-11.0.7+3 (EA)
+- Resolves: rhbz#1810557
+
+* Mon Apr 06 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.2-0.1.ea
+- Update to shenandoah-jdk-11.0.7+2 (EA)
+- Resolves: rhbz#1810557
+
+* Wed Apr 01 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.7.1-0.1.ea
+- Update to shenandoah-jdk-11.0.7+1 (EA)
+- Switch to EA mode for 11.0.7 pre-release builds.
+- Drop JDK-8236039 backport now applied upstream.
+- Resolves: rhbz#1810557
+
+* Fri Mar 27 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.6.10-4
+- Need to support noarch for creating source RPMs for non-scratch builds.
+- Resolves: rhbz#1737115
+
+* Thu Mar 19 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.6.10-4
+- Introduce stapinstall variable to set SystemTap arch directory correctly (e.g. arm64 on aarch64)
+- Resolves: rhbz#1737115
+
+* Sun Feb 23 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.6.10-3
+- Sync SystemTap & desktop files with upstream IcedTea release 3.15.0
+- Resolves: rhbz#1737115
+
+* Sun Feb 23 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.6.10-3
+- Sync SystemTap & desktop files with upstream IcedTea release 3.11.0 using new script
+- Resolves: rhbz#1737115
+
+* Sun Feb 16 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.6.10-2
+- Add JDK-8237396 backport to resolve Shenandoah TCK breakage in traversal mode.
+- Resolves: rhbz#1785753
+
+* Sat Jan 11 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.6.10-1
+- Update to shenandoah-jdk-11.0.6+10 (GA)
+- Switch to GA mode for final release.
+- Add JDK-8236039 backport to resolve OpenShift blocker
+- Resolves: rhbz#1785753
+
+* Thu Jan 09 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.6.1-0.1.ea
+- Update to shenandoah-jdk-11.0.6+1 (EA)
+- Switch to EA mode for 11.0.6 pre-release builds.
+- Add support for jfr binary.
+- Drop JDK-8230923 now applied upstream.
+- Resolves: rhbz#1785753
+
+* Wed Jan 08 2020 Andrew Hughes <gnu.andrew@redhat.com> - 1:11.0.5.10-6
+- Update generate_source_tarball.sh script to use the PR3751 patch and retain the secp256k1 curve.
+- Regenerate source tarball using the updated script and add the -'4curve' suffix.
+- Resolves: rhbz#1746875
+
+* Thu Jan 02 2020 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.5.10-5
+- Revert SSBD removal for now, until appropriate messaging has been decided.
+- Resolves: rhbz#1784116
+
+* Fri Dec 27 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.5.10-4
+- Remove CVE-2018-3639 mitigation due to performance regression and
+    OpenJDK position on speculative execution vulnerabilities.
+    https://mail.openjdk.java.net/pipermail/vuln-announce/2019-July/000002.html
+- Resolves: rhbz#1784116
+
+* Wed Nov 06 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.5.10-3
+- Bump release number for RHEL 8.2.0.
+- Resolves: rhbz#1753423
 
 * Fri Oct 25 2019 Andrew John Hughes <gnu.andrew@redhat.com> - 1:11.0.5.10-2
 - Disable FIPS mode support unless com.redhat.fips is set to "true".
@@ -2273,7 +2558,7 @@ require "copy_jdk_configs.lua"
 - renamed zip javadoc
 
 * Tue Apr 10 2018 Severin Gehwolf <sgehwolf@redhat.com> - 1:10.0.0.46-12
-- Enable basic EC ciphers test in %check.
+- Enable basic EC ciphers test in %%check.
 
 * Tue Apr 10 2018 Severin Gehwolf <sgehwolf@redhat.com> - 1:10.0.0.46-11
 - Port Martin Balao's JDK 9 patch for system NSS support to JDK 10.
