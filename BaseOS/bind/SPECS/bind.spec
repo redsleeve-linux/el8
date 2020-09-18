@@ -63,7 +63,7 @@ Summary:  The Berkeley Internet Name Domain (BIND) DNS (Domain Name System) serv
 Name:     bind
 License:  MPLv2.0
 Version:  9.11.13
-Release:  3%{?PATCHVER:.%{PATCHVER}}%{?PREVER:.%{PREVER}}%{?dist}.redsleeve
+Release:  6%{?PATCHVER:.%{PATCHVER}}%{?PREVER:.%{PREVER}}%{?dist}.1
 Epoch:    32
 Url:      http://www.isc.org/products/BIND/
 #
@@ -155,6 +155,11 @@ Patch177:bind-9.11-serve-stale.patch
 Patch178:bind-9.11-dhcp-time-monotonic.patch
 Patch179:bind-9.11-rh1790879.patch
 Patch180:bind-9.11.13-rwlock.patch
+Patch181:bind-9.11.13-CVE-2020-8617.patch
+Patch182:bind-9.11.13-CVE-2020-8616.patch
+Patch183:bind-9.11-CVE-2020-8616-test.patch
+Patch184:bind-9.11-CVE-2020-8617-test.patch
+Patch185:bind-9.11-rh1865785.patch
 
 # SDB patches
 Patch11: bind-9.3.2b2-sdbsrc.patch
@@ -166,9 +171,6 @@ Patch135:bind-9.11-export-isc-config.patch
 # needs inpection
 Patch17: bind-9.3.2b1-fix_sdb_ldap.patch
 Patch18: bind-9.11-zone2ldap.patch
-
-# redsleeve
-Patch1000: bind-9.11-atomic-test.patch
 
 Requires(post):   systemd
 Requires(preun):  systemd
@@ -512,6 +514,11 @@ are used for building ISC DHCP.
 %patch178 -p1 -b .time-monotonic
 %patch179 -p1 -b .rh1790879
 %patch180 -p1 -b .rwlock
+%patch181 -p1 -b .CVE-2020-8617
+%patch182 -p1 -b .CVE-2020-8616
+%patch183 -p1 -b .CVE-2020-8616-test
+%patch184 -p1 -b .CVE-2020-8616-test
+%patch185 -p1 -b .rh1865785
 
 mkdir lib/dns/tests/testdata/dstrandom
 cp -a %{SOURCE50} lib/dns/tests/testdata/dstrandom/random.data
@@ -557,8 +564,6 @@ cp -fp contrib/sdb/sqlite/zone2sqlite.c bin/sdb_tools
 
 %patch133 -p1 -b .rh640538
 %patch134 -p1 -b .rh669163
-
-%patch1000 -p1 -b .atomic_config
 
 # Sparc and s390 arches need to use -fPIE
 %ifarch sparcv9 sparc64 s390 s390x
@@ -1491,8 +1496,17 @@ rm -rf ${RPM_BUILD_ROOT}
 
 
 %changelog
-* Sat Jun 20 2020 Jacco Ligthart <jacco@redsleeve.org> - 32:9.11.13-3.redsleeve
-- changed configure to get the desired atomic status
+* Tue Aug 04 2020 Tomas Korbar <tkorbar@redhat.com> - 32:9.11.13-6.1
+- Validate configuration files with CIDRs host bits set (#1865785)
+
+* Fri May 22 2020 Petr Menšík <pemensik@redhat.com> - 32:9.11.13-5.1
+- Add CVE tests to codebase
+
+* Fri May 15 2020 Petr Menšík <pemensik@redhat.com> - 32:9.11.13-5
+- Limit number of queries triggered by a request (CVE-2020-8616)
+
+* Fri May 15 2020 Petr Menšík <pemensik@redhat.com> - 32:9.11.13-4
+- Fix invalid tsig request (CVE-2020-8617)
 
 * Thu Feb 27 2020 Miroslav Lichvar <mlichvar@redhat.com> - 32:9.11.13-3
 - Fix rwlock to be thread-safe (#1740511)
