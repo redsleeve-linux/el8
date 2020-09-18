@@ -1,0 +1,799 @@
+From 5a465424f5249ceaf0547ab90361a16eb08f7a2b Mon Sep 17 00:00:00 2001
+From: Evan Hunt <each@isc.org>
+Date: Thu, 28 Sep 2017 10:09:22 -0700
+Subject: [PATCH] completed and corrected the crypto-random change
+
+4724.	[func]		By default, BIND now uses the random number
+			functions provided by the crypto library (i.e.,
+			OpenSSL or a PKCS#11 provider) as a source of
+			randomness rather than /dev/random.  This is
+			suitable for virtual machine environments
+			which have limited entropy pools and lack
+			hardware random number generators.
+
+			This can be overridden by specifying another
+			entropy source via the "random-device" option
+			in named.conf, or via the -r command line option;
+			however, for functions requiring full cryptographic
+			strength, such as DNSSEC key generation, this
+			cannot be overridden. In particular, the -r
+			command line option no longer has any effect on
+			dnssec-keygen.
+
+			This can be disabled by building with
+			"configure --disable-crypto-rand".
+			[RT #31459] [RT #46047]
+---
+ bin/confgen/keygen.c                     | 12 +++---
+ bin/dnssec/dnssec-keygen.docbook         | 24 +++++++----
+ bin/dnssec/dnssectool.c                  | 12 +++---
+ bin/named/client.c                       |  3 +-
+ bin/named/config.c                       |  4 +-
+ bin/named/controlconf.c                  | 19 +++++---
+ bin/named/include/named/server.h         |  2 +
+ bin/named/interfacemgr.c                 |  1 +
+ bin/named/query.c                        |  1 +
+ bin/named/server.c                       | 52 ++++++++++++++--------
+ bin/nsupdate/nsupdate.c                  |  4 +-
+ bin/tests/system/pipelined/pipequeries.c |  4 +-
+ bin/tests/system/tkey/keycreate.c        |  4 +-
+ bin/tests/system/tkey/keydelete.c        |  5 +--
+ doc/arm/Bv9ARM-book.xml                  | 55 +++++++++++++++++-------
+ doc/arm/notes-rh-changes.xml             | 43 ++++++++++++++++++
+ doc/arm/notes.xml                        |  1 +
+ lib/dns/dst_api.c                        |  4 +-
+ lib/dns/include/dst/dst.h                | 14 +++++-
+ lib/dns/openssl_link.c                   |  3 +-
+ lib/isc/include/isc/entropy.h            | 50 +++++++++++++++------
+ lib/isc/include/isc/random.h             | 28 +++++++-----
+ lib/isccfg/namedconf.c                   |  2 +-
+ 23 files changed, 241 insertions(+), 106 deletions(-)
+ create mode 100644 doc/arm/notes-rh-changes.xml
+
+diff --git a/bin/confgen/keygen.c b/bin/confgen/keygen.c
+index 295e16f..0f79aa8 100644
+--- a/bin/confgen/keygen.c
++++ b/bin/confgen/keygen.c
+@@ -161,17 +161,15 @@ generate_key(isc_mem_t *mctx, const char *randomfile, dns_secalg_t alg,
+ 
+ 	DO("create entropy context", isc_entropy_create(mctx, &ectx));
+ 
+-	if (randomfile != NULL && strcmp(randomfile, "keyboard") == 0) {
+-		randomfile = NULL;
+-		open_keyboard = ISC_ENTROPY_KEYBOARDYES;
+-	}
+ #ifdef ISC_PLATFORM_CRYPTORANDOM
+-	if (randomfile != NULL &&
+-	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
+-		randomfile = NULL;
++	if (randomfile == NULL) {
+ 		isc_entropy_usehook(ectx, true);
+ 	}
+ #endif
++	if (randomfile != NULL && strcmp(randomfile, "keyboard") == 0) {
++		randomfile = NULL;
++		open_keyboard = ISC_ENTROPY_KEYBOARDYES;
++	}
+ 	DO("start entropy source", isc_entropy_usebestsource(ectx,
+ 							     &entropy_source,
+ 							     randomfile,
+diff --git a/bin/dnssec/dnssec-keygen.docbook b/bin/dnssec/dnssec-keygen.docbook
+index 0ae6b41..4562430 100644
+--- a/bin/dnssec/dnssec-keygen.docbook
++++ b/bin/dnssec/dnssec-keygen.docbook
+@@ -348,15 +348,23 @@
+ 	<term>-r <replaceable class="parameter">randomdev</replaceable></term>
+ 	<listitem>
+ 	  <para>
+-	    Specifies the source of randomness.  If the operating
+-	    system does not provide a <filename>/dev/random</filename>
+-	    or equivalent device, the default source of randomness
+-	    is keyboard input.  <filename>randomdev</filename>
+-	    specifies
++	    Specifies a source of randomness.  Normally, when generating
++	    DNSSEC keys, this option has no effect; the random number
++	    generation function provided by the cryptographic library will
++	    be used.
++	  </para>
++	  <para>
++	    If that behavior is disabled at compile time, however,
++	    the specified file will be used as entropy source
++	    for key generation.  <filename>randomdev</filename> is
+ 	    the name of a character device or file containing random
+-	    data to be used instead of the default.  The special value
+-	    <filename>keyboard</filename> indicates that keyboard
+-	    input should be used.
++	    data to be used.  The special value <filename>keyboard</filename>
++	    indicates that keyboard input should be used.
++	  </para>
++	  <para>
++	    The default is <filename>/dev/random</filename> if the
++	    operating system provides it or an equivalent device;
++	    if not, the default source of randomness is keyboard input.
+ 	  </para>
+ 	</listitem>
+       </varlistentry>
+diff --git a/bin/dnssec/dnssectool.c b/bin/dnssec/dnssectool.c
+index 31a99e7..38c83ed 100644
+--- a/bin/dnssec/dnssectool.c
++++ b/bin/dnssec/dnssectool.c
+@@ -241,18 +241,16 @@ setup_entropy(isc_mem_t *mctx, const char *randomfile, isc_entropy_t **ectx) {
+ 		ISC_LIST_INIT(sources);
+ 	}
+ 
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	if (randomfile == NULL) {
++		isc_entropy_usehook(*ectx, true);
++	}
++#endif
+ 	if (randomfile != NULL && strcmp(randomfile, "keyboard") == 0) {
+ 		usekeyboard = ISC_ENTROPY_KEYBOARDYES;
+ 		randomfile = NULL;
+ 	}
+ 
+-#ifdef ISC_PLATFORM_CRYPTORANDOM
+-	if (randomfile != NULL &&
+-	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
+-		randomfile = NULL;
+-		isc_entropy_usehook(*ectx, true);
+-	}
+-#endif
+ 	result = isc_entropy_usebestsource(*ectx, &source, randomfile,
+ 					   usekeyboard);
+ 
+diff --git a/bin/named/client.c b/bin/named/client.c
+index 50fa2cd..524d9a3 100644
+--- a/bin/named/client.c
++++ b/bin/named/client.c
+@@ -1762,7 +1762,8 @@ ns_client_addopt(ns_client_t *client, dns_message_t *message,
+ 
+ 		isc_buffer_init(&buf, cookie, sizeof(cookie));
+ 		isc_stdtime_get(&now);
+-		isc_random_get(&nonce);
++		nonce = ((isc_rng_random(ns_g_server->rngctx) << 16) |
++			 isc_rng_random(ns_g_server->rngctx));
+ 
+ 		compute_cookie(client, now, nonce, ns_g_server->secret, &buf);
+ 
+diff --git a/bin/named/config.c b/bin/named/config.c
+index dbdff64..63da4b0 100644
+--- a/bin/named/config.c
++++ b/bin/named/config.c
+@@ -98,7 +98,9 @@ options {\n\
+ #	pid-file \"" NS_LOCALSTATEDIR "/run/named/named.pid\"; /* or /lwresd.pid */\n\
+ 	port 53;\n\
+ 	prefetch 2 9;\n"
+-#ifdef PATH_RANDOMDEV
++#if defined(ISC_PLATFORM_CRYPTORANDOM)
++"	random-device none;\n"
++#elif defined(PATH_RANDOMDEV)
+ "	random-device \"" PATH_RANDOMDEV "\";\n"
+ #endif
+ "	recursing-file \"named.recursing\";\n\
+diff --git a/bin/named/controlconf.c b/bin/named/controlconf.c
+index d955c2f..40621f2 100644
+--- a/bin/named/controlconf.c
++++ b/bin/named/controlconf.c
+@@ -325,9 +325,10 @@ log_invalid(isccc_ccmsg_t *ccmsg, isc_result_t result) {
+ 
+ static void
+ control_recvmessage(isc_task_t *task, isc_event_t *event) {
+-	controlconnection_t *conn;
+-	controllistener_t *listener;
+-	controlkey_t *key;
++	controlconnection_t *conn = NULL;
++	controllistener_t *listener = NULL;
++	ns_server_t *server = NULL;
++	controlkey_t *key = NULL;
+ 	isccc_sexpr_t *request = NULL;
+ 	isccc_sexpr_t *response = NULL;
+ 	uint32_t algorithm;
+@@ -338,16 +339,17 @@ control_recvmessage(isc_task_t *task, isc_event_t *event) {
+ 	isc_buffer_t *text;
+ 	isc_result_t result;
+ 	isc_result_t eresult;
+-	isccc_sexpr_t *_ctrl;
++	isccc_sexpr_t *_ctrl = NULL;
+ 	isccc_time_t sent;
+ 	isccc_time_t exp;
+ 	uint32_t nonce;
+-	isccc_sexpr_t *data;
++	isccc_sexpr_t *data = NULL;
+ 
+ 	REQUIRE(event->ev_type == ISCCC_EVENT_CCMSG);
+ 
+ 	conn = event->ev_arg;
+ 	listener = conn->listener;
++	server = listener->controls->server;
+ 	algorithm = DST_ALG_UNKNOWN;
+ 	secret.rstart = NULL;
+ 	text = NULL;
+@@ -458,8 +460,11 @@ control_recvmessage(isc_task_t *task, isc_event_t *event) {
+ 	 * Establish nonce.
+ 	 */
+ 	if (conn->nonce == 0) {
+-		while (conn->nonce == 0)
+-			isc_random_get(&conn->nonce);
++		while (conn->nonce == 0) {
++			uint16_t r1 = isc_rng_random(server->rngctx);
++			uint16_t r2 = isc_rng_random(server->rngctx);
++			conn->nonce = (r1 << 16) | r2;
++		}
+ 		eresult = ISC_R_SUCCESS;
+ 	} else
+ 		eresult = ns_control_docommand(request, listener->readonly, &text);
+diff --git a/bin/named/include/named/server.h b/bin/named/include/named/server.h
+index 7ee8f66..8982d26 100644
+--- a/bin/named/include/named/server.h
++++ b/bin/named/include/named/server.h
+@@ -20,6 +20,7 @@
+ #include <isc/log.h>
+ #include <isc/magic.h>
+ #include <isc/quota.h>
++#include <isc/random.h>
+ #include <isc/sockaddr.h>
+ #include <isc/types.h>
+ #include <isc/xml.h>
+@@ -134,6 +135,7 @@ struct ns_server {
+ 	char *			lockfile;
+ 
+ 	uint16_t		transfer_tcp_message_size;
++	isc_rng_t *		rngctx;
+ };
+ 
+ struct ns_altsecret {
+diff --git a/bin/named/interfacemgr.c b/bin/named/interfacemgr.c
+index 9dea7c1..272d300 100644
+--- a/bin/named/interfacemgr.c
++++ b/bin/named/interfacemgr.c
+@@ -17,6 +17,7 @@
+ 
+ #include <isc/interfaceiter.h>
+ #include <isc/os.h>
++#include <isc/random.h>
+ #include <isc/string.h>
+ #include <isc/task.h>
+ #include <isc/util.h>
+diff --git a/bin/named/query.c b/bin/named/query.c
+index c9e5469..0940714 100644
+--- a/bin/named/query.c
++++ b/bin/named/query.c
+@@ -19,6 +19,7 @@
+ #include <isc/hex.h>
+ #include <isc/mem.h>
+ #include <isc/print.h>
++#include <isc/random.h>
+ #include <isc/rwlock.h>
+ #include <isc/serial.h>
+ #include <isc/stats.h>
+diff --git a/bin/named/server.c b/bin/named/server.c
+index 36fc047..3c1eec0 100644
+--- a/bin/named/server.c
++++ b/bin/named/server.c
+@@ -8208,21 +8208,32 @@ load_configuration(const char *filename, ns_server_t *server,
+ 	 * Open the source of entropy.
+ 	 */
+ 	if (first_time) {
++		const char *randomdev = NULL;
++		int level = ISC_LOG_ERROR;
+ 		obj = NULL;
+ 		result = ns_config_get(maps, "random-device", &obj);
+-		if (result != ISC_R_SUCCESS) {
++		if (result == ISC_R_SUCCESS) {
++			if (!cfg_obj_isvoid(obj)) {
++				level = ISC_LOG_INFO;
++				randomdev = cfg_obj_asstring(obj);
++			}
++		}
++		if (randomdev == NULL) {
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++			isc_entropy_usehook(ns_g_entropy, true);
++#else
++			if ((obj != NULL) && !cfg_obj_isvoid(obj))
++				level = ISC_LOG_INFO;
+ 			isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL,
+-				      NS_LOGMODULE_SERVER, ISC_LOG_INFO,
++				      NS_LOGMODULE_SERVER, level,
+ 				      "no source of entropy found");
++			if ((obj == NULL) || cfg_obj_isvoid(obj)) {
++				CHECK(ISC_R_FAILURE);
++			}
++#endif
+ 		} else {
+-			const char *randomdev = cfg_obj_asstring(obj);
+-#ifdef ISC_PLATFORM_CRYPTORANDOM
+-			if (strcmp(randomdev, ISC_PLATFORM_CRYPTORANDOM) == 0)
+-				isc_entropy_usehook(ns_g_entropy, true);
+-#else
+-			int level = ISC_LOG_ERROR;
+ 			result = isc_entropy_createfilesource(ns_g_entropy,
+-							      randomdev);
++			                                      randomdev);
+ #ifdef PATH_RANDOMDEV
+ 			if (ns_g_fallbackentropy != NULL) {
+ 				level = ISC_LOG_INFO;
+@@ -8233,8 +8244,8 @@ load_configuration(const char *filename, ns_server_t *server,
+ 					      NS_LOGCATEGORY_GENERAL,
+ 					      NS_LOGMODULE_SERVER,
+ 					      level,
+-					      "could not open entropy source "
+-					      "%s: %s",
++					      "could not open "
++					      "entropy source %s: %s",
+ 					      randomdev,
+ 					      isc_result_totext(result));
+ 			}
+@@ -8254,7 +8265,6 @@ load_configuration(const char *filename, ns_server_t *server,
+ 				}
+ 				isc_entropy_detach(&ns_g_fallbackentropy);
+ 			}
+-#endif
+ #endif
+ 		}
+ 
+@@ -9022,6 +9032,7 @@ ns_server_create(isc_mem_t *mctx, ns_server_t **serverp) {
+ 	server->in_roothints = NULL;
+ 	server->blackholeacl = NULL;
+ 	server->keepresporder = NULL;
++	server->rngctx = NULL;
+ 
+ 	/* Must be first. */
+ 	CHECKFATAL(dst_lib_init2(ns_g_mctx, ns_g_entropy,
+@@ -9048,6 +9059,9 @@ ns_server_create(isc_mem_t *mctx, ns_server_t **serverp) {
+ 	CHECKFATAL(dns_tkeyctx_create(ns_g_mctx, ns_g_entropy,
+ 				      &server->tkeyctx),
+ 		   "creating TKEY context");
++	server->rngctx = NULL;
++	CHECKFATAL(isc_rng_create(ns_g_mctx, ns_g_entropy, &server->rngctx),
++	           "creating random numbers context");
+ 
+ 	/*
+ 	 * Setup the server task, which is responsible for coordinating
+@@ -9254,7 +9268,8 @@ ns_server_destroy(ns_server_t **serverp) {
+ 
+ 	if (server->zonemgr != NULL)
+ 		dns_zonemgr_detach(&server->zonemgr);
+-
++	if (server->rngctx != NULL)
++		isc_rng_detach(&server->rngctx);
+ 	if (server->tkeyctx != NULL)
+ 		dns_tkeyctx_destroy(&server->tkeyctx);
+ 
+@@ -13230,10 +13245,10 @@ newzone_cfgctx_destroy(void **cfgp) {
+ 
+ static isc_result_t
+ generate_salt(unsigned char *salt, size_t saltlen) {
+-	int i, n;
++	size_t i, n;
+ 	union {
+ 		unsigned char rnd[256];
+-		uint32_t rnd32[64];
++		uint16_t rnd16[128];
+ 	} rnd;
+ 	unsigned char text[512 + 1];
+ 	isc_region_t r;
+@@ -13243,9 +13258,10 @@ generate_salt(unsigned char *salt, size_t saltlen) {
+ 	if (saltlen > 256U)
+ 		return (ISC_R_RANGE);
+ 
+-	n = (int) (saltlen + sizeof(uint32_t) - 1) / sizeof(uint32_t);
+-	for (i = 0; i < n; i++)
+-		isc_random_get(&rnd.rnd32[i]);
++	n = (saltlen + sizeof(uint16_t) - 1) / sizeof(uint16_t);
++	for (i = 0; i < n; i++) {
++		rnd.rnd16[i] = isc_rng_random(ns_g_server->rngctx);
++	}
+ 
+ 	memmove(salt, rnd.rnd, saltlen);
+ 
+diff --git a/bin/nsupdate/nsupdate.c b/bin/nsupdate/nsupdate.c
+index 0286987..0376377 100644
+--- a/bin/nsupdate/nsupdate.c
++++ b/bin/nsupdate/nsupdate.c
+@@ -283,9 +283,7 @@ setup_entropy(isc_mem_t *mctx, const char *randomfile, isc_entropy_t **ectx) {
+ 	}
+ 
+ #ifdef ISC_PLATFORM_CRYPTORANDOM
+-	if (randomfile != NULL &&
+-	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
+-		randomfile = NULL;
++	if (randomfile == NULL) {
+ 		isc_entropy_usehook(*ectx, true);
+ 	}
+ #endif
+diff --git a/bin/tests/system/pipelined/pipequeries.c b/bin/tests/system/pipelined/pipequeries.c
+index f0a6ff2..55064f6 100644
+--- a/bin/tests/system/pipelined/pipequeries.c
++++ b/bin/tests/system/pipelined/pipequeries.c
+@@ -280,9 +280,7 @@ main(int argc, char *argv[]) {
+ 	ectx = NULL;
+ 	RUNCHECK(isc_entropy_create(mctx, &ectx));
+ #ifdef ISC_PLATFORM_CRYPTORANDOM
+-	if (randomfile != NULL &&
+-	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
+-		randomfile = NULL;
++	if (randomfile == NULL) {
+ 		isc_entropy_usehook(ectx, true);
+ 	}
+ #endif
+diff --git a/bin/tests/system/tkey/keycreate.c b/bin/tests/system/tkey/keycreate.c
+index fe8698e..937fcc3 100644
+--- a/bin/tests/system/tkey/keycreate.c
++++ b/bin/tests/system/tkey/keycreate.c
+@@ -255,9 +255,7 @@ main(int argc, char *argv[]) {
+ 	ectx = NULL;
+ 	RUNCHECK(isc_entropy_create(mctx, &ectx));
+ #ifdef ISC_PLATFORM_CRYPTORANDOM
+-	if (randomfile != NULL &&
+-	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
+-		randomfile = NULL;
++	if (randomfile == NULL) {
+ 		isc_entropy_usehook(ectx, true);
+ 	}
+ #endif
+diff --git a/bin/tests/system/tkey/keydelete.c b/bin/tests/system/tkey/keydelete.c
+index 2146f9b..64b8e74 100644
+--- a/bin/tests/system/tkey/keydelete.c
++++ b/bin/tests/system/tkey/keydelete.c
+@@ -171,6 +171,7 @@ main(int argc, char **argv) {
+ 		randomfile = argv[2];
+ 		argv += 2;
+ 		argc -= 2;
++		POST(argc);
+ 	}
+ 	keyname = argv[1];
+ 
+@@ -182,9 +183,7 @@ main(int argc, char **argv) {
+ 	ectx = NULL;
+ 	RUNCHECK(isc_entropy_create(mctx, &ectx));
+ #ifdef ISC_PLATFORM_CRYPTORANDOM
+-	if (randomfile != NULL &&
+-	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
+-		randomfile = NULL;
++	if (randomfile == NULL) {
+ 		isc_entropy_usehook(ectx, true);
+ 	}
+ #endif
+diff --git a/doc/arm/Bv9ARM-book.xml b/doc/arm/Bv9ARM-book.xml
+index 33e06e6..539973c 100644
+--- a/doc/arm/Bv9ARM-book.xml
++++ b/doc/arm/Bv9ARM-book.xml
+@@ -5076,22 +5076,45 @@ badresp:1,adberr:0,findfail:0,valfail:0]
+ 	    <term><command>random-device</command></term>
+ 	    <listitem>
+ 	      <para>
+-		The source of entropy to be used by the server.  Entropy is
+-		primarily needed
+-		for DNSSEC operations, such as TKEY transactions and dynamic
+-		update of signed
+-		zones.  This options specifies the device (or file) from which
+-		to read
+-		entropy.  If this is a file, operations requiring entropy will
+-		fail when the
+-		file has been exhausted.  If not specified, the default value
+-		is
+-		<filename>/dev/random</filename>
+-		(or equivalent) when present, and none otherwise.  The
+-		<command>random-device</command> option takes
+-		effect during
+-		the initial configuration load at server startup time and
+-		is ignored on subsequent reloads.
++		Specifies a source of entropy to be used by the server.
++		This is a device or file from which to read entropy.
++		If it is a file, operations requiring entropy
++		will fail when the file has been exhausted.
++	      </para>
++	      <para>
++		Entropy is needed for cryptographic operations such as
++		TKEY transactions, dynamic update of signed zones, and
++		generation of TSIG session keys. It is also used for
++		seeding and stirring the pseudo-random number generator,
++		which is used for less critical functions requiring
++		randomness such as generation of DNS message transaction
++		ID's.
++	      </para>
++	      <para>
++		If <command>random-device</command> is not specified, or
++		if it is set to <literal>none</literal>, entropy will be
++		read from the random number generation function supplied
++		by the cryptographic library with which BIND was linked
++		(i.e.  OpenSSL or a PKCS#11 provider).
++	      </para>
++	      <para>
++		The <command>random-device</command> option takes
++		effect during the initial configuration load at server
++		startup time and is ignored on subsequent reloads.
++	      </para>
++	      <para>
++		If BIND is built with
++		<command>configure --disable-crypto-rand</command>, then
++		entropy is <emphasis>not</emphasis> sourced from the
++		cryptographic library. In this case, if
++		<command>random-device</command> is not specified, the
++		default value is the system random device,
++		<filename>/dev/random</filename> or the equivalent.
++		This default can be overridden with
++		<command>configure --with-randomdev</command>.
++		If no system random device exists, then no entropy source
++		will be configured, and <command>named</command> will only
++		be able to use pseudo-random numbers.
+ 	      </para>
+ 	    </listitem>
+ 	  </varlistentry>
+diff --git a/doc/arm/notes-rh-changes.xml b/doc/arm/notes-rh-changes.xml
+new file mode 100644
+index 0000000..11c3a7c
+--- /dev/null
++++ b/doc/arm/notes-rh-changes.xml
+@@ -0,0 +1,43 @@
++
++<!--
++ - Copyright (C) Internet Systems Consortium, Inc. ("ISC")
++ -
++ - This Source Code Form is subject to the terms of the Mozilla Public
++ - License, v. 2.0. If a copy of the MPL was not distributed with this
++ - file, You can obtain one at http://mozilla.org/MPL/2.0/.
++ -
++ - See the COPYRIGHT file distributed with this work for additional
++ - information regarding copyright ownership.
++-->
++
++<section xml:id="relnotes_rh_changes"><info><title>Red Hat Specific Changes</title></info>
++  <itemizedlist>
++     <listitem>
++      <para>
++        By default, BIND now uses the random number generation functions
++        in the cryptographic library (i.e., OpenSSL or a PKCS#11
++        provider) as a source of high-quality randomness rather than
++        <filename>/dev/random</filename>.  This is suitable for virtual
++        machine environments, which may have limited entropy pools and
++        lack hardware random number generators.
++      </para>
++      <para>
++        This can be overridden by specifying another entropy source via
++        the <command>random-device</command> option in
++        <filename>named.conf</filename>, or via the <command>-r</command>
++        command line option.  However, for functions requiring full
++        cryptographic strength, such as DNSSEC key generation, this
++        <emphasis>cannot</emphasis> be overridden. In particular, the
++        <command>-r</command> command line option no longer has any
++        effect on <command>dnssec-keygen</command>.
++      </para>
++      <para>
++        This can be disabled by building with
++        <command>configure --disable-crypto-rand</command>, in which
++        case <filename>/dev/random</filename> will be the default
++        entropy source.  [RT #31459] [RT #46047]
++      </para>
++    </listitem>
++  </itemizedlist>
++</section>
++
+diff --git a/doc/arm/notes.xml b/doc/arm/notes.xml
+index b16dab6..763ff7e 100644
+--- a/doc/arm/notes.xml
++++ b/doc/arm/notes.xml
+@@ -36,6 +36,7 @@
+   <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="notes-9.11.1.xml"/>
+   <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="notes-9.11.0.xml"/>
+ 
++  <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="notes-rh-changes.xml"/>
+   <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="notes-eol.xml"/>
+   <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="notes-thankyou.xml"/>
+ </section>
+diff --git a/lib/dns/dst_api.c b/lib/dns/dst_api.c
+index 1614afa..0f52df9 100644
+--- a/lib/dns/dst_api.c
++++ b/lib/dns/dst_api.c
+@@ -2017,10 +2017,12 @@ dst__entropy_getdata(void *buf, unsigned int len, bool pseudo) {
+ 	else
+ 		flags |= ISC_ENTROPY_BLOCKING;
+ #ifdef ISC_PLATFORM_CRYPTORANDOM
++	/* get entropy directly from crypto provider */
+ 	return (dst_random_getdata(buf, len, NULL, flags));
+ #else
++	/* get entropy from entropy source or hook function */
+ 	return (isc_entropy_getdata(dst_entropy_pool, buf, len, NULL, flags));
+-#endif
++#endif /* ISC_PLATFORM_CRYPTORANDOM */
+ #endif /* PKCS11CRYPTO */
+ }
+ 
+diff --git a/lib/dns/include/dst/dst.h b/lib/dns/include/dst/dst.h
+index 6813c96..665574d 100644
+--- a/lib/dns/include/dst/dst.h
++++ b/lib/dns/include/dst/dst.h
+@@ -163,8 +163,18 @@ isc_result_t
+ dst_random_getdata(void *data, unsigned int length,
+ 		   unsigned int *returned, unsigned int flags);
+ /*%<
+- * \brief Return data from the crypto random generator.
+- * Specialization of isc_entropy_getdata().
++ * Gets random data from the random generator provided by the
++ * crypto library, if BIND was built with --enable-crypto-rand.
++ *
++ * See isc_entropy_getdata() for parameter usage. Normally when
++ * this function is available, it will be set up as a hook in the
++ * entropy context, so that isc_entropy_getdata() is a front-end to
++ * this function.
++ *
++ * Returns:
++ * \li	ISC_R_SUCCESS on success
++ * \li	ISC_R_NOTIMPLEMENTED if BIND is built with --disable-crypto-rand
++ * \li	DST_R_OPENSSLFAILURE, DST_R_CRYPTOFAILURE, or other codes on error
+  */
+ 
+ bool
+diff --git a/lib/dns/openssl_link.c b/lib/dns/openssl_link.c
+index 6849732..e00a0e4 100644
+--- a/lib/dns/openssl_link.c
++++ b/lib/dns/openssl_link.c
+@@ -484,7 +484,8 @@ dst__openssl_getengine(const char *engine) {
+ 
+ isc_result_t
+ dst_random_getdata(void *data, unsigned int length,
+-		   unsigned int *returned, unsigned int flags) {
++		   unsigned int *returned, unsigned int flags)
++{
+ #ifdef ISC_PLATFORM_CRYPTORANDOM
+ #ifndef DONT_REQUIRE_DST_LIB_INIT
+ 	INSIST(dst__memory_pool != NULL);
+diff --git a/lib/isc/include/isc/entropy.h b/lib/isc/include/isc/entropy.h
+index 632166a..c7cb17d 100644
+--- a/lib/isc/include/isc/entropy.h
++++ b/lib/isc/include/isc/entropy.h
+@@ -9,8 +9,6 @@
+  * information regarding copyright ownership.
+  */
+ 
+-/* $Id: entropy.h,v 1.35 2009/10/19 02:37:08 marka Exp $ */
+-
+ #ifndef ISC_ENTROPY_H
+ #define ISC_ENTROPY_H 1
+ 
+@@ -191,9 +189,8 @@ isc_entropy_createcallbacksource(isc_entropy_t *ent,
+ /*!<
+  * \brief Create an entropy source that is polled via a callback.
+  *
+- * This would
+- * be used when keyboard input is used, or a GUI input method.  It can
+- * also be used to hook in any external entropy source.
++ * This would be used when keyboard input is used, or a GUI input method.
++ * It can also be used to hook in any external entropy source.
+  *
+  * Samples are added via isc_entropy_addcallbacksample(), below.
+  * _addcallbacksample() is the only function which may be called from
+@@ -234,15 +231,32 @@ isc_result_t
+ isc_entropy_getdata(isc_entropy_t *ent, void *data, unsigned int length,
+ 		    unsigned int *returned, unsigned int flags);
+ /*!<
+- * \brief Extract data from the entropy pool.  This may load the pool from various
+- * sources.
++ * \brief Get random data from entropy pool 'ent'.
++ *
++ * If a hook has been set up using isc_entropy_sethook() and
++ * isc_entropy_usehook(), then the hook function will be called to get
++ * random data.
++ *
++ * Otherwise, randomness is extracted from the entropy pool set up in BIND.
++ * This may cause the pool to be loaded from various sources. Ths is done
++ * by stirring the pool and returning a part of hash as randomness.
++ * (Note that no secrets are given away here since parts of the hash are
++ * XORed together before returning.)
++ *
++ * 'flags' may contain ISC_ENTROPY_GOODONLY, ISC_ENTROPY_PARTIAL, or
++ * ISC_ENTROPY_BLOCKING. These will be honored if the hook function is
++ * not in use. If it is, the flags will be passed to the hook function
++ * but it may ignore them.
+  *
+- * Do this by stiring the pool and returning a part of hash as randomness.
+- * Note that no secrets are given away here since parts of the hash are
+- * xored together before returned.
++ * Up to 'length' bytes of randomness are retrieved and copied into 'data'.
++ * (If 'returned' is not NULL, and the number of bytes copied is less than
++ * 'length' - which may happen if ISC_ENTROPY_PARTIAL was used - then the
++ * number of bytes copied will be stored in *returned.)
+  *
+- * Honor the request from the caller to only return good data, any data,
+- * etc.
++ * Returns:
++ * \li	ISC_R_SUCCESS on success
++ * \li	ISC_R_NOENTROPY if entropy pool is empty
++ * \li	other error codes are possible when a hook is in use
+  */
+ 
+ void
+@@ -307,13 +321,21 @@ isc_entropy_usebestsource(isc_entropy_t *ectx, isc_entropysource_t **source,
+ void
+ isc_entropy_usehook(isc_entropy_t *ectx, bool onoff);
+ /*!<
+- * \brief Mark/unmark the given entropy structure as being hooked.
++ * \brief Configure entropy context 'ectx' to use the hook function
++ *
++ * Sets the entropy context to call the hook function for random number
++ * generation, if such a function has been configured via
++ * isc_entropy_sethook(), whenever isc_entropy_getdata() is called.
+  */
+ 
+ void
+ isc_entropy_sethook(isc_entropy_getdata_t myhook);
+ /*!<
+- * \brief Set the getdata hook (e.g., for a crypto random generator).
++ * \brief Set the hook function.
++ *
++ * The hook function is a global value: only one hook function
++ * can be set in the system. Individual entropy contexts may be
++ * configured to use it, or not, by calling isc_entropy_usehook().
+  */
+ 
+ ISC_LANG_ENDDECLS
+diff --git a/lib/isc/include/isc/random.h b/lib/isc/include/isc/random.h
+index f8aed34..17c551b 100644
+--- a/lib/isc/include/isc/random.h
++++ b/lib/isc/include/isc/random.h
+@@ -9,8 +9,6 @@
+  * information regarding copyright ownership.
+  */
+ 
+-/* $Id: random.h,v 1.20 2009/01/17 23:47:43 tbox Exp $ */
+-
+ #ifndef ISC_RANDOM_H
+ #define ISC_RANDOM_H 1
+ 
+@@ -21,13 +19,23 @@
+ #include <isc/mutex.h>
+ 
+ /*! \file isc/random.h
+- * \brief Implements a random state pool which will let the caller return a
+- * series of possibly non-reproducible random values.
++ * \brief Implements pseudo random number generators.
++ *
++ * Two pseudo-random number generators are implemented, in isc_random_*
++ * and isc_rng_*. Neither one is very strong; they should not be used
++ * in cryptography functions.
++ *
++ * isc_random_* is based on arc4random if it is available on the system.
++ * Otherwise it is based on the posix srand() and rand() functions.
++ * It is useful for jittering values a bit here and there, such as
++ * timeouts, etc, but should not be relied upon to generate
++ * unpredictable sequences (for example, when choosing transaction IDs).
+  *
+- * Note that the
+- * strength of these numbers is not all that high, and should not be
+- * used in cryptography functions.  It is useful for jittering values
+- * a bit here and there, such as timeouts, etc.
++ * isc_rng_* is based on ChaCha20, and is seeded and stirred from the
++ * system entropy source. It is stronger than isc_random_* and can
++ * be used for generating unpredictable sequences. It is still not as
++ * good as using system entropy directly (see entropy.h) and should not
++ * be used for cryptographic functions such as key generation.
+  */
+ 
+ ISC_LANG_BEGINDECLS
+@@ -115,8 +123,8 @@ isc_rng_random(isc_rng_t *rngctx);
+ uint16_t
+ isc_rng_uniformrandom(isc_rng_t *rngctx, uint16_t upper_bound);
+ /*%<
+- * Returns a uniformly distributed pseudo random 16-bit unsigned
+- * integer.
++ * Returns a uniformly distributed pseudo-random 16-bit unsigned integer
++ * less than 'upper_bound'.
+  */
+ 
+ ISC_LANG_ENDDECLS
+diff --git a/lib/isccfg/namedconf.c b/lib/isccfg/namedconf.c
+index 03890a3..7bad989 100644
+--- a/lib/isccfg/namedconf.c
++++ b/lib/isccfg/namedconf.c
+@@ -1109,7 +1109,7 @@ options_clauses[] = {
+ 	{ "pid-file", &cfg_type_qstringornone, 0 },
+ 	{ "port", &cfg_type_uint32, 0 },
+ 	{ "querylog", &cfg_type_boolean, 0 },
+-	{ "random-device", &cfg_type_qstring, 0 },
++	{ "random-device", &cfg_type_qstringornone, 0 },
+ 	{ "recursing-file", &cfg_type_qstring, 0 },
+ 	{ "recursive-clients", &cfg_type_uint32, 0 },
+ 	{ "reserved-sockets", &cfg_type_uint32, 0 },
+-- 
+2.20.1
+

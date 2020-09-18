@@ -1,0 +1,51 @@
+diff --git a/configure.ac b/configure.ac
+index 26c509e..c1bfd62 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -4152,6 +4152,10 @@ if test "yes" = "$use_atomic"; then
+ 	AC_MSG_RESULT($arch)
+ fi
+ 
++if test ! "$arch" = "x86_64" -a "$have_xaddq" = "yes"; then
++	AC_MSG_ERROR([XADDQ present but disabled by Fedora patch!])
++fi
++
+ if test "yes" = "$have_atomic"; then
+ 	AC_MSG_CHECKING([compiler support for inline assembly code])
+ 
+diff --git a/lib/isc/include/isc/platform.h.in b/lib/isc/include/isc/platform.h.in
+index c902d46..9c7c342 100644
+--- a/lib/isc/include/isc/platform.h.in
++++ b/lib/isc/include/isc/platform.h.in
+@@ -284,19 +284,25 @@
+  * If the "xaddq" operation (64bit xadd) is available on this architecture,
+  * ISC_PLATFORM_HAVEXADDQ will be defined.
+  */
+-@ISC_PLATFORM_HAVEXADDQ@
+ 
+ /*
+- * If the 32-bit "atomic swap" operation is available on this
+- * architecture, ISC_PLATFORM_HAVEATOMICSTORE" will be defined.
++ * If the 64-bit "atomic swap" operation is available on this
++ * architecture, ISC_PLATFORM_HAVEATOMICSTOREQ" will be defined.
+  */
+-@ISC_PLATFORM_HAVEATOMICSTORE@
++
++#ifdef __x86_64__
++#define ISC_PLATFORM_HAVEXADDQ 1
++#define ISC_PLATFORM_HAVEATOMICSTOREQ 1
++#else
++#undef ISC_PLATFORM_HAVEXADDQ
++#undef ISC_PLATFORM_HAVEATOMICSTOREQ
++#endif
+ 
+ /*
+- * If the 64-bit "atomic swap" operation is available on this
++ * If the 32-bit "atomic swap" operation is available on this
+  * architecture, ISC_PLATFORM_HAVEATOMICSTORE" will be defined.
+  */
+-@ISC_PLATFORM_HAVEATOMICSTOREQ@
++@ISC_PLATFORM_HAVEATOMICSTORE@
+ 
+ /*
+  * If the "compare-and-exchange" operation is available on this architecture,

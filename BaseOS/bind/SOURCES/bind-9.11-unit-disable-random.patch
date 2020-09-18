@@ -1,0 +1,30 @@
+From 373f07148217a8e70e33446f5108fb42d1079ba6 Mon Sep 17 00:00:00 2001
+From: Petr Mensik <pemensik@redhat.com>
+Date: Thu, 21 Feb 2019 22:42:27 +0100
+Subject: [PATCH] Disable random_test
+
+It fails too often on some architecture, failing the whole build along.
+Because it runs two times for pkcs11 and normal build and any of
+subtests can occasionally fail, stop it.
+
+It can be used again by defining 'unstable' variable in Kyuafile.
+---
+ lib/isc/tests/Kyuafile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/isc/tests/Kyuafile b/lib/isc/tests/Kyuafile
+index 4cd2574..9df2340 100644
+--- a/lib/isc/tests/Kyuafile
++++ b/lib/isc/tests/Kyuafile
+@@ -19,7 +19,7 @@ tap_test_program{name='pool_test'}
+ tap_test_program{name='print_test'}
+ tap_test_program{name='queue_test'}
+ tap_test_program{name='radix_test'}
+-tap_test_program{name='random_test'}
++tap_test_program{name='random_test', required_configs='unstable'}
+ tap_test_program{name='regex_test'}
+ tap_test_program{name='result_test'}
+ tap_test_program{name='safe_test'}
+-- 
+2.20.1
+

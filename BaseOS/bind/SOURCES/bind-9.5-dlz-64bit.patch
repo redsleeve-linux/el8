@@ -1,0 +1,53 @@
+diff --git a/contrib/dlz/config.dlz.in b/contrib/dlz/config.dlz.in
+index 47525af..eefe3c3 100644
+--- a/contrib/dlz/config.dlz.in
++++ b/contrib/dlz/config.dlz.in
+@@ -17,6 +17,13 @@
+ #
+ dlzdir='${DLZ_DRIVER_DIR}'
+ 
++AC_MSG_CHECKING([for target libdir])
++AC_RUN_IFELSE([int main(void) {exit((sizeof(void *) == 8) ? 0 : 1);}],
++	[target_lib=lib64],
++	[target_lib=lib],
++)
++AC_MSG_RESULT(["$target_lib"])
++
+ #
+ # Private autoconf macro to simplify configuring drivers:
+ #
+@@ -292,9 +299,9 @@ case "$use_dlz_bdb" in
+ 					then
+ 						break
+ 					fi
+-				elif test -f "$dd/lib/lib${d}.so"
++				elif test -f "$dd/${target_lib}/lib${d}.so"
+ 				then
+-					dlz_bdb_libs="-L${dd}/lib -l${d}"
++					dlz_bdb_libs="-L${dd}/${target_lib} -l${d}"
+ 					break
+ 				fi
+ 			done
+@@ -396,7 +403,7 @@ case "$use_dlz_ldap" in
+ 	*)
+ 		DLZ_ADD_DRIVER(LDAP, dlz_ldap_driver,
+ 				[-I$use_dlz_ldap/include],
+-				[-L$use_dlz_ldap/lib -lldap -llber])
++				[-L$use_dlz_ldap/${target_lib} -lldap -llber])
+ 
+ 		AC_MSG_RESULT(
+ [using LDAP from $use_dlz_ldap/lib and $use_dlz_ldap/include])
+@@ -432,11 +439,11 @@ then
+ 		odbcdirs="/usr /usr/local /usr/pkg"
+ 		for d in $odbcdirs
+ 		do
+-			if test -f $d/include/sql.h -a -f $d/lib/libodbc.a
++			if test -f $d/include/sql.h -a -f $d/${target_lib}/libodbc.a
+ 			then
+ 				use_dlz_odbc=$d
+ 				dlz_odbc_include="-I$use_dlz_odbc/include"
+-				dlz_odbc_libs="-L$use_dlz_odbc/lib -lodbc"
++				dlz_odbc_libs="-L$use_dlz_odbc/${target_lib} -lodbc"
+ 				break
+ 			fi
+ 		done

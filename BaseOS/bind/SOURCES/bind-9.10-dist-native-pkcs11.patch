@@ -1,0 +1,612 @@
+diff --git a/bin/Makefile.in b/bin/Makefile.in
+index f0c504a..ce7a2da 100644
+--- a/bin/Makefile.in
++++ b/bin/Makefile.in
+@@ -11,8 +11,8 @@ srcdir =	@srcdir@
+ VPATH =		@srcdir@
+ top_srcdir =	@top_srcdir@
+ 
+-SUBDIRS =	named rndc dig delv dnssec tools nsupdate check confgen \
+-		@NZD_TOOLS@ @PYTHON_TOOLS@ @PKCS11_TOOLS@ tests
++SUBDIRS =	named named-pkcs11 rndc dig delv dnssec dnssec-pkcs11 tools nsupdate \
++		check confgen @NZD_TOOLS@ @PYTHON_TOOLS@ @PKCS11_TOOLS@ tests
+ TARGETS =
+ 
+ @BIND9_MAKE_RULES@
+diff --git a/bin/dnssec-pkcs11/Makefile.in b/bin/dnssec-pkcs11/Makefile.in
+index 4b8ca13..32f4470 100644
+--- a/bin/dnssec-pkcs11/Makefile.in
++++ b/bin/dnssec-pkcs11/Makefile.in
+@@ -15,18 +15,18 @@ VERSION=@BIND9_VERSION@
+ 
+ @BIND9_MAKE_INCLUDES@
+ 
+-CINCLUDES =	${DNS_INCLUDES} ${ISC_INCLUDES} @DST_OPENSSL_INC@
++CINCLUDES =	${DNS_PKCS11_INCLUDES} ${ISC_PKCS11_INCLUDES}
+ 
+-CDEFINES =	-DVERSION=\"${VERSION}\" @USE_PKCS11@ @PKCS11_ENGINE@ \
+-		@CRYPTO@ -DPK11_LIB_LOCATION=\"@PKCS11_PROVIDER@\"
++CDEFINES =	-DVERSION=\"${VERSION}\" @PKCS11_ENGINE@ \
++		@CRYPTO_PK11@ -DPK11_LIB_LOCATION=\"@PKCS11_PROVIDER@\"
+ CWARNINGS =
+ 
+-DNSLIBS =	../../lib/dns/libdns.@A@ ${MAXMINDDB_LIBS} @DNS_CRYPTO_LIBS@
+-ISCLIBS =	../../lib/isc/libisc.@A@
+-ISCNOSYMLIBS =	../../lib/isc/libisc-nosymtbl.@A@
++DNSLIBS =	../../lib/dns-pkcs11/libdns-pkcs11.@A@ ${MAXMINDDB_LIBS} @DNS_CRYPTO_LIBS@
++ISCLIBS =	../../lib/isc-pkcs11/libisc-pkcs11.@A@
++ISCNOSYMLIBS =	../../lib/isc-pkcs11/libisc-pkcs11-nosymtbl.@A@
+ 
+-DNSDEPLIBS =	../../lib/dns/libdns.@A@
+-ISCDEPLIBS =	../../lib/isc/libisc.@A@
++DNSDEPLIBS =	../../lib/dns-pkcs11/libdns-pkcs11.@A@
++ISCDEPLIBS =	../../lib/isc-pkcs11/libisc-pkcs11.@A@
+ 
+ DEPLIBS =	${DNSDEPLIBS} ${ISCDEPLIBS}
+ 
+@@ -35,10 +35,10 @@ LIBS =		${DNSLIBS} ${ISCLIBS} @LIBS@
+ NOSYMLIBS =	${DNSLIBS} ${ISCNOSYMLIBS} @LIBS@
+ 
+ # Alphabetically
+-TARGETS =	dnssec-keygen@EXEEXT@ dnssec-signzone@EXEEXT@ \
+-		dnssec-keyfromlabel@EXEEXT@ dnssec-dsfromkey@EXEEXT@ \
+-		dnssec-revoke@EXEEXT@ dnssec-settime@EXEEXT@ \
+-		dnssec-verify@EXEEXT@ dnssec-importkey@EXEEXT@
++TARGETS =	dnssec-keygen-pkcs11@EXEEXT@ dnssec-signzone-pkcs11@EXEEXT@ \
++		dnssec-keyfromlabel-pkcs11@EXEEXT@ dnssec-dsfromkey-pkcs11@EXEEXT@ \
++		dnssec-revoke-pkcs11@EXEEXT@ dnssec-settime-pkcs11@EXEEXT@ \
++		dnssec-verify-pkcs11@EXEEXT@ dnssec-importkey-pkcs11@EXEEXT@
+ 
+ OBJS =		dnssectool.@O@
+ 
+@@ -59,15 +59,15 @@ MANOBJS =	${MANPAGES} ${HTMLPAGES}
+ 
+ @BIND9_MAKE_RULES@
+ 
+-dnssec-dsfromkey@EXEEXT@: dnssec-dsfromkey.@O@ ${OBJS} ${DEPLIBS}
++dnssec-dsfromkey-pkcs11@EXEEXT@: dnssec-dsfromkey.@O@ ${OBJS} ${DEPLIBS}
+ 	export BASEOBJS="dnssec-dsfromkey.@O@ ${OBJS}"; \
+ 	${FINALBUILDCMD}
+ 
+-dnssec-keyfromlabel@EXEEXT@: dnssec-keyfromlabel.@O@ ${OBJS} ${DEPLIBS}
++dnssec-keyfromlabel-pkcs11@EXEEXT@: dnssec-keyfromlabel.@O@ ${OBJS} ${DEPLIBS}
+ 	export BASEOBJS="dnssec-keyfromlabel.@O@ ${OBJS}"; \
+ 	${FINALBUILDCMD}
+ 
+-dnssec-keygen@EXEEXT@: dnssec-keygen.@O@ ${OBJS} ${DEPLIBS}
++dnssec-keygen-pkcs11@EXEEXT@: dnssec-keygen.@O@ ${OBJS} ${DEPLIBS}
+ 	export BASEOBJS="dnssec-keygen.@O@ ${OBJS}"; \
+ 	${FINALBUILDCMD}
+ 
+@@ -75,7 +75,7 @@ dnssec-signzone.@O@: dnssec-signzone.c
+ 	${LIBTOOL_MODE_COMPILE} ${CC} ${ALL_CFLAGS} -DVERSION=\"${VERSION}\" \
+ 		-c ${srcdir}/dnssec-signzone.c
+ 
+-dnssec-signzone@EXEEXT@: dnssec-signzone.@O@ ${OBJS} ${DEPLIBS}
++dnssec-signzone-pkcs11@EXEEXT@: dnssec-signzone.@O@ ${OBJS} ${DEPLIBS}
+ 	export BASEOBJS="dnssec-signzone.@O@ ${OBJS}"; \
+ 	${FINALBUILDCMD}
+ 
+@@ -83,19 +83,19 @@ dnssec-verify.@O@: dnssec-verify.c
+ 	${LIBTOOL_MODE_COMPILE} ${CC} ${ALL_CFLAGS} -DVERSION=\"${VERSION}\" \
+ 		-c ${srcdir}/dnssec-verify.c
+ 
+-dnssec-verify@EXEEXT@: dnssec-verify.@O@ ${OBJS} ${DEPLIBS}
++dnssec-verify-pkcs11@EXEEXT@: dnssec-verify.@O@ ${OBJS} ${DEPLIBS}
+ 	export BASEOBJS="dnssec-verify.@O@ ${OBJS}"; \
+ 	${FINALBUILDCMD}
+ 
+-dnssec-revoke@EXEEXT@: dnssec-revoke.@O@ ${OBJS} ${DEPLIBS}
++dnssec-revoke-pkcs11@EXEEXT@: dnssec-revoke.@O@ ${OBJS} ${DEPLIBS}
+ 	${LIBTOOL_MODE_LINK} ${PURIFY} ${CC} ${CFLAGS} ${LDFLAGS} -o $@ \
+ 	dnssec-revoke.@O@ ${OBJS} ${LIBS}
+ 
+-dnssec-settime@EXEEXT@: dnssec-settime.@O@ ${OBJS} ${DEPLIBS}
++dnssec-settime-pkcs11@EXEEXT@: dnssec-settime.@O@ ${OBJS} ${DEPLIBS}
+ 	${LIBTOOL_MODE_LINK} ${PURIFY} ${CC} ${CFLAGS} ${LDFLAGS} -o $@ \
+ 	dnssec-settime.@O@ ${OBJS} ${LIBS}
+ 
+-dnssec-importkey@EXEEXT@: dnssec-importkey.@O@ ${OBJS} ${DEPLIBS}
++dnssec-importkey-pkcs11@EXEEXT@: dnssec-importkey.@O@ ${OBJS} ${DEPLIBS}
+ 	${LIBTOOL_MODE_LINK} ${PURIFY} ${CC} ${CFLAGS} ${LDFLAGS} -o $@ \
+ 	dnssec-importkey.@O@ ${OBJS} ${LIBS}
+ 
+@@ -106,16 +106,14 @@ docclean manclean maintainer-clean::
+ 
+ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${sbindir}
+-	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man8
+ 
+ install-man8: ${MANPAGES}
+ 	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man8
+ 
+-install:: ${TARGETS} installdirs install-man8
++install:: ${TARGETS} installdirs
+ 	for t in ${TARGETS}; do ${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} $$t ${DESTDIR}${sbindir} || exit 1; done
+ 
+ uninstall::
+-	for m in ${MANPAGES}; do rm -f ${DESTDIR}${mandir}/man8/$$m || exit 1; done
+ 	for t in ${TARGETS}; do ${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${sbindir}/$$t || exit 1; done
+ 
+ clean distclean::
+diff --git a/bin/dnssec/Makefile.in b/bin/dnssec/Makefile.in
+index 4b8ca13..4175996 100644
+--- a/bin/dnssec/Makefile.in
++++ b/bin/dnssec/Makefile.in
+@@ -17,7 +17,7 @@ VERSION=@BIND9_VERSION@
+ 
+ CINCLUDES =	${DNS_INCLUDES} ${ISC_INCLUDES} @DST_OPENSSL_INC@
+ 
+-CDEFINES =	-DVERSION=\"${VERSION}\" @USE_PKCS11@ @PKCS11_ENGINE@ \
++CDEFINES =	-DVERSION=\"${VERSION}\" \
+ 		@CRYPTO@ -DPK11_LIB_LOCATION=\"@PKCS11_PROVIDER@\"
+ CWARNINGS =
+ 
+diff --git a/bin/named-pkcs11/Makefile.in b/bin/named-pkcs11/Makefile.in
+index 3166368..a403941 100644
+--- a/bin/named-pkcs11/Makefile.in
++++ b/bin/named-pkcs11/Makefile.in
+@@ -43,27 +43,27 @@ DLZDRIVER_INCLUDES =	@DLZ_DRIVER_INCLUDES@
+ DLZDRIVER_LIBS =	@DLZ_DRIVER_LIBS@
+ 
+ CINCLUDES =	-I${srcdir}/include -I${srcdir}/unix/include -I. \
+-		${LWRES_INCLUDES} ${DNS_INCLUDES} ${BIND9_INCLUDES} \
+-		${ISCCFG_INCLUDES} ${ISCCC_INCLUDES} ${ISC_INCLUDES} \
++		${LWRES_INCLUDES} ${DNS_PKCS11_INCLUDES} ${BIND9_INCLUDES} \
++		${ISCCFG_INCLUDES} ${ISCCC_INCLUDES} ${ISC_PKCS11_INCLUDES} \
+ 		${DLZDRIVER_INCLUDES} ${DBDRIVER_INCLUDES} ${MAXMINDDB_CFLAGS} \
+ 		@DST_OPENSSL_INC@
+ 
+-CDEFINES =      @CONTRIB_DLZ@ @USE_PKCS11@ @PKCS11_ENGINE@ @CRYPTO@
++CDEFINES =      @USE_PKCS11@ @PKCS11_ENGINE@ @CRYPTO_PK11@ @USE_GSSAPI@
+ 
+ CWARNINGS =
+ 
+-DNSLIBS =	../../lib/dns/libdns.@A@ ${MAXMINDDB_LIBS} @DNS_CRYPTO_LIBS@
++DNSLIBS =	../../lib/dns-pkcs11/libdns-pkcs11.@A@ ${MAXMINDDB_LIBS} @DNS_CRYPTO_LIBS@
+ ISCCFGLIBS =	../../lib/isccfg/libisccfg.@A@
+ ISCCCLIBS =	../../lib/isccc/libisccc.@A@
+-ISCLIBS =	../../lib/isc/libisc.@A@
+-ISCNOSYMLIBS =	../../lib/isc/libisc-nosymtbl.@A@
++ISCLIBS =	../../lib/isc-pkcs11/libisc-pkcs11.@A@
++ISCNOSYMLIBS =	../../lib/isc-pkcs11/libisc-pkcs11-nosymtbl.@A@
+ LWRESLIBS =	../../lib/lwres/liblwres.@A@
+ BIND9LIBS =	../../lib/bind9/libbind9.@A@
+ 
+-DNSDEPLIBS =	../../lib/dns/libdns.@A@
++DNSDEPLIBS =	../../lib/dns-pkcs11/libdns-pkcs11.@A@
+ ISCCFGDEPLIBS =	../../lib/isccfg/libisccfg.@A@
+ ISCCCDEPLIBS =	../../lib/isccc/libisccc.@A@
+-ISCDEPLIBS =	../../lib/isc/libisc.@A@
++ISCDEPLIBS =	../../lib/isc-pkcs11/libisc-pkcs11.@A@
+ LWRESDEPLIBS =	../../lib/lwres/liblwres.@A@
+ BIND9DEPLIBS =	../../lib/bind9/libbind9.@A@
+ 
+@@ -72,15 +72,15 @@ DEPLIBS =	${LWRESDEPLIBS} ${DNSDEPLIBS} ${BIND9DEPLIBS} \
+ 
+ LIBS =		${LWRESLIBS} ${DNSLIBS} ${BIND9LIBS} \
+ 		${ISCCFGLIBS} ${ISCCCLIBS} ${ISCLIBS} \
+-		${DLZDRIVER_LIBS} ${DBDRIVER_LIBS} @LIBS@
++		@LIBS@
+ 
+ NOSYMLIBS =	${LWRESLIBS} ${DNSLIBS} ${BIND9LIBS} \
+ 		${ISCCFGLIBS} ${ISCCCLIBS} ${ISCNOSYMLIBS} \
+-		${DLZDRIVER_LIBS} ${DBDRIVER_LIBS} @LIBS@
++		@LIBS@
+ 
+ SUBDIRS =	unix
+ 
+-TARGETS =	named@EXEEXT@ lwresd@EXEEXT@
++TARGETS =	named-pkcs11@EXEEXT@
+ 
+ GEOIPLINKOBJS = geoip.@O@
+ GEOIP2LINKOBJS = geoip.@O@
+@@ -94,8 +94,7 @@ OBJS =		builtin.@O@ client.@O@ config.@O@ control.@O@ \
+ 		tkeyconf.@O@ tsigconf.@O@ update.@O@ xfrout.@O@ \
+ 		zoneconf.@O@ \
+ 		lwaddr.@O@ lwresd.@O@ lwdclient.@O@ lwderror.@O@ lwdgabn.@O@ \
+-		lwdgnba.@O@ lwdgrbn.@O@ lwdnoop.@O@ lwsearch.@O@ \
+-		${DLZDRIVER_OBJS} ${DBDRIVER_OBJS}
++        lwdgnba.@O@ lwdgrbn.@O@ lwdnoop.@O@ lwsearch.@O@
+ 
+ UOBJS =		unix/os.@O@ unix/dlz_dlopen_driver.@O@
+ 
+@@ -113,8 +112,7 @@ SRCS =		builtin.c client.c config.c control.c \
+ 		tkeyconf.c tsigconf.c update.c xfrout.c \
+ 		zoneconf.c \
+ 		lwaddr.c lwresd.c lwdclient.c lwderror.c lwdgabn.c \
+-		lwdgnba.c lwdgrbn.c lwdnoop.c lwsearch.c \
+-		${DLZDRIVER_SRCS} ${DBDRIVER_SRCS}
++        lwdgnba.c lwdgrbn.c lwdnoop.c lwsearch.c
+ 
+ MANPAGES =	named.8 lwresd.8 named.conf.5
+ 
+@@ -154,14 +152,14 @@ server.@O@: server.c
+ 		-DPRODUCT=\"${PRODUCT}\" \
+ 		-DVERSION=\"${VERSION}\" -c ${srcdir}/server.c
+ 
+-named@EXEEXT@: ${OBJS} ${DEPLIBS}
++named-pkcs11@EXEEXT@: ${OBJS} ${DEPLIBS}
+ 	export MAKE_SYMTABLE="yes"; \
+ 	export BASEOBJS="${OBJS} ${UOBJS}"; \
+ 	${FINALBUILDCMD}
+ 
+-lwresd@EXEEXT@: named@EXEEXT@
++lwresd@EXEEXT@: named-pkcs11@EXEEXT@
+ 	rm -f lwresd@EXEEXT@
+-	@LN@ named@EXEEXT@ lwresd@EXEEXT@
++	@LN@ named-pkcs11@EXEEXT@ lwresd@EXEEXT@
+ 
+ doc man:: ${MANOBJS}
+ 
+@@ -192,16 +190,11 @@ install-man8: named.8 lwresd.8
+ 
+ install-man: install-man5 install-man8
+ 
+-install:: named@EXEEXT@ lwresd@EXEEXT@ installdirs install-man
+-	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} named@EXEEXT@ ${DESTDIR}${sbindir}
+-	(cd ${DESTDIR}${sbindir}; rm -f lwresd@EXEEXT@; @LN@ named@EXEEXT@ lwresd@EXEEXT@)
++install:: named-pkcs11@EXEEXT@ installdirs
++	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} named-pkcs11@EXEEXT@ ${DESTDIR}${sbindir}
+ 
+ uninstall::
+-	rm -f ${DESTDIR}${mandir}/man5/named.conf.5
+-	rm -f ${DESTDIR}${mandir}/man8/lwresd.8
+-	rm -f ${DESTDIR}${mandir}/man8/named.8
+-	rm -f ${DESTDIR}${sbindir}/lwresd@EXEEXT@
+-	${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${sbindir}/named@EXEEXT@
++	${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${sbindir}/named-pkcs11@EXEEXT@
+ 
+ @DLZ_DRIVER_RULES@
+ 
+diff --git a/bin/named/Makefile.in b/bin/named/Makefile.in
+index 3166368..890574f 100644
+--- a/bin/named/Makefile.in
++++ b/bin/named/Makefile.in
+@@ -48,7 +48,7 @@ CINCLUDES =	-I${srcdir}/include -I${srcdir}/unix/include -I. \
+ 		${DLZDRIVER_INCLUDES} ${DBDRIVER_INCLUDES} ${MAXMINDDB_CFLAGS} \
+ 		@DST_OPENSSL_INC@
+ 
+-CDEFINES =      @CONTRIB_DLZ@ @USE_PKCS11@ @PKCS11_ENGINE@ @CRYPTO@
++CDEFINES =      @CONTRIB_DLZ@ @USE_GSSAPI@ @CRYPTO@
+ 
+ CWARNINGS =
+ 
+diff --git a/bin/pkcs11/Makefile.in b/bin/pkcs11/Makefile.in
+index a058c91..d4b689a 100644
+--- a/bin/pkcs11/Makefile.in
++++ b/bin/pkcs11/Makefile.in
+@@ -15,13 +15,13 @@ top_srcdir =	@top_srcdir@
+ 
+ @BIND9_MAKE_INCLUDES@
+ 
+-CINCLUDES =	${ISC_INCLUDES}
++CINCLUDES =	${ISC_PKCS11_INCLUDES}
+ 
+ CDEFINES =
+ 
+-ISCLIBS =	../../lib/isc/libisc.@A@ @ISC_OPENSSL_LIBS@
++ISCLIBS =	../../lib/isc-pkcs11/libisc-pkcs11.@A@ @ISC_OPENSSL_LIBS@
+ 
+-ISCDEPLIBS =	../../lib/isc/libisc.@A@
++ISCDEPLIBS =	../../lib/isc-pkcs11/libisc-pkcs11.@A@
+ 
+ DEPLIBS =	${ISCDEPLIBS}
+ 
+diff --git a/configure.ac b/configure.ac
+index 9b7d778..59ba20b 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1139,12 +1139,14 @@ AC_SUBST(USE_GSSAPI)
+ AC_SUBST(DST_GSSAPI_INC)
+ AC_SUBST(DNS_GSSAPI_LIBS)
+ DNS_CRYPTO_LIBS="$DNS_GSSAPI_LIBS $DNS_CRYPTO_LIBS"
++DNS_CRYPTO_PK11_LIBS="$DNS_GSSAPI_LIBS $DNS_CRYPTO_PK11_LIBS"
+ 
+ #
+ # Applications linking with libdns also need to link with these libraries.
+ #
+ 
+ AC_SUBST(DNS_CRYPTO_LIBS)
++AC_SUBST(DNS_CRYPTO_PK11_LIBS)
+ 
+ #
+ # was --with-randomdev specified?
+@@ -1494,11 +1496,11 @@ AC_ARG_ENABLE(openssl-hash,
+ AC_MSG_CHECKING(for OpenSSL library)
+ OPENSSL_WARNING=
+ openssldirs="/usr /usr/local /usr/local/ssl /opt/local /usr/pkg /usr/sfw"
+-if test "yes" = "$want_native_pkcs11"
+-then
+-	use_openssl="native_pkcs11"
+-	AC_MSG_RESULT(use of native PKCS11 instead)
+-fi
++# if test "yes" = "$want_native_pkcs11"
++# then
++# 	use_openssl="native_pkcs11"
++# 	AC_MSG_RESULT(use of native PKCS11 instead)
++# fi
+ 
+ if test "auto" = "$use_openssl"
+ then
+@@ -1511,6 +1513,7 @@ then
+ 		fi
+ 	done
+ fi
++CRYPTO_PK11=""
+ OPENSSL_ECDSA=""
+ OPENSSL_GOST=""
+ OPENSSL_ED25519=""
+@@ -1532,11 +1535,10 @@ case "$with_gost" in
+ 		;;
+ esac
+ 
+-case "$use_openssl" in
+-	native_pkcs11)
+-		AC_MSG_RESULT(disabled because of native PKCS11)
++if test "$want_native_pkcs11" = "yes"
++then
+ 		DST_OPENSSL_INC=""
+-		CRYPTO="-DPKCS11CRYPTO"
++		CRYPTO_PK11="-DPKCS11CRYPTO"
+ 		CRYPTOLIB="pkcs11"
+ 		OPENSSLECDSALINKOBJS=""
+ 		OPENSSLECDSALINKSRCS=""
+@@ -1546,7 +1548,9 @@ case "$use_openssl" in
+ 		OPENSSLGOSTLINKSRCS=""
+ 		OPENSSLLINKOBJS=""
+ 		OPENSSLLINKSRCS=""
+-		;;
++fi
++
++case "$use_openssl" in
+ 	no)
+ 		AC_MSG_RESULT(no)
+ 		DST_OPENSSL_INC=""
+@@ -1578,7 +1582,7 @@ case "$use_openssl" in
+ If you do not want OpenSSL, use --without-openssl])
+ 		;;
+ 	*)
+-		if test "yes" = "$want_native_pkcs11"
++		if false # test "yes" = "$want_native_pkcs11"
+ 		then
+ 			AC_MSG_RESULT()
+ 			AC_MSG_ERROR([OpenSSL and native PKCS11 cannot be used together.])
+@@ -2006,6 +2010,7 @@ AC_SUBST(OPENSSL_ED25519)
+ AC_SUBST(OPENSSL_GOST)
+ 
+ DNS_CRYPTO_LIBS="$DNS_CRYPTO_LIBS $DST_OPENSSL_LIBS"
++DNS_CRYPTO_PK11_LIBS="$DNS_CRYPTO_LIBS"
+ 
+ ISC_PLATFORM_WANTAES="#undef ISC_PLATFORM_WANTAES"
+ if test "yes" = "$with_aes"
+@@ -2291,6 +2296,7 @@ esac
+ AC_SUBST(PKCS11LINKOBJS)
+ AC_SUBST(PKCS11LINKSRCS)
+ AC_SUBST(CRYPTO)
++AC_SUBST(CRYPTO_PK11)
+ AC_SUBST(PKCS11_ECDSA)
+ AC_SUBST(PKCS11_GOST)
+ AC_SUBST(PKCS11_ED25519)
+@@ -5405,8 +5411,11 @@ AC_CONFIG_FILES([
+ 	bin/delv/Makefile
+ 	bin/dig/Makefile
+ 	bin/dnssec/Makefile
++	bin/dnssec-pkcs11/Makefile	
+ 	bin/named/Makefile
+ 	bin/named/unix/Makefile
++	bin/named-pkcs11/Makefile
++	bin/named-pkcs11/unix/Makefile
+ 	bin/nsupdate/Makefile
+ 	bin/pkcs11/Makefile
+ 	bin/python/Makefile
+@@ -5479,6 +5488,10 @@ AC_CONFIG_FILES([
+ 	lib/dns/include/dns/Makefile
+ 	lib/dns/include/dst/Makefile
+ 	lib/dns/tests/Makefile
++	lib/dns-pkcs11/Makefile
++	lib/dns-pkcs11/include/Makefile
++	lib/dns-pkcs11/include/dns/Makefile
++	lib/dns-pkcs11/include/dst/Makefile
+ 	lib/irs/Makefile
+ 	lib/irs/include/Makefile
+ 	lib/irs/include/irs/Makefile
+@@ -5503,6 +5516,24 @@ AC_CONFIG_FILES([
+ 	lib/isc/unix/include/Makefile
+ 	lib/isc/unix/include/isc/Makefile
+ 	lib/isc/unix/include/pkcs11/Makefile
++	lib/isc-pkcs11/$arch/Makefile
++	lib/isc-pkcs11/$arch/include/Makefile
++	lib/isc-pkcs11/$arch/include/isc/Makefile
++	lib/isc-pkcs11/$thread_dir/Makefile
++	lib/isc-pkcs11/$thread_dir/include/Makefile
++	lib/isc-pkcs11/$thread_dir/include/isc/Makefile
++	lib/isc-pkcs11/Makefile
++	lib/isc-pkcs11/include/Makefile
++	lib/isc-pkcs11/include/isc/Makefile
++	lib/isc-pkcs11/include/isc/platform.h
++	lib/isc-pkcs11/include/pk11/Makefile
++	lib/isc-pkcs11/include/pkcs11/Makefile
++	lib/isc-pkcs11/tests/Makefile
++	lib/isc-pkcs11/nls/Makefile
++	lib/isc-pkcs11/unix/Makefile
++	lib/isc-pkcs11/unix/include/Makefile
++	lib/isc-pkcs11/unix/include/isc/Makefile
++	lib/isc-pkcs11/unix/include/pkcs11/Makefile
+ 	lib/isccc/Makefile
+ 	lib/isccc/include/Makefile
+ 	lib/isccc/include/isccc/Makefile
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 81270a0..bcb5312 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -15,7 +15,7 @@ top_srcdir =	@top_srcdir@
+ # Attempt to disable parallel processing.
+ .NOTPARALLEL:
+ .NO_PARALLEL:
+-SUBDIRS =	isc isccc dns isccfg bind9 lwres irs samples
++SUBDIRS =	isc isc-pkcs11 isccc dns dns-pkcs11 isccfg bind9 lwres irs samples
+ TARGETS =
+ 
+ @BIND9_MAKE_RULES@
+diff --git a/lib/dns-pkcs11/Makefile.in b/lib/dns-pkcs11/Makefile.in
+index 7f09bd6..c388d9e 100644
+--- a/lib/dns-pkcs11/Makefile.in
++++ b/lib/dns-pkcs11/Makefile.in
+@@ -26,17 +26,16 @@ VERSION=@BIND9_VERSION@
+ 
+ USE_ISC_SPNEGO = @USE_ISC_SPNEGO@
+ 
+-CINCLUDES =	-I. -I${top_srcdir}/lib/dns -Iinclude ${DNS_INCLUDES} \
+-		${ISC_INCLUDES} ${MAXMINDDB_CFLAGS} \
+-		@DST_OPENSSL_INC@ @DST_GSSAPI_INC@
++CINCLUDES =	-I. -I${top_srcdir}/lib/dns-pkcs11 -Iinclude ${DNS_PKCS11_INCLUDES} \
++		${ISC_PKCS11_INCLUDES} ${MAXMINDDB_CFLAGS} @DST_OPENSSL_INC@ @DST_GSSAPI_INC@
+ 
+-CDEFINES =	-DUSE_MD5 @CRYPTO@ @USE_GSSAPI@ ${USE_ISC_SPNEGO}
++CDEFINES =	-DUSE_MD5 @CRYPTO_PK11@ @USE_GSSAPI@ ${USE_ISC_SPNEGO}
+ 
+ CWARNINGS =
+ 
+-ISCLIBS =	../../lib/isc/libisc.@A@
++ISCLIBS =	../../lib/isc-pkcs11/libisc-pkcs11.@A@
+ 
+-ISCDEPLIBS =	../../lib/isc/libisc.@A@
++ISCDEPLIBS =	../../lib/isc-pkcs11/libisc-pkcs11.@A@
+ 
+ LIBS =		${MAXMINDDB_LIBS} @LIBS@
+ 
+@@ -150,15 +149,15 @@ version.@O@: version.c
+ 		-DLIBAGE=${LIBAGE} \
+ 		-c ${srcdir}/version.c
+ 
+-libdns.@SA@: ${OBJS}
++libdns-pkcs11.@SA@: ${OBJS}
+ 	${AR} ${ARFLAGS} $@ ${OBJS}
+ 	${RANLIB} $@
+ 
+-libdns.la: ${OBJS}
++libdns-pkcs11.la: ${OBJS}
+ 	${LIBTOOL_MODE_LINK} \
+-		${CC} ${ALL_CFLAGS} ${LDFLAGS} -o libdns.la -rpath ${libdir} \
++		${CC} ${ALL_CFLAGS} ${LDFLAGS} -o libdns-pkcs11.la -rpath ${libdir} \
+ 		-version-info ${LIBINTERFACE}:${LIBREVISION}:${LIBAGE} \
+-		${OBJS} ${ISCLIBS} @DNS_CRYPTO_LIBS@ ${LIBS}
++		${OBJS} ${ISCLIBS} @DNS_CRYPTO_PK11_LIBS@ ${LIBS}
+ 
+ include: gen
+ 	${MAKE} include/dns/enumtype.h
+@@ -189,22 +188,22 @@ gen: gen.c
+ 	${BUILD_CPPFLAGS} ${BUILD_LDFLAGS} -o $@ ${srcdir}/gen.c \
+ 	${BUILD_LIBS} ${LFS_LIBS}
+ 
+-timestamp: include libdns.@A@
++timestamp: include libdns-pkcs11.@A@
+ 	touch timestamp
+ 
+-testdirs: libdns.@A@
++testdirs: libdns-pkcs11.@A@
+ 
+ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${libdir}
+ 
+ install:: timestamp installdirs
+-	${LIBTOOL_MODE_INSTALL} ${INSTALL_LIBRARY} libdns.@A@ ${DESTDIR}${libdir}
++	${LIBTOOL_MODE_INSTALL} ${INSTALL_LIBRARY} libdns-pkcs11.@A@ ${DESTDIR}${libdir}
+ 
+ uninstall::
+-	${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${libdir}/libdns.@A@
++	${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${libdir}/libdns-pkcs11.@A@
+ 
+ clean distclean::
+-	rm -f libdns.@A@ timestamp
++	rm -f libdns-pkcs11.@A@ timestamp
+ 	rm -f gen code.h include/dns/enumtype.h include/dns/enumclass.h
+ 	rm -f include/dns/rdatastruct.h
+ 	rm -f dnstap.pb-c.c dnstap.pb-c.h
+diff --git a/lib/isc-pkcs11/Makefile.in b/lib/isc-pkcs11/Makefile.in
+index 8ad54bb..a3ecdfb 100644
+--- a/lib/isc-pkcs11/Makefile.in
++++ b/lib/isc-pkcs11/Makefile.in
+@@ -23,8 +23,8 @@ CINCLUDES =	-I${srcdir}/unix/include \
+ 		-I${srcdir}/@ISC_THREAD_DIR@/include \
+ 		-I${srcdir}/@ISC_ARCH_DIR@/include \
+ 		-I./include \
+-		-I${srcdir}/include ${DNS_INCLUDES} @ISC_OPENSSL_INC@
+-CDEFINES =	@CRYPTO@ -DPK11_LIB_LOCATION=\"${PROVIDER}\"
++		-I${srcdir}/include ${DNS_PKCS11_INCLUDES}
++CDEFINES =	@CRYPTO_PK11@ -DPK11_LIB_LOCATION=\"${PROVIDER}\"
+ CWARNINGS =
+ 
+ # Alphabetically
+@@ -103,40 +103,40 @@ version.@O@: version.c
+ 		-DLIBAGE=${LIBAGE} \
+ 		-c ${srcdir}/version.c
+ 
+-libisc.@SA@: ${OBJS} ${SYMTBLOBJS}
++libisc-pkcs11.@SA@: ${OBJS} ${SYMTBLOBJS}
+ 	${AR} ${ARFLAGS} $@ ${OBJS} ${SYMTBLOBJS}
+ 	${RANLIB} $@
+ 
+-libisc-nosymtbl.@SA@: ${OBJS}
++libisc-pkcs11-nosymtbl.@SA@: ${OBJS}
+ 	${AR} ${ARFLAGS} $@ ${OBJS}
+ 	${RANLIB} $@
+ 
+-libisc.la: ${OBJS} ${SYMTBLOBJS}
++libisc-pkcs11.la: ${OBJS} ${SYMTBLOBJS}
+ 	${LIBTOOL_MODE_LINK} \
+-		${CC} ${ALL_CFLAGS} ${LDFLAGS} -o libisc.la -rpath ${libdir} \
++		${CC} ${ALL_CFLAGS} ${LDFLAGS} -o libisc-pkcs11.la -rpath ${libdir} \
+ 		-version-info ${LIBINTERFACE}:${LIBREVISION}:${LIBAGE} \
+ 		${OBJS} ${SYMTBLOBJS} ${LIBS}
+ 
+-libisc-nosymtbl.la: ${OBJS}
++libisc-pkcs11-nosymtbl.la: ${OBJS}
+ 	${LIBTOOL_MODE_LINK} \
+-		${CC} ${ALL_CFLAGS} ${LDFLAGS} -o libisc-nosymtbl.la -rpath ${libdir} \
++		${CC} ${ALL_CFLAGS} ${LDFLAGS} -o libisc-pkcs11-nosymtbl.la -rpath ${libdir} \
+ 		-version-info ${LIBINTERFACE}:${LIBREVISION}:${LIBAGE} \
+ 		${OBJS} ${LIBS}
+ 
+-timestamp: libisc.@A@ libisc-nosymtbl.@A@
++timestamp: libisc-pkcs11.@A@ libisc-pkcs11-nosymtbl.@A@
+ 	touch timestamp
+ 
+-testdirs: libisc.@A@ libisc-nosymtbl.@A@
++testdirs: libisc-pkcs11.@A@ libisc-pkcs11-nosymtbl.@A@
+ 
+ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${libdir}
+ 
+ install:: timestamp installdirs
+-	${LIBTOOL_MODE_INSTALL} ${INSTALL_LIBRARY} libisc.@A@ ${DESTDIR}${libdir}
++	${LIBTOOL_MODE_INSTALL} ${INSTALL_LIBRARY} libisc-pkcs11.@A@ ${DESTDIR}${libdir}
+ 
+ uninstall::
+-	${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${libdir}/libisc.@A@
++	${LIBTOOL_MODE_UNINSTALL} rm -f ${DESTDIR}${libdir}/libisc-pkcs11.@A@
+ 
+ clean distclean::
+-	rm -f libisc.@A@ libisc-nosymtbl.@A@ libisc.la \
+-	libisc-nosymtbl.la timestamp
++	rm -f libisc-pkcs11.@A@ libisc-pkcs11-nosymtbl.@A@ libisc-pkcs11.la \
++	libisc-pkcs11-nosymtbl.la timestamp
+diff --git a/make/includes.in b/make/includes.in
+index fa86ad1..3cfbe9f 100644
+--- a/make/includes.in
++++ b/make/includes.in
+@@ -43,3 +43,13 @@ BIND9_INCLUDES = @BIND9_BIND9_BUILDINCLUDE@ \
+ 
+ TEST_INCLUDES = \
+ 	-I${top_srcdir}/lib/tests/include
++
++ISC_PKCS11_INCLUDES = @BIND9_ISC_BUILDINCLUDE@ \
++	-I${top_srcdir}/lib/isc-pkcs11 \
++	-I${top_srcdir}/lib/isc-pkcs11/include \
++	-I${top_srcdir}/lib/isc-pkcs11/unix/include \
++	-I${top_srcdir}/lib/isc-pkcs11/@ISC_THREAD_DIR@/include \
++	-I${top_srcdir}/lib/isc-pkcs11/@ISC_ARCH_DIR@/include
++
++DNS_PKCS11_INCLUDES = @BIND9_DNS_BUILDINCLUDE@ \
++	-I${top_srcdir}/lib/dns-pkcs11/include

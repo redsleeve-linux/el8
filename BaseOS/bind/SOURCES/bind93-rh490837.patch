@@ -1,0 +1,81 @@
+diff --git a/lib/isc/include/isc/stdio.h b/lib/isc/include/isc/stdio.h
+index 1f44b5a..a3625f9 100644
+--- a/lib/isc/include/isc/stdio.h
++++ b/lib/isc/include/isc/stdio.h
+@@ -69,6 +69,9 @@ isc_stdio_sync(FILE *f);
+  * direct counterpart in the stdio library.
+  */
+ 
++isc_result_t
++isc_stdio_fgetc(FILE *f, int *ret);
++
+ ISC_LANG_ENDDECLS
+ 
+ #endif /* ISC_STDIO_H */
+diff --git a/lib/isc/lex.c b/lib/isc/lex.c
+index a8955bc..fc6103b 100644
+--- a/lib/isc/lex.c
++++ b/lib/isc/lex.c
+@@ -434,17 +434,14 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
+ 			if (source->is_file) {
+ 				stream = source->input;
+ 
+-#if defined(HAVE_FLOCKFILE) && defined(HAVE_GETCUNLOCKED)
+-				c = getc_unlocked(stream);
+-#else
+-				c = getc(stream);
+-#endif
+-				if (c == EOF) {
+-					if (ferror(stream)) {
+-						source->result = ISC_R_IOERROR;
+-						result = source->result;
++				result = isc_stdio_fgetc(stream, &c);
++
++				if (result != ISC_R_SUCCESS) {
++					if (result != ISC_R_EOF) {
++						source->result = result;
+ 						goto done;
+ 					}
++
+ 					source->at_eof = true;
+ 				}
+ 			} else {
+diff --git a/lib/isc/unix/errno2result.c b/lib/isc/unix/errno2result.c
+index 2f12bcc..5bfd648 100644
+--- a/lib/isc/unix/errno2result.c
++++ b/lib/isc/unix/errno2result.c
+@@ -40,6 +40,7 @@ isc___errno2result(int posixerrno, bool dolog,
+ 	case EINVAL:		/* XXX sometimes this is not for files */
+ 	case ENAMETOOLONG:
+ 	case EBADF:
++	case EISDIR:
+ 		return (ISC_R_INVALIDFILE);
+ 	case ENOENT:
+ 		return (ISC_R_FILENOTFOUND);
+diff --git a/lib/isc/unix/stdio.c b/lib/isc/unix/stdio.c
+index e60fa65..77f0b13 100644
+--- a/lib/isc/unix/stdio.c
++++ b/lib/isc/unix/stdio.c
+@@ -149,3 +149,22 @@ isc_stdio_sync(FILE *f) {
+ 		return (isc__errno2result(errno));
+ }
+ 
++isc_result_t
++isc_stdio_fgetc(FILE *f, int *ret) {
++	int r;
++	isc_result_t result = ISC_R_SUCCESS;
++
++#if defined(HAVE_FLOCKFILE) && defined(HAVE_GETCUNLOCKED)
++	r = fgetc_unlocked(f);
++#else
++	r = fgets(f);
++#endif
++
++	if (r == EOF)
++		result = ferror(f) ? isc__errno2result(errno) : ISC_R_EOF;
++
++	*ret = r;
++
++	return result;
++}
++

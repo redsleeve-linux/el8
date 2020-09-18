@@ -1,0 +1,192 @@
+From eb38d2278937ec3fe45d0af30cd080953bbb5b54 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20Men=C5=A1=C3=ADk?= <pemensik@redhat.com>
+Date: Tue, 2 Jan 2018 18:13:07 +0100
+Subject: [PATCH] Fix pkcs11 variants atf tests
+
+Add dns-pkcs11 tests Makefile to configure
+
+Add pkcs11 Kyuafile, fix dh_test to pass in pkcs11 mode
+---
+ configure.ac                     |  1 +
+ lib/Kyuafile                     |  2 ++
+ lib/dns-pkcs11/tests/Makefile.in | 10 +++++-----
+ lib/dns-pkcs11/tests/dh_test.c   |  3 ++-
+ lib/isc-pkcs11/tests/Makefile.in |  6 +++---
+ lib/isc-pkcs11/tests/hash_test.c | 32 +++++++++++++++++++++++++-------
+ 6 files changed, 38 insertions(+), 16 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 0532feb..a83ddd5 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -5578,6 +5578,7 @@ AC_CONFIG_FILES([
+ 	lib/dns-pkcs11/include/Makefile
+ 	lib/dns-pkcs11/include/dns/Makefile
+ 	lib/dns-pkcs11/include/dst/Makefile
++	lib/dns-pkcs11/tests/Makefile
+ 	lib/irs/Makefile
+ 	lib/irs/include/Makefile
+ 	lib/irs/include/irs/Makefile
+diff --git a/lib/Kyuafile b/lib/Kyuafile
+index 7c8bab0..eec9564 100644
+--- a/lib/Kyuafile
++++ b/lib/Kyuafile
+@@ -2,8 +2,10 @@ syntax(2)
+ test_suite('bind9')
+ 
+ include('dns/Kyuafile')
++include('dns-pkcs11/Kyuafile')
+ include('irs/Kyuafile')
+ include('isc/Kyuafile')
++include('isc-pkcs11/Kyuafile')
+ include('isccc/Kyuafile')
+ include('isccfg/Kyuafile')
+ include('lwres/Kyuafile')
+diff --git a/lib/dns-pkcs11/tests/Makefile.in b/lib/dns-pkcs11/tests/Makefile.in
+index 7671e1d..e237d5c 100644
+--- a/lib/dns-pkcs11/tests/Makefile.in
++++ b/lib/dns-pkcs11/tests/Makefile.in
+@@ -17,12 +17,12 @@ VERSION=@BIND9_VERSION@
+ 
+ CINCLUDES =	-I. -Iinclude ${DNS_INCLUDES} ${ISC_INCLUDES} \
+ 		@DST_OPENSSL_INC@
+-CDEFINES =	@CRYPTO@ -DTESTS="\"${top_builddir}/lib/dns/tests/\""
++CDEFINES =	@CRYPTO_PK11@ -DTESTS="\"${top_builddir}/lib/dns-pkcs11/tests/\""
+ 
+-ISCLIBS =	../../isc/libisc.@A@
+-ISCDEPLIBS =	../../isc/libisc.@A@
+-DNSLIBS =	../libdns.@A@ ${MAXMINDDB_LIBS} @DNS_CRYPTO_LIBS@
+-DNSDEPLIBS =	../libdns.@A@
++ISCLIBS =	../../isc-pkcs11/libisc-pkcs11.@A@
++ISCDEPLIBS =	../../isc-pkcs11/libisc-pkcs11.@A@
++DNSLIBS =	../libdns-pkcs11.@A@ ${MAXMINDDB_LIBS} @DNS_CRYPTO_LIBS@
++DNSDEPLIBS =	../libdns-pkcs11.@A@
+ 
+ LIBS =		@LIBS@ @CMOCKA_LIBS@
+ CFLAGS =	@CFLAGS@ @CMOCKA_CFLAGS@
+diff --git a/lib/dns-pkcs11/tests/dh_test.c b/lib/dns-pkcs11/tests/dh_test.c
+index 4dbfd82..a383b8e 100644
+--- a/lib/dns-pkcs11/tests/dh_test.c
++++ b/lib/dns-pkcs11/tests/dh_test.c
+@@ -86,7 +86,8 @@ dh_computesecret(void **state) {
+ 	result = dst_key_computesecret(key, key, &buf);
+ 	assert_int_equal(result, DST_R_NOTPRIVATEKEY);
+ 	result = key->func->computesecret(key, key, &buf);
+-	assert_int_equal(result, DST_R_COMPUTESECRETFAILURE);
++	/* PKCS11 variant gives different result, accept both */
++	assert_true(result == DST_R_COMPUTESECRETFAILURE || result == DST_R_INVALIDPRIVATEKEY);
+ 
+ 	dst_key_free(&key);
+ }
+diff --git a/lib/isc-pkcs11/tests/Makefile.in b/lib/isc-pkcs11/tests/Makefile.in
+index 2fdee0b..a263b35 100644
+--- a/lib/isc-pkcs11/tests/Makefile.in
++++ b/lib/isc-pkcs11/tests/Makefile.in
+@@ -16,10 +16,10 @@ VERSION=@BIND9_VERSION@
+ @BIND9_MAKE_INCLUDES@
+ 
+ CINCLUDES =	-I. -Iinclude ${ISC_INCLUDES} @ISC_OPENSSL_INC@
+-CDEFINES =	@CRYPTO@ -DTESTS="\"${top_builddir}/lib/isc/tests/\""
++CDEFINES =	@CRYPTO_PK11@ -DTESTS="\"${top_builddir}/lib/isc-pkcs11/tests/\""
+ 
+-ISCLIBS =	../libisc.@A@ @ISC_OPENSSL_LIBS@
+-ISCDEPLIBS =	../libisc.@A@
++ISCLIBS =	../libisc-pkcs11.@A@ @ISC_OPENSSL_LIBS@
++ISCDEPLIBS =	../libisc-pkcs11.@A@
+ 
+ LIBS =		@LIBS@ @CMOCKA_LIBS@
+ CFLAGS =	@CFLAGS@ @CMOCKA_CFLAGS@
+diff --git a/lib/isc-pkcs11/tests/hash_test.c b/lib/isc-pkcs11/tests/hash_test.c
+index 9c4d299..d9deba2 100644
+--- a/lib/isc-pkcs11/tests/hash_test.c
++++ b/lib/isc-pkcs11/tests/hash_test.c
+@@ -85,7 +85,7 @@ typedef struct hash_testcase {
+ 
+ typedef struct hash_test_key {
+ 	const char *key;
+-	const int len;
++	const unsigned len;
+ } hash_test_key_t;
+ 
+ /* non-hmac tests */
+@@ -956,8 +956,11 @@ isc_hmacsha1_test(void **state) {
+ 	hash_test_key_t *test_key = test_keys;
+ 
+ 	while (testcase->input != NULL && testcase->result != NULL) {
++		int len = ISC_MAX(test_key->len, ISC_SHA1_DIGESTLENGTH);
++
++		memset(buffer, 0, ISC_SHA1_DIGESTLENGTH);
+ 		memmove(buffer, test_key->key, test_key->len);
+-		isc_hmacsha1_init(&hmacsha1, buffer, test_key->len);
++		isc_hmacsha1_init(&hmacsha1, buffer, len);
+ 		isc_hmacsha1_update(&hmacsha1,
+ 				    (const uint8_t *) testcase->input,
+ 				    testcase->input_len);
+@@ -1116,8 +1119,11 @@ isc_hmacsha224_test(void **state) {
+ 	hash_test_key_t *test_key = test_keys;
+ 
+ 	while (testcase->input != NULL && testcase->result != NULL) {
++		int len = ISC_MAX(test_key->len, ISC_SHA224_DIGESTLENGTH);
++
++		memset(buffer, 0, ISC_SHA224_DIGESTLENGTH);
+ 		memmove(buffer, test_key->key, test_key->len);
+-		isc_hmacsha224_init(&hmacsha224, buffer, test_key->len);
++		isc_hmacsha224_init(&hmacsha224, buffer, len);
+ 		isc_hmacsha224_update(&hmacsha224,
+ 				      (const uint8_t *) testcase->input,
+ 				      testcase->input_len);
+@@ -1277,8 +1283,11 @@ isc_hmacsha256_test(void **state) {
+ 	hash_test_key_t *test_key = test_keys;
+ 
+ 	while (testcase->input != NULL && testcase->result != NULL) {
++		int len = ISC_MAX(test_key->len, ISC_SHA256_DIGESTLENGTH);
++
++		memset(buffer, 0, ISC_SHA256_DIGESTLENGTH);
+ 		memmove(buffer, test_key->key, test_key->len);
+-		isc_hmacsha256_init(&hmacsha256, buffer, test_key->len);
++		isc_hmacsha256_init(&hmacsha256, buffer, len);
+ 		isc_hmacsha256_update(&hmacsha256,
+ 				      (const uint8_t *) testcase->input,
+ 				      testcase->input_len);
+@@ -1444,8 +1453,11 @@ isc_hmacsha384_test(void **state) {
+ 	hash_test_key_t *test_key = test_keys;
+ 
+ 	while (testcase->input != NULL && testcase->result != NULL) {
++		int len = ISC_MAX(test_key->len, ISC_SHA384_DIGESTLENGTH);
++
++		memset(buffer, 0, ISC_SHA384_DIGESTLENGTH);
+ 		memmove(buffer, test_key->key, test_key->len);
+-		isc_hmacsha384_init(&hmacsha384, buffer, test_key->len);
++		isc_hmacsha384_init(&hmacsha384, buffer, len);
+ 		isc_hmacsha384_update(&hmacsha384,
+ 				      (const uint8_t *) testcase->input,
+ 				      testcase->input_len);
+@@ -1611,8 +1623,11 @@ isc_hmacsha512_test(void **state) {
+ 	hash_test_key_t *test_key = test_keys;
+ 
+ 	while (testcase->input != NULL && testcase->result != NULL) {
++		int len = ISC_MAX(test_key->len, ISC_SHA512_DIGESTLENGTH);
++
++		memset(buffer, 0, ISC_SHA512_DIGESTLENGTH);
+ 		memmove(buffer, test_key->key, test_key->len);
+-		isc_hmacsha512_init(&hmacsha512, buffer, test_key->len);
++		isc_hmacsha512_init(&hmacsha512, buffer, len);
+ 		isc_hmacsha512_update(&hmacsha512,
+ 				      (const uint8_t *) testcase->input,
+ 				      testcase->input_len);
+@@ -1755,8 +1770,11 @@ isc_hmacmd5_test(void **state) {
+ 	hash_test_key_t *test_key = test_keys;
+ 
+ 	while (testcase->input != NULL && testcase->result != NULL) {
++		int len = ISC_MAX(test_key->len, ISC_MD5_DIGESTLENGTH);
++
++		memset(buffer, 0, ISC_MD5_DIGESTLENGTH);
+ 		memmove(buffer, test_key->key, test_key->len);
+-		isc_hmacmd5_init(&hmacmd5, buffer, test_key->len);
++		isc_hmacmd5_init(&hmacmd5, buffer, len);
+ 		isc_hmacmd5_update(&hmacmd5,
+ 				   (const uint8_t *) testcase->input,
+ 				   testcase->input_len);
+-- 
+2.20.1
+

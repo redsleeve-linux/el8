@@ -1,0 +1,54 @@
+diff --git a/config.h.in b/config.h.in
+index 4ecaa8f..2f65ccc 100644
+--- a/config.h.in
++++ b/config.h.in
+@@ -600,7 +600,7 @@ int sigwait(const unsigned int *set, int *sig);
+ #undef PREFER_GOSTASN1
+ 
+ /* The size of `void *', as computed by sizeof. */
+-#undef SIZEOF_VOID_P
++/* #undef SIZEOF_VOID_P */
+ 
+ /* Define to 1 if you have the ANSI C header files. */
+ #undef STDC_HEADERS
+diff --git a/isc-config.sh.in b/isc-config.sh.in
+index a8a0a89..b5e94ed 100644
+--- a/isc-config.sh.in
++++ b/isc-config.sh.in
+@@ -13,7 +13,18 @@ prefix=@prefix@
+ exec_prefix=@exec_prefix@
+ exec_prefix_set=
+ includedir=@includedir@
+-libdir=@libdir@
++arch=$(uname -m)
++
++case $arch in
++	x86_64 | amd64 | sparc64 | s390x | ppc64)
++		libdir=/usr/lib64
++		sec_libdir=/usr/lib
++		;;
++	* )
++		libdir=/usr/lib
++		sec_libdir=/usr/lib64
++		;;
++esac
+ 
+ usage()
+ {
+@@ -132,6 +143,16 @@ if test x"$echo_libs" = x"true"; then
+ 	if test x"${exec_prefix_set}" = x"true"; then
+ 		libs="-L${exec_prefix}/lib"
+ 	else
++		if [ ! -x $libdir/libisc.so ] ; then
++			if [ ! -x $sec_libdir/libisc.so ] ; then
++				echo "Error: ISC libs not found in $libdir"
++				if [ -d $sec_libdir ] ; then
++					echo "Error: ISC libs not found in $sec_libdir"
++				fi
++				exit 1
++			fi
++			libdir=$sec_libdir
++		fi
+ 		libs="-L${libdir}"
+ 	fi
+ 	if test x"$libirs" = x"true" ; then

@@ -1,0 +1,50 @@
+From cb6d2019766a6c8c5516fd8859cedf0052f03293 Mon Sep 17 00:00:00 2001
+From: Petr Mensik <pemensik@redhat.com>
+Date: Thu, 25 Jul 2019 11:37:57 +0200
+Subject: [PATCH] Skip support of jsoncpp
+
+Bind cannot be compiled when jsoncpp-devel is installed. Remove support
+for jsoncpp, use only json-c-devel. Bind 9.15 has already support for
+--with-json-c, do not yet introduce it.
+---
+ configure.ac | 17 ++---------------
+ 1 file changed, 2 insertions(+), 15 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 6d05337..5ce83b5 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -2594,15 +2594,7 @@ case "$use_libjson" in
+ 	auto|yes)
+ 		for d in /usr /usr/local /opt/local
+ 		do
+-			if test -f "${d}/include/json/json.h"
+-			then
+-				if test ${d} != /usr
+-				then
+-					libjson_cflags="-I ${d}/include"
+-					LIBS="$LIBS -L${d}/lib"
+-				fi
+-				have_libjson="yes"
+-			elif test -f "${d}/include/json-c/json.h"
++			if test -f "${d}/include/json-c/json.h"
+ 			then
+ 				if test ${d} != /usr
+ 				then
+@@ -2615,12 +2607,7 @@ case "$use_libjson" in
+ 		done
+ 		;;
+ 	*)
+-		if test -f "${use_libjson}/include/json/json.h"
+-		then
+-			libjson_cflags="-I${use_libjson}/include"
+-			LIBS="$LIBS -L${use_libjson}/lib"
+-			have_libjson="yes"
+-		elif test -f "${use_libjson}/include/json-c/json.h"
++		if test -f "${use_libjson}/include/json-c/json.h"
+ 		then
+ 			libjson_cflags="-I${use_libjson}/include"
+ 			LIBS="$LIBS -L${use_libjson}/lib"
+-- 
+2.20.1
+

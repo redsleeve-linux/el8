@@ -1,0 +1,196 @@
+From 0430b3ac66169eea7a74aaa8bfca50400d3497cf Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20Men=C5=A1=C3=ADk?= <pemensik@redhat.com>
+Date: Tue, 18 Dec 2018 16:06:26 +0100
+Subject: [PATCH] Make absolute hostname by dns API instead of strings
+
+Duplicate all strings in dc_list. Free allocated memory on each record.
+---
+ bin/sdb_tools/zone2ldap.c | 71 +++++++++++++++++++++++++--------------
+ 1 file changed, 45 insertions(+), 26 deletions(-)
+
+diff --git a/bin/sdb_tools/zone2ldap.c b/bin/sdb_tools/zone2ldap.c
+index 76186b5..28df191 100644
+--- a/bin/sdb_tools/zone2ldap.c
++++ b/bin/sdb_tools/zone2ldap.c
+@@ -87,6 +87,10 @@ int get_attr_list_size (char **tmp);
+ /* Get a DN */
+ char *build_dn_from_dc_list (char **dc_list, unsigned int ttl, int flag, char *zone);
+ 
++/* Free a DN list */
++static void
++free_dc_list(char **dc_list);
++
+ /* Add to RR list */
+ void add_to_rr_list (char *dn, char *name, char *type, char *data,
+ 		     unsigned int ttl, unsigned int flags);
+@@ -123,6 +127,7 @@ static char dNSTTL            []="dNSTTL";
+ static char zoneName          []="zoneName";
+ static char dc                []="dc";
+ static char sameZone          []="@";
++static char dot               []=".";
+ /* LDAPMod mod_values: */
+ static char *objectClasses    []= { &(topClass[0]), &(dNSZoneClass[0]), NULL };
+ static char *topObjectClasses []= { &(topClass[0]), &(dcObjectClass[0]), &(dNSZoneClass[0]), NULL };
+@@ -396,6 +401,8 @@ main (int argc, char **argv)
+ 	    }
+ 
+ 	}
++
++        free_dc_list(dc_list);
+     }
+   else
+     {
+@@ -451,12 +458,18 @@ generate_ldap (dns_name_t * dnsname, dns_rdata_t * rdata, unsigned int ttl)
+   char data[2048];
+   char **dc_list;
+   char *dn;
++  size_t argzone_len;
++  bool omit_dot;
+ 
+   isc_buffer_t buff;
+   isc_result_t result;
+ 
+   isc_buffer_init (&buff, name, sizeof (name));
+   result = dns_name_totext (dnsname, true, &buff);
++  argzone_len = strlen(argzone);
++  /* If argzone is absolute, output absolute name too */
++  omit_dot = (!(argzone_len > 0 && argzone[argzone_len-1] == '.'));
++  result = dns_name_totext (dnsname, omit_dot, &buff);
+   isc_result_check (result, "dns_name_totext");
+   name[isc_buffer_usedlength (&buff)] = 0;
+ 
+@@ -478,6 +491,7 @@ generate_ldap (dns_name_t * dnsname, dns_rdata_t * rdata, unsigned int ttl)
+     printf ("Adding %s (%s %s) to run queue list.\n", dn, type, data);
+ 
+   add_to_rr_list (dn, dc_list[len], (char*)type, (char*)data, ttl, DNS_OBJECT);
++  free_dc_list(dc_list);
+ }
+ 
+ 
+@@ -538,12 +552,9 @@ add_to_rr_list (char *dn, char *name, char *type,
+       if (tmp->attrs == (LDAPMod **) NULL)
+ 	fatal("calloc");
+ 
+-      for (i = 0; i < (int)flags; i++)
+-	{
+-	  tmp->attrs[i] = (LDAPMod *) malloc (sizeof (LDAPMod));
+-	  if (tmp->attrs[i] == (LDAPMod *) NULL)
+-	    fatal("malloc");
+-	}
++      tmp->attrs[0] = (LDAPMod *) malloc (sizeof (LDAPMod));
++      if (tmp->attrs[0] == (LDAPMod *) NULL)
++	  fatal("malloc");
+       tmp->attrs[0]->mod_op = LDAP_MOD_ADD;
+       tmp->attrs[0]->mod_type = objectClass;
+ 
+@@ -559,9 +570,18 @@ add_to_rr_list (char *dn, char *name, char *type,
+ 	  return;
+ 	}
+ 
++      for (i = 1; i < (int)flags-1; i++)
++	{
++	  tmp->attrs[i] = (LDAPMod *) malloc (sizeof (LDAPMod));
++	  if (tmp->attrs[i] == (LDAPMod *) NULL)
++	    fatal("malloc");
++	}
++      tmp->attrs[i] = NULL;
++
++
+       tmp->attrs[1]->mod_op = LDAP_MOD_ADD;
+       tmp->attrs[1]->mod_type = relativeDomainName;
+-      tmp->attrs[1]->mod_values = (char **) calloc (sizeof (char *), 2);
++      tmp->attrs[1]->mod_values = (char **) calloc (sizeof (char *), 3);
+ 
+       if (tmp->attrs[1]->mod_values == (char **)NULL)
+ 	fatal("calloc");
+@@ -705,25 +725,16 @@ char **
+ hostname_to_dn_list (char *hostname, char *zone, unsigned int flags)
+ {
+   char *tmp;
+-  int i = 0;
++  int i = 0, j = 0;
+   char *hname=0L, *last=0L;
+   int hlen=strlen(hostname), zlen=(strlen(zone));
+ 
+ /*  printf("hostname: %s zone: %s\n",hostname, zone); */
+-  hname=0L;
+   if(flags == DNS_OBJECT)
+   {
+-      if( (zone[ zlen - 1 ] == '.') && (hostname[hlen - 1] != '.') )
+-      {
+-	  hname=(char*)malloc(hlen + 1);
+-	  hlen += 1;
+-	  sprintf(hname, "%s.", hostname);
+-	  hostname = hname;
+-      }
+       if(strcmp(hostname, zone) == 0)
+       {
+-	  if( hname == 0 )
+-	      hname=strdup(hostname);
++	  hname=strdup(hostname);
+   	  last = strdup(sameZone);
+       }else
+       {	   
+@@ -731,8 +742,6 @@ hostname_to_dn_list (char *hostname, char *zone, unsigned int flags)
+ 	     ||( strcmp( hostname + (hlen - zlen), zone ) != 0)
+ 	    )
+ 	  {
+-	      if( hname != 0 )
+-		  free(hname);
+ 	      hname=(char*)malloc( hlen + zlen + 1);
+ 	      if( *zone == '.' )
+ 		  sprintf(hname, "%s%s", hostname, zone);
+@@ -740,8 +749,7 @@ hostname_to_dn_list (char *hostname, char *zone, unsigned int flags)
+ 		  sprintf(hname,"%s",zone);
+ 	  }else
+ 	  {
+-	      if( hname == 0 )
+-		  hname = strdup(hostname);
++	      hname = strdup(hostname);
+ 	  }
+ 	  last = hname;
+       }
+@@ -754,18 +762,21 @@ hostname_to_dn_list (char *hostname, char *zone, unsigned int flags)
+   for (tmp = strrchr (hname, '.'); tmp != (char *) 0;
+        tmp = strrchr (hname, '.'))
+   {
+-      if( *( tmp + 1 ) != '\0' )
++      tmp[0] = '\0';
++      if( tmp[1] != '\0' )
+       {
+-	  *tmp = '\0';
+ 	  dn_buffer[i++] = ++tmp;
+       }else
+       { /* trailing '.' ! */
+-	  dn_buffer[i++] = strdup(".");
+-	  *tmp = '\0';
++	  dn_buffer[i++] = dot;
+ 	  if( tmp == hname )
+ 	      break;
+       }	  
+   }
++  for (j=0; j<i; j++)
++  {
++      dn_buffer[j] = strdup(dn_buffer[j]);
++  }
+   if( ( last != hname ) && (tmp != hname) )
+       dn_buffer[i++] = hname;
+   dn_buffer[i++] = last;
+@@ -825,6 +836,14 @@ build_dn_from_dc_list (char **dc_list, unsigned int ttl, int flag, char *zone)
+   return dn;
+ }
+ 
++static void
++free_dc_list(char **dc_list)
++{
++    for (; *dc_list; dc_list++) {
++        free(*dc_list);
++	*dc_list=NULL;
++    }
++}
+ 
+ /* Initialize LDAP Conn */
+ void
+-- 
+2.20.1
+

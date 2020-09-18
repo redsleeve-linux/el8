@@ -1,0 +1,3858 @@
+From 2bdcb7159b1ac097355e95864e979b4f68bc1a4e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20Men=C5=A1=C3=ADk?= <pemensik@redhat.com>
+Date: Thu, 7 Nov 2019 14:31:03 +0100
+Subject: [PATCH] Implement serve-stale in 9.11
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Squashed commit of the following:
+
+commit 32f47f36e545223b2a4757588d7bd4af8c5f5760
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Tue Sep 3 18:45:54 2019 +0200
+
+    convert serve_stale to db_test
+
+    Manual checkout from commit e8f61dd315c5d1c88915bb79361182241e42e47a.
+    Use test modified for cmocka, including serve-stale tests.
+
+commit 071eb1fb0786f6d614955813d99c3caabff33383
+Author: Michał Kępień <michal@isc.org>
+Date:   Fri Apr 27 09:13:26 2018 +0200
+
+    Detect recursion loops during query processing
+
+    Interrupt query processing when query_recurse() attempts to ask the same
+    name servers for the same QNAME/QTYPE tuple for two times in a row as
+    this indicates that query processing may be stuck for an indeterminate
+    period of time, e.g. due to interactions between features able to
+    restart query_lookup().
+
+    (cherry picked from commit 46bb4dd124ed031d4c219d1e37a3c6322092e30c)
+
+commit c12090bc361c7fa4522ace73899e778e44e9b295
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Mon Sep 2 11:12:32 2019 +0200
+
+    Fix test name used in whole test-suite
+
+    Correct name is serve-stale
+
+commit ff4d826f295d268a248ca06941d65c903e1b405c
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Fri Aug 30 17:43:28 2019 +0200
+
+    Clean files in more generic rules
+
+commit 8d81ed15eda9a2a11e1433d1fdddacfc772708b6
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Thu Aug 29 21:27:57 2019 +0200
+
+    [rt46602] Pass port numbers to tests via environment variables
+
+    Manually applied commit f5d8f079008b648d2e343543e66dd728054c6101
+
+commit 94fafa477891576286def8c4041ad127734af2d1
+Author: Tony Finch <dot@dotat.at>
+Date:   Tue Apr 10 16:17:57 2018 +0100
+
+    Move serve-stale logging to its own category, so that its verbosity can be curtailed.
+
+    (cherry picked from commit 4b442c309dfb2c8880b19af4133047655bb734df)
+
+commit e0c884bee98c3d2533dfaa667f58c6a80d8a3a00
+Author: Michał Kępień <michal@isc.org>
+Date:   Fri Apr 27 09:13:26 2018 +0200
+
+    Prevent check_stale_header() from leaking rdataset headers
+
+    check_stale_header() fails to update the pointer to the previous header
+    while processing rdataset headers eligible for serve-stale, thus
+    enabling rdataset headers to be leaked (i.e. disassociated from a node
+    and left on the relevant TTL heap) while iterating through a node.  This
+    can lead to several different assertion failures.  Add the missing
+    pointer update.
+
+    (cherry picked from commit 391fac1fc8d2e470287b5cc4344b3adb90c6f54a)
+
+commit d724cc1d80ee8d46113eaf82549d49636739b67c
+Author: Matthijs Mekking <matthijs@isc.org>
+Date:   Thu Jan 24 10:24:44 2019 +0100
+
+    Print in dump-file stale ttl
+
+    This change makes rndc dumpdb correctly print the "; stale" line.
+    It also provides extra information on how long this data may still
+    be served to clients (in other words how long the stale RRset may
+    still be used).
+
+    (cherry picked from commit 924ebc605db798e2a383ee5eaaebad739e7c789c)
+
+commit 625da4bd4590ac6108bb30eddd23ceffb245ae49
+Author: Michał Kępień <michal@isc.org>
+Date:   Mon Oct 22 15:26:45 2018 +0200
+
+    Check serve-stale behavior with a cold cache
+
+    Ensure that serve-stale works as expected when returning stale answers
+    is enabled, the authoritative server does not respond, and there is no
+    cached answer available.
+
+    (cherry picked from commit 27cfe83a388147edfa0451b28c06c746912ea684)
+
+commit d67ae10461c409fdafdbbe64f857db2552b71059
+Author: Michał Kępień <michal@isc.org>
+Date:   Mon Oct 22 15:26:45 2018 +0200
+
+    Check TTL of stale answers
+
+    Make sure that stale answers returned when the serve-stale feature is
+    enabled have a TTL matching the value of the stale-answer-ttl setting.
+
+    (cherry picked from commit 893ab37ce78c658215bd3a019f25afe795b37d5a)
+
+commit 50459107805e68e4a63a8e497bf58ef3ce013ddb
+Author: Michał Kępień <michal@isc.org>
+Date:   Mon Jul 9 14:35:12 2018 +0200
+
+    Do not use Net::DNS::Nameserver in the "serve-stale" system test
+
+    Net::DNS versions older than 0.67 respond to queries sent to a
+    Net::DNS::Nameserver even if its ReplyHandler returns undef.  This makes
+    the "serve-stale" system test fail as it takes advantage of the newer
+    behavior.  Since the latest Net::DNS version available with stock
+    RHEL/CentOS 6 packages is 0.65 and we officially support that operating
+    system, bin/tests/system/serve-stale/ans2/ans.pl should behave
+    consistently for various Net::DNS versions.  Ensure that by reworking it
+    so that it does not use Net::DNS::Nameserver.
+
+    (cherry picked from commit c4209418a50c09142375f7edadca731c526f3d3a)
+
+commit 4b5befc714bb386bd245b1c14ce3bce5ae6fb5fa
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Tue Jun 5 21:38:29 2018 +0200
+
+    Fix server-stale requirement, skip without Time::HiRes
+
+    (cherry picked from commit 7a0c7bf9c8e6a724e52635eed213ad25b9504e66)
+
+commit 5ce51a3a7e5ef3087c4d022e3fca42fb2fd0c996
+Author: Ondřej Surý <ondrej@sury.org>
+Date:   Wed Oct 18 13:01:14 2017 +0200
+
+    [rt46602] Update server-stale test to run on port passed from run.sh script
+
+    (cherry picked from commit f83ebd34b9555a5a834c58146035173bcbd01dda)
+
+commit 3954a9bf3437f6fab050294a7f2f954a23d161ec
+Author: Ondřej Surý <ondrej@sury.org>
+Date:   Wed Oct 18 14:18:59 2017 +0200
+
+    [rt46602] Add serve-stale working files to .gitignore
+
+    (cherry picked from commit cba162e70e7fac43435a606106841a69ce468526)
+
+commit 112aa21f5fa875494820e4d1eb70e41e10e1aae7
+Author: Mark Andrews <marka@isc.org>
+Date:   Thu Oct 12 15:33:47 2017 +1100
+
+    test for Net::DNS::Nameserver
+
+    (cherry picked from commit 5b60d0608ac2852753180b762d1917163f9dc315)
+
+commit 9d610e46af8a636f44914cee4cf8b2016054db1e
+Author: Mark Andrews <marka@isc.org>
+Date:   Thu Oct 12 15:19:45 2017 +1100
+
+    add Net::DNS prerequiste test
+
+    (cherry picked from commit fa644181f51559da3e3913acd72dbc3f6d916e71)
+
+commit e4ea7ba88d9a9a0c79579400c68a5dabe03e8572
+Author: Mark Andrews <marka@isc.org>
+Date:   Wed Sep 6 19:26:10 2017 +1000
+
+    add quotes arount $send_response
+
+    (cherry picked from commit 023ab19634b287543169e9b7b5259f3126cd60ff)
+
+commit 0af0c5d33c2de34da164571288b650282c6be10a
+Author: Mark Andrews <marka@isc.org>
+Date:   Thu Nov 23 16:11:49 2017 +1100
+
+    initalise serve_stale_ttl
+
+    (cherry picked from commit 2f4e0e5a81278f59037bf06ae99ff52245cd57e9)
+
+commit fbadd90ee81863d617c4c319d5f0079b877fe102
+Author: Evan Hunt <each@isc.org>
+Date:   Thu Sep 14 11:48:21 2017 -0700
+
+    [master] add thanks to APNIC and add missing note for serve-stale
+
+commit deb8adaa59955970b9d2f2fe58060a3cbf08312b
+Author: Mark Andrews <marka@isc.org>
+Date:   Wed Sep 6 12:16:10 2017 +1000
+
+    silence 'staleanswersok' may be used uninitialized in this function warning. [RT #14147
+
+commit 0e2d03823768dc545015e6ce309777210f4a9f85
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Thu Aug 29 19:57:58 2019 +0200
+
+    More fixes to merge
+
+commit 360e25ffe7623ea0a2eec49395001f4940967776
+Author: Mark Andrews <marka@isc.org>
+Date:   Wed Sep 6 09:58:29 2017 +1000
+
+    4700.   [func]          Serving of stale answers is now supported. This
+                            allows named to provide stale cached answers when
+                            the authoritative server is under attack.
+                            See max-stale-ttl, stale-answer-enable,
+                            stale-answer-ttl. [RT #44790]
+
+Signed-off-by: Petr Menšík <pemensik@redhat.com>
+---
+ bin/named/config.c                            |   9 +-
+ bin/named/control.c                           |   2 +
+ bin/named/include/named/control.h             |   1 +
+ bin/named/include/named/log.h                 |   1 +
+ bin/named/include/named/query.h               |  15 +
+ bin/named/include/named/server.h              |  13 +-
+ bin/named/log.c                               |   1 +
+ bin/named/query.c                             | 164 +++++-
+ bin/named/server.c                            | 177 +++++-
+ bin/named/statschannel.c                      |   6 +
+ bin/rndc/rndc.c                               |   2 +
+ bin/rndc/rndc.docbook                         |  19 +
+ bin/tests/system/chain/prereq.sh              |   7 +
+ bin/tests/system/conf.sh.in                   |   2 +-
+ bin/tests/system/dyndb/driver/db.c            |   2 +
+ bin/tests/system/serve-stale/.gitignore       |  11 +
+ bin/tests/system/serve-stale/ans2/ans.pl.in   | 178 ++++++
+ bin/tests/system/serve-stale/clean.sh         |  15 +
+ .../system/serve-stale/ns1/named1.conf.in     |  35 ++
+ .../system/serve-stale/ns1/named2.conf.in     |  35 ++
+ bin/tests/system/serve-stale/ns1/root.db      |   5 +
+ .../system/serve-stale/ns3/named.conf.in      |  35 ++
+ bin/tests/system/serve-stale/prereq.sh        |  38 ++
+ bin/tests/system/serve-stale/setup.sh         |  13 +
+ bin/tests/system/serve-stale/tests.sh         | 536 ++++++++++++++++++
+ doc/arm/Bv9ARM-book.xml                       |  69 ++-
+ doc/arm/logging-categories.xml                |  11 +
+ doc/arm/notes-rh-changes.xml                  |  14 +-
+ doc/misc/options                              |  10 +
+ lib/bind9/check.c                             |  78 ++-
+ lib/dns/cache.c                               |  38 +-
+ lib/dns/db.c                                  |  22 +
+ lib/dns/ecdb.c                                |   4 +-
+ lib/dns/include/dns/cache.h                   |  21 +
+ lib/dns/include/dns/db.h                      |  35 ++
+ lib/dns/include/dns/rdataset.h                |  11 +
+ lib/dns/include/dns/resolver.h                |  43 +-
+ lib/dns/include/dns/types.h                   |   6 +
+ lib/dns/include/dns/view.h                    |   3 +
+ lib/dns/master.c                              |  14 +-
+ lib/dns/masterdump.c                          |  23 +
+ lib/dns/rbtdb.c                               | 207 ++++++-
+ lib/dns/resolver.c                            |  78 ++-
+ lib/dns/sdb.c                                 |   4 +-
+ lib/dns/sdlz.c                                |   4 +-
+ lib/dns/tests/db_test.c                       | 198 ++++++-
+ lib/dns/view.c                                |   3 +
+ lib/isccfg/namedconf.c                        |   5 +
+ 48 files changed, 2121 insertions(+), 102 deletions(-)
+ create mode 100644 bin/tests/system/serve-stale/.gitignore
+ create mode 100644 bin/tests/system/serve-stale/ans2/ans.pl.in
+ create mode 100644 bin/tests/system/serve-stale/clean.sh
+ create mode 100644 bin/tests/system/serve-stale/ns1/named1.conf.in
+ create mode 100644 bin/tests/system/serve-stale/ns1/named2.conf.in
+ create mode 100644 bin/tests/system/serve-stale/ns1/root.db
+ create mode 100644 bin/tests/system/serve-stale/ns3/named.conf.in
+ create mode 100644 bin/tests/system/serve-stale/prereq.sh
+ create mode 100644 bin/tests/system/serve-stale/setup.sh
+ create mode 100755 bin/tests/system/serve-stale/tests.sh
+
+diff --git a/bin/named/config.c b/bin/named/config.c
+index 63da4b0..b598f9b 100644
+--- a/bin/named/config.c
++++ b/bin/named/config.c
+@@ -182,13 +182,14 @@ options {\n\
+ #ifdef HAVE_LMDB
+ "	lmdb-mapsize 32M;\n"
+ #endif
+-"	max-acache-size 16M;\n\
+-	max-cache-size 90%;\n\
++"	max-cache-size 90%;\n\
++	max-acache-size 16M;\n\
+ 	max-cache-ttl 604800; /* 1 week */\n\
+ 	max-clients-per-query 100;\n\
+ 	max-ncache-ttl 10800; /* 3 hours */\n\
+ 	max-recursion-depth 7;\n\
+ 	max-recursion-queries 75;\n\
++	max-stale-ttl 604800; /* 1 week */\n\
+ 	message-compression yes;\n\
+ #	min-roots <obsolete>;\n\
+ 	minimal-any false;\n\
+@@ -203,10 +204,14 @@ options {\n\
+ 	request-expire true;\n\
+ 	request-ixfr true;\n\
+ 	require-server-cookie no;\n\
++	resolver-nonbackoff-tries 3;\n\
++	resolver-retry-interval 800; /* in milliseconds */\n\
+ #	rfc2308-type1 <obsolete>;\n\
+ 	root-key-sentinel yes;\n\
+ 	servfail-ttl 1;\n\
+ #	sortlist <none>\n\
++	stale-answer-enable false;\n\
++	stale-answer-ttl 1; /* 1 second */\n\
+ #	topology <none>\n\
+ 	transfer-format many-answers;\n\
+ 	v6-bias 50;\n\
+diff --git a/bin/named/control.c b/bin/named/control.c
+index df23c26..8b79850 100644
+--- a/bin/named/control.c
++++ b/bin/named/control.c
+@@ -282,6 +282,8 @@ ns_control_docommand(isccc_sexpr_t *message, bool readonly,
+ 		result = ns_server_validation(ns_g_server, lex, text);
+ 	} else if (command_compare(command, NS_COMMAND_ZONESTATUS)) {
+ 		result = ns_server_zonestatus(ns_g_server, lex, text);
++	} else if (command_compare(command, NS_COMMAND_SERVESTALE)) {
++		result = ns_server_servestale(ns_g_server, lex, text);
+ 	} else {
+ 		isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL,
+ 			      NS_LOGMODULE_CONTROL, ISC_LOG_WARNING,
+diff --git a/bin/named/include/named/control.h b/bin/named/include/named/control.h
+index 8705fdd..1634154 100644
+--- a/bin/named/include/named/control.h
++++ b/bin/named/include/named/control.h
+@@ -69,6 +69,7 @@
+ #define NS_COMMAND_MKEYS	"managed-keys"
+ #define NS_COMMAND_DNSTAPREOPEN	"dnstap-reopen"
+ #define NS_COMMAND_DNSTAP	"dnstap"
++#define NS_COMMAND_SERVESTALE	"serve-stale"
+ 
+ isc_result_t
+ ns_controls_create(ns_server_t *server, ns_controls_t **ctrlsp);
+diff --git a/bin/named/include/named/log.h b/bin/named/include/named/log.h
+index 56bfcd4..cd8db60 100644
+--- a/bin/named/include/named/log.h
++++ b/bin/named/include/named/log.h
+@@ -32,6 +32,7 @@
+ #define NS_LOGCATEGORY_UPDATE_SECURITY	(&ns_g_categories[6])
+ #define NS_LOGCATEGORY_QUERY_ERRORS	(&ns_g_categories[7])
+ #define NS_LOGCATEGORY_TAT		(&ns_g_categories[8])
++#define NS_LOGCATEGORY_SERVE_STALE	(&ns_g_categories[9])
+ 
+ /*
+  * Backwards compatibility.
+diff --git a/bin/named/include/named/query.h b/bin/named/include/named/query.h
+index 9661f56..445b578 100644
+--- a/bin/named/include/named/query.h
++++ b/bin/named/include/named/query.h
+@@ -35,6 +35,18 @@ typedef struct ns_dbversion {
+ 	ISC_LINK(struct ns_dbversion)	link;
+ } ns_dbversion_t;
+ 
++/*%
++ * nameserver recursion parameters, to uniquely identify a recursion
++ * query; this is used to detect a recursion loop
++ */
++typedef struct ns_query_recparam {
++	dns_rdatatype_t			qtype;
++	dns_name_t *			qname;
++	dns_fixedname_t			fqname;
++	dns_name_t *			qdomain;
++	dns_fixedname_t			fqdomain;
++} ns_query_recparam_t;
++
+ /*% nameserver query structure */
+ struct ns_query {
+ 	unsigned int			attributes;
+@@ -63,6 +75,7 @@ struct ns_query {
+ 	unsigned int			dns64_aaaaoklen;
+ 	unsigned int			dns64_options;
+ 	unsigned int			dns64_ttl;
++
+ 	struct {
+ 		dns_db_t *      	db;
+ 		dns_zone_t *      	zone;
+@@ -76,6 +89,8 @@ struct ns_query {
+ 		bool		authoritative;
+ 		bool		is_zone;
+ 	} redirect;
++
++	ns_query_recparam_t		recparam;
+ 	dns_keytag_t root_key_sentinel_keyid;
+ 	bool root_key_sentinel_is_ta;
+ 	bool root_key_sentinel_not_ta;
+diff --git a/bin/named/include/named/server.h b/bin/named/include/named/server.h
+index 8982d26..919ac28 100644
+--- a/bin/named/include/named/server.h
++++ b/bin/named/include/named/server.h
+@@ -224,7 +224,10 @@ enum {
+ 
+ 	dns_nsstatscounter_tcphighwater = 57,
+ 
+-	dns_nsstatscounter_max = 58
++	dns_nsstatscounter_trystale = 58,
++	dns_nsstatscounter_usedstale = 59,
++
++	dns_nsstatscounter_max = 60
+ };
+ 
+ /*%
+@@ -763,4 +766,12 @@ ns_server_mkeys(ns_server_t *server, isc_lex_t *lex, isc_buffer_t **text);
+ isc_result_t
+ ns_server_dnstap(ns_server_t *server, isc_lex_t *lex, isc_buffer_t **text);
+ 
++
++/*%
++ * Control whether stale answers are served or not when configured in
++ * named.conf.
++ */
++isc_result_t
++ns_server_servestale(ns_server_t *server, isc_lex_t *lex,
++		     isc_buffer_t **text);
+ #endif /* NAMED_SERVER_H */
+diff --git a/bin/named/log.c b/bin/named/log.c
+index 3aa25e9..12f178b 100644
+--- a/bin/named/log.c
++++ b/bin/named/log.c
+@@ -38,6 +38,7 @@ static isc_logcategory_t categories[] = {
+ 	{ "update-security",		0 },
+ 	{ "query-errors",		0 },
+ 	{ "trust-anchor-telemetry",	0 },
++	{ "serve-stale",                0 },
+ 	{ NULL, 			0 }
+ };
+ 
+diff --git a/bin/named/query.c b/bin/named/query.c
+index 0940714..882d69c 100644
+--- a/bin/named/query.c
++++ b/bin/named/query.c
+@@ -125,10 +125,14 @@
+ #define REDIRECT(c)		(((c)->query.attributes & \
+ 				  NS_QUERYATTR_REDIRECT) != 0)
+ 
+-/*% No QNAME Proof? */
++/*% Does the rdataset 'r' have an attached 'No QNAME Proof'? */
+ #define NOQNAME(r)		(((r)->attributes & \
+ 				  DNS_RDATASETATTR_NOQNAME) != 0)
+ 
++/*% Does the rdataset 'r' contain a stale answer? */
++#define STALE(r)		(((r)->attributes & \
++				  DNS_RDATASETATTR_STALE) != 0)
++
+ #ifdef WANT_QUERYTRACE
+ static inline void
+ client_trace(ns_client_t *client, int level, const char *message) {
+@@ -217,6 +221,10 @@ static bool
+ rpz_ck_dnssec(ns_client_t *client, isc_result_t qresult,
+ 	      dns_rdataset_t *rdataset, dns_rdataset_t *sigrdataset);
+ 
++static void
++recparam_update(ns_query_recparam_t *param, dns_rdatatype_t qtype,
++		const dns_name_t *qname, const dns_name_t *qdomain);
++
+ /*%
+  * Increment query statistics counters.
+  */
+@@ -470,6 +478,7 @@ query_reset(ns_client_t *client, bool everything) {
+ 	client->query.isreferral = false;
+ 	client->query.dns64_options = 0;
+ 	client->query.dns64_ttl = UINT32_MAX;
++	recparam_update(&client->query.recparam, 0, NULL, NULL);
+ 	client->query.root_key_sentinel_keyid = 0;
+ 	client->query.root_key_sentinel_is_ta = false;
+ 	client->query.root_key_sentinel_not_ta = false;
+@@ -4254,6 +4263,54 @@ query_prefetch(ns_client_t *client, dns_name_t *qname,
+ 	dns_rdataset_clearprefetch(rdataset);
+ }
+ 
++/*%
++ * Check whether the recursion parameters in 'param' match the current query's
++ * recursion parameters provided in 'qtype', 'qname', and 'qdomain'.
++ */
++static bool
++recparam_match(const ns_query_recparam_t *param, dns_rdatatype_t qtype,
++	       const dns_name_t *qname, const dns_name_t *qdomain)
++{
++	REQUIRE(param != NULL);
++
++	return (param->qtype == qtype &&
++	        param->qname != NULL && qname != NULL &&
++	        param->qdomain != NULL && qdomain != NULL &&
++	        dns_name_equal(param->qname, qname) &&
++	        dns_name_equal(param->qdomain, qdomain));
++}
++
++/*%
++ * Update 'param' with current query's recursion parameters provided in
++ * 'qtype', 'qname', and 'qdomain'.
++ */
++static void
++recparam_update(ns_query_recparam_t *param, dns_rdatatype_t qtype,
++		const dns_name_t *qname, const dns_name_t *qdomain)
++{
++	isc_result_t result;
++
++	REQUIRE(param != NULL);
++
++	param->qtype = qtype;
++
++	if (qname == NULL) {
++		param->qname = NULL;
++	} else {
++		param->qname = dns_fixedname_initname(&param->fqname);
++		result = dns_name_copy(qname, param->qname, NULL);
++		RUNTIME_CHECK(result == ISC_R_SUCCESS);
++	}
++
++	if (qdomain == NULL) {
++		param->qdomain = NULL;
++	} else {
++		param->qdomain = dns_fixedname_initname(&param->fqdomain);
++		result = dns_name_copy(qdomain, param->qdomain, NULL);
++		RUNTIME_CHECK(result == ISC_R_SUCCESS);
++	}
++}
++
+ static isc_result_t
+ query_recurse(ns_client_t *client, dns_rdatatype_t qtype, dns_name_t *qname,
+ 	      dns_name_t *qdomain, dns_rdataset_t *nameservers,
+@@ -4263,6 +4320,19 @@ query_recurse(ns_client_t *client, dns_rdatatype_t qtype, dns_name_t *qname,
+ 	dns_rdataset_t *rdataset, *sigrdataset;
+ 	isc_sockaddr_t *peeraddr;
+ 
++	/*
++	 * Check recursion parameters from the previous query to see if they
++	 * match.  If not, update recursion parameters and proceed.
++	 */
++	if (recparam_match(&client->query.recparam, qtype, qname, qdomain)) {
++		ns_client_log(client, NS_LOGCATEGORY_CLIENT,
++			      NS_LOGMODULE_QUERY, ISC_LOG_INFO,
++			      "recursion loop detected");
++		return (ISC_R_FAILURE);
++	}
++
++	recparam_update(&client->query.recparam, qtype, qname, qdomain);
++
+ 	if (!resuming)
+ 		inc_stats(client, dns_nsstatscounter_recursion);
+ 
+@@ -6780,6 +6850,7 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 	int line = -1;
+ 	bool dns64_exclude, dns64, rpz;
+ 	bool nxrewrite = false;
++	bool want_stale = false;
+ 	bool redirected = false;
+ 	dns_clientinfomethods_t cm;
+ 	dns_clientinfo_t ci;
+@@ -7089,6 +7160,7 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 		type = qtype;
+ 
+  restart:
++	// query_start
+ 	CTRACE(ISC_LOG_DEBUG(3), "query_find: restart");
+ 	want_restart = false;
+ 	authoritative = false;
+@@ -7233,6 +7305,7 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 	}
+ 
+  db_find:
++	// query_lookup
+ 	CTRACE(ISC_LOG_DEBUG(3), "query_find: db_find");
+ 	/*
+ 	 * We'll need some resources...
+@@ -7290,6 +7363,35 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 	if (!is_zone)
+ 		dns_cache_updatestats(client->view->cache, result);
+ 
++	if (want_stale) {
++		char namebuf[DNS_NAME_FORMATSIZE];
++		bool success;
++
++		client->query.dboptions &= ~DNS_DBFIND_STALEOK;
++		want_stale = false;
++
++		if (dns_rdataset_isassociated(rdataset) &&
++		    dns_rdataset_count(rdataset) > 0 &&
++		    STALE(rdataset)) {
++			rdataset->ttl = client->view->staleanswerttl;
++			success = true;
++		} else {
++			success = false;
++		}
++
++		dns_name_format(client->query.qname,
++				namebuf, sizeof(namebuf));
++		isc_log_write(ns_g_lctx, NS_LOGCATEGORY_SERVE_STALE,
++			      NS_LOGMODULE_QUERY, ISC_LOG_INFO,
++			      "%s resolver failure, stale answer %s",
++			      namebuf, success ? "used" : "unavailable");
++
++		if (!success) {
++			QUERY_ERROR(DNS_R_SERVFAIL);
++			goto cleanup;
++		}
++	}
++
+  resume:
+ 	CTRACE(ISC_LOG_DEBUG(3), "query_find: resume");
+ 
+@@ -7635,6 +7737,7 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 		 * The cache doesn't even have the root NS.  Get them from
+ 		 * the hints DB.
+ 		 */
++		// query_notfound
+ 		INSIST(!is_zone);
+ 		if (db != NULL)
+ 			dns_db_detach(&db);
+@@ -7697,12 +7800,14 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 		 */
+ 		/* FALLTHROUGH */
+ 	case DNS_R_DELEGATION:
++		// query_delegation
+ 		authoritative = false;
+ 		if (is_zone) {
+ 			/*
+ 			 * Look to see if we are authoritative for the
+ 			 * child zone if the query type is DS.
+ 			 */
++			// query_zone_delegation
+ 			if (!RECURSIONOK(client) &&
+ 			    (options & DNS_GETDB_NOEXACT) != 0 &&
+ 			    qtype == dns_rdatatype_ds) {
+@@ -8089,6 +8194,7 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 						       false, true);
+ 			}
+ 		}
++		// query_nxdomain
+ 		if (dns_rdataset_isassociated(rdataset)) {
+ 			/*
+ 			 * If we've got a NSEC record, we need to save the
+@@ -8409,7 +8515,8 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 		/*
+ 		 * If we have a zero ttl from the cache refetch it.
+ 		 */
+-		if (!is_zone && !resuming && rdataset->ttl == 0 &&
++		// query_cname
++		if (!is_zone && !resuming && !STALE(rdataset) && rdataset->ttl == 0 &&
+ 		    RECURSIONOK(client))
+ 		{
+ 			if (dns_rdataset_isassociated(rdataset))
+@@ -8627,7 +8734,11 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 			 "query_find: unexpected error after resuming: %s",
+ 			 isc_result_totext(result));
+ 		CTRACE(ISC_LOG_ERROR, errmsg);
+-		QUERY_ERROR(DNS_R_SERVFAIL);
++		if (resuming) {
++			want_stale = true;
++		} else {
++			QUERY_ERROR(DNS_R_SERVFAIL);
++		}
+ 		goto cleanup;
+ 	}
+ 
+@@ -8883,7 +8994,7 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 		/*
+ 		 * If we have a zero ttl from the cache refetch it.
+ 		 */
+-		if (!is_zone && !resuming && rdataset->ttl == 0 &&
++		if (!is_zone && !resuming && !STALE(rdataset) && rdataset->ttl == 0 &&
+ 		    RECURSIONOK(client))
+ 		{
+ 			if (dns_rdataset_isassociated(rdataset))
+@@ -8894,6 +9005,7 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 			if (node != NULL)
+ 				dns_db_detachnode(db, &node);
+ 
++			// query_respond
+ 			INSIST(!REDIRECT(client));
+ 			result = query_recurse(client, qtype,
+ 					       client->query.qname,
+@@ -9174,6 +9286,7 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 				       dns_fixedname_name(&wildcardname),
+ 				       true, false);
+  cleanup:
++	// query_done
+ 	CTRACE(ISC_LOG_DEBUG(3), "query_find: cleanup");
+ 	/*
+ 	 * General cleanup.
+@@ -9230,6 +9343,49 @@ query_find(ns_client_t *client, dns_fetchevent_t *event, dns_rdatatype_t qtype)
+ 		goto restart;
+ 	}
+ 
++	if (want_stale) {
++		dns_ttl_t stale_ttl = 0;
++		isc_result_t result;
++		bool staleanswersok = false;
++
++		/*
++		 * Stale answers only make sense if stale_ttl > 0 but
++		 * we want rndc to be able to control returning stale
++		 * answers if they are configured.
++		 */
++		dns_db_attach(client->view->cachedb, &db);
++		result = dns_db_getservestalettl(db, &stale_ttl);
++		if (result == ISC_R_SUCCESS && stale_ttl > 0)  {
++			switch (client->view->staleanswersok) {
++			case dns_stale_answer_yes:
++				staleanswersok = true;
++				break;
++			case dns_stale_answer_conf:
++				staleanswersok =
++					client->view->staleanswersenable;
++				break;
++			case dns_stale_answer_no:
++				staleanswersok = false;
++				break;
++			}
++		} else {
++			staleanswersok = false;
++		}
++
++		if (staleanswersok) {
++			client->query.dboptions |= DNS_DBFIND_STALEOK;
++			inc_stats(client, dns_nsstatscounter_trystale);
++			if (client->query.fetch != NULL)
++				dns_resolver_destroyfetch(
++						   &client->query.fetch);
++			goto db_find;
++		}
++		dns_db_detach(&db);
++		want_stale = false;
++		QUERY_ERROR(DNS_R_SERVFAIL);
++		goto cleanup;
++	}
++
+ 	if (eresult != ISC_R_SUCCESS &&
+ 	    (!PARTIALANSWER(client) || WANTRECURSION(client)
+ 	     || eresult == DNS_R_DROP)) {
+diff --git a/bin/named/server.c b/bin/named/server.c
+index 0c1f08b..d195bca 100644
+--- a/bin/named/server.c
++++ b/bin/named/server.c
+@@ -1722,7 +1722,8 @@ static bool
+ cache_sharable(dns_view_t *originview, dns_view_t *view,
+ 	       bool new_zero_no_soattl,
+ 	       unsigned int new_cleaning_interval,
+-	       uint64_t new_max_cache_size)
++	       uint64_t new_max_cache_size,
++	       uint32_t new_stale_ttl)
+ {
+ 	/*
+ 	 * If the cache cannot even reused for the same view, it cannot be
+@@ -1737,6 +1738,7 @@ cache_sharable(dns_view_t *originview, dns_view_t *view,
+ 	 */
+ 	if (dns_cache_getcleaninginterval(originview->cache) !=
+ 	    new_cleaning_interval ||
++	    dns_cache_getservestalettl(originview->cache) != new_stale_ttl ||
+ 	    dns_cache_getcachesize(originview->cache) != new_max_cache_size) {
+ 		return (false);
+ 	}
+@@ -3292,6 +3294,7 @@ configure_view(dns_view_t *view, dns_viewlist_t *viewlist,
+ 	size_t max_acache_size;
+ 	size_t max_adb_size;
+ 	uint32_t lame_ttl, fail_ttl;
++	uint32_t max_stale_ttl;
+ 	dns_tsig_keyring_t *ring = NULL;
+ 	dns_view_t *pview = NULL;	/* Production view */
+ 	isc_mem_t *cmctx = NULL, *hmctx = NULL;
+@@ -3320,6 +3323,7 @@ configure_view(dns_view_t *view, dns_viewlist_t *viewlist,
+ 	bool old_rpz_ok = false;
+ 	isc_dscp_t dscp4 = -1, dscp6 = -1;
+ 	dns_dyndbctx_t *dctx = NULL;
++	unsigned int resolver_param;
+ 
+ 	REQUIRE(DNS_VIEW_VALID(view));
+ 
+@@ -3734,6 +3738,24 @@ configure_view(dns_view_t *view, dns_viewlist_t *viewlist,
+ 	if (view->maxncachettl > 7 * 24 * 3600)
+ 		view->maxncachettl = 7 * 24 * 3600;
+ 
++	obj = NULL;
++	result = ns_config_get(maps, "max-stale-ttl", &obj);
++	INSIST(result == ISC_R_SUCCESS);
++	max_stale_ttl = cfg_obj_asuint32(obj);
++
++	obj = NULL;
++	result = ns_config_get(maps, "stale-answer-enable", &obj);
++	INSIST(result == ISC_R_SUCCESS);
++	view->staleanswersenable = cfg_obj_asboolean(obj);
++
++	result = dns_viewlist_find(&ns_g_server->viewlist, view->name,
++				   view->rdclass, &pview);
++	if (result == ISC_R_SUCCESS) {
++		view->staleanswersok = pview->staleanswersok;
++		dns_view_detach(&pview);
++	} else
++		view->staleanswersok = dns_stale_answer_conf;
++
+ 	/*
+ 	 * Configure the view's cache.
+ 	 *
+@@ -3767,7 +3789,8 @@ configure_view(dns_view_t *view, dns_viewlist_t *viewlist,
+ 	nsc = cachelist_find(cachelist, cachename, view->rdclass);
+ 	if (nsc != NULL) {
+ 		if (!cache_sharable(nsc->primaryview, view, zero_no_soattl,
+-				    cleaning_interval, max_cache_size)) {
++				    cleaning_interval, max_cache_size,
++				    max_stale_ttl)) {
+ 			isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL,
+ 				      NS_LOGMODULE_SERVER, ISC_LOG_ERROR,
+ 				      "views %s and %s can't share the cache "
+@@ -3866,9 +3889,15 @@ configure_view(dns_view_t *view, dns_viewlist_t *viewlist,
+ 
+ 	dns_cache_setcleaninginterval(cache, cleaning_interval);
+ 	dns_cache_setcachesize(cache, max_cache_size);
++	dns_cache_setservestalettl(cache, max_stale_ttl);
+ 
+ 	dns_cache_detach(&cache);
+ 
++	obj = NULL;
++	result = ns_config_get(maps, "stale-answer-ttl", &obj);
++	INSIST(result == ISC_R_SUCCESS);
++	view->staleanswerttl = ISC_MAX(cfg_obj_asuint32(obj), 1);
++
+ 	/*
+ 	 * Resolver.
+ 	 *
+@@ -4057,6 +4086,21 @@ configure_view(dns_view_t *view, dns_viewlist_t *viewlist,
+ 		maxbits = 4096;
+ 	view->maxbits = maxbits;
+ 
++	/*
++	 * Set resolver retry parameters.
++	 */
++	obj = NULL;
++	CHECK(ns_config_get(maps, "resolver-retry-interval", &obj));
++	resolver_param = cfg_obj_asuint32(obj);
++	if (resolver_param > 0)
++		dns_resolver_setretryinterval(view->resolver, resolver_param);
++
++	obj = NULL;
++	CHECK(ns_config_get(maps, "resolver-nonbackoff-tries", &obj));
++	resolver_param = cfg_obj_asuint32(obj);
++	if (resolver_param > 0)
++		dns_resolver_setnonbackofftries(view->resolver, resolver_param);
++
+ 	/*
+ 	 * Set supported DNSSEC algorithms.
+ 	 */
+@@ -14423,3 +14467,132 @@ ns_server_dnstap(ns_server_t *server, isc_lex_t *lex, isc_buffer_t **text) {
+ 	return (ISC_R_NOTIMPLEMENTED);
+ #endif
+ }
++
++isc_result_t
++ns_server_servestale(ns_server_t *server, isc_lex_t *lex,
++		     isc_buffer_t **text)
++{
++	char *ptr, *classtxt, *viewtxt = NULL;
++	char msg[128];
++	dns_rdataclass_t rdclass = dns_rdataclass_in;
++	dns_view_t *view;
++	bool found = false;
++	dns_stale_answer_t staleanswersok = dns_stale_answer_conf;
++	bool wantstatus = false;
++	isc_result_t result = ISC_R_SUCCESS;
++
++	/* Skip the command name. */
++	ptr = next_token(lex, text);
++	if (ptr == NULL)
++		return (ISC_R_UNEXPECTEDEND);
++
++	ptr = next_token(lex, NULL);
++	if (ptr == NULL)
++		return (ISC_R_UNEXPECTEDEND);
++
++	if (strcasecmp(ptr, "on") == 0 || strcasecmp(ptr, "yes") == 0) {
++		staleanswersok = dns_stale_answer_yes;
++	} else if (strcasecmp(ptr, "off") == 0 || strcasecmp(ptr, "no") == 0) {
++		staleanswersok = dns_stale_answer_no;
++	} else if (strcasecmp(ptr, "reset") == 0) {
++		staleanswersok = dns_stale_answer_conf;
++	} else if (strcasecmp(ptr, "status") == 0) {
++		wantstatus = true;
++	} else
++		return (DNS_R_SYNTAX);
++
++	/* Look for the optional class name. */
++	classtxt = next_token(lex, text);
++	if (classtxt != NULL) {
++		/* Look for the optional view name. */
++		viewtxt = next_token(lex, text);
++	}
++
++	if (classtxt != NULL) {
++		isc_textregion_t r;
++
++		r.base = classtxt;
++		r.length = strlen(classtxt);
++		result = dns_rdataclass_fromtext(&rdclass, &r);
++		if (result != ISC_R_SUCCESS) {
++			if (viewtxt == NULL) {
++				viewtxt = classtxt;
++				classtxt = NULL;
++				result = ISC_R_SUCCESS;
++			} else {
++				snprintf(msg, sizeof(msg),
++					 "unknown class '%s'", classtxt);
++				(void) putstr(text, msg);
++				goto cleanup;
++			}
++		}
++	}
++
++	result = isc_task_beginexclusive(server->task);
++	RUNTIME_CHECK(result == ISC_R_SUCCESS);
++
++	for (view = ISC_LIST_HEAD(server->viewlist);
++	     view != NULL;
++	     view = ISC_LIST_NEXT(view, link))
++	{
++		dns_ttl_t stale_ttl = 0;
++		dns_db_t *db = NULL;
++
++		if (classtxt != NULL && rdclass != view->rdclass)
++			continue;
++
++		if (viewtxt != NULL && strcmp(view->name, viewtxt) != 0)
++			continue;
++
++		if (!wantstatus) {
++			view->staleanswersok = staleanswersok;
++			found = true;
++			continue;
++		}
++
++		db = NULL;
++		dns_db_attach(view->cachedb, &db);
++		(void)dns_db_getservestalettl(db, &stale_ttl);
++		dns_db_detach(&db);
++		if (found)
++			CHECK(putstr(text, "\n"));
++		CHECK(putstr(text, view->name));
++		CHECK(putstr(text, ": "));
++		switch (view->staleanswersok) {
++		case dns_stale_answer_yes:
++			if (stale_ttl > 0)
++				CHECK(putstr(text, "on (rndc)"));
++			else
++				CHECK(putstr(text, "off (not-cached)"));
++			break;
++		case dns_stale_answer_no:
++			CHECK(putstr(text, "off (rndc)"));
++			break;
++		case dns_stale_answer_conf:
++			if (view->staleanswersenable && stale_ttl > 0)
++				CHECK(putstr(text, "on"));
++			else if (view->staleanswersenable)
++				CHECK(putstr(text, "off (not-cached)"));
++			else
++				CHECK(putstr(text, "off"));
++			break;
++		}
++		if (stale_ttl > 0) {
++			snprintf(msg, sizeof(msg),
++				 " (stale-answer-ttl=%u max-stale-ttl=%u)",
++				 view->staleanswerttl, stale_ttl);
++			CHECK(putstr(text, msg));
++		}
++		found = true;
++	}
++	isc_task_endexclusive(ns_g_server->task);
++
++	if (!found)
++		result = ISC_R_NOTFOUND;
++
++cleanup:
++	if (isc_buffer_usedlength(*text) > 0)
++		(void) putnull(text);
++
++	return (result);
++}
+diff --git a/bin/named/statschannel.c b/bin/named/statschannel.c
+index 4cdf7d6..5b413e7 100644
+--- a/bin/named/statschannel.c
++++ b/bin/named/statschannel.c
+@@ -297,6 +297,12 @@ init_desc(void) {
+ 		"QryNXRedirRLookup");
+ 	SET_NSSTATDESC(badcookie, "sent badcookie response", "QryBADCOOKIE");
+ 	SET_NSSTATDESC(keytagopt, "Keytag option received", "KeyTagOpt");
++	SET_NSSTATDESC(trystale,
++		       "attempts to use stale cache data after lookup failure",
++		       "QryTryStale");
++	SET_NSSTATDESC(usedstale,
++		       "successful uses of stale cache data after lookup failure",
++		       "QryUsedStale");
+ 	INSIST(i == dns_nsstatscounter_max);
+ 
+ 	/* Initialize resolver statistics */
+diff --git a/bin/rndc/rndc.c b/bin/rndc/rndc.c
+index 8083654..d519983 100644
+--- a/bin/rndc/rndc.c
++++ b/bin/rndc/rndc.c
+@@ -160,6 +160,8 @@ command is one of the following:\n\
+   scan		Scan available network interfaces for changes.\n\
+   secroots [view ...]\n\
+ 		Write security roots to the secroots file.\n\
++  serve-stale	( yes | no | reset ) [class [view]]\n\
++		Control whether stale answers are returned\n\
+   showzone zone [class [view]]\n\
+ 		Print a zone's configuration.\n\
+   sign zone [class [view]]\n\
+diff --git a/bin/rndc/rndc.docbook b/bin/rndc/rndc.docbook
+index 06b073a..6ae8e5d 100644
+--- a/bin/rndc/rndc.docbook
++++ b/bin/rndc/rndc.docbook
+@@ -688,6 +688,25 @@
+ 	</listitem>
+       </varlistentry>
+ 
++      <varlistentry>
++	<term><userinput>serve-stale ( on | off | reset | status) <optional><replaceable>class</replaceable> <optional><replaceable>view</replaceable></optional></optional></userinput></term>
++	<listitem>
++	  <para>
++	    Enable, disable, or reset the serving of stale answers
++	    as configured in named.conf. Serving of stale answers
++	    will remain disabled across <filename>named.conf</filename>
++	    reloads if disabled via rndc until it is reset via rndc.
++	  </para>
++	  <para>
++	    Status will report whether serving of stale answers is
++	    currently enabled, disabled or not configured for a
++	    view.  If serving of stale records is configured then
++	    the values of stale-answer-ttl and max-stale-ttl are
++	    reported.
++	  </para>
++	</listitem>
++      </varlistentry>
++
+       <varlistentry>
+ 	<term><userinput>secroots <optional>-</optional> <optional><replaceable>view ...</replaceable></optional></userinput></term>
+ 	<listitem>
+diff --git a/bin/tests/system/chain/prereq.sh b/bin/tests/system/chain/prereq.sh
+index f3f1939..9ff3f07 100644
+--- a/bin/tests/system/chain/prereq.sh
++++ b/bin/tests/system/chain/prereq.sh
+@@ -48,3 +48,10 @@ else
+     echo_i "This test requires the Net::DNS::Nameserver library." >&2
+     exit 1
+ fi
++if $PERL -e 'use Net::DNS::Nameserver;' 2>/dev/null
++then
++	:
++else
++    echo "I:This test requires the Net::DNS::Nameserver library." >&2
++    exit 1
++fi
+diff --git a/bin/tests/system/conf.sh.in b/bin/tests/system/conf.sh.in
+index f781966..d20a830 100644
+--- a/bin/tests/system/conf.sh.in
++++ b/bin/tests/system/conf.sh.in
+@@ -125,7 +125,7 @@ PARALLELDIRS="dnssec rpzrecurse \
+ 	reclimit redirect resolver rndc rootkeysentinel rpz \
+ 	rrchecker rrl rrsetorder rsabigexponent runtime \
+ 	sfcache smartsign sortlist \
+-	spf staticstub statistics statschannel stub \
++	spf serve-stale staticstub statistics statschannel stub \
+ 	tcp tsig tsiggss \
+ 	unknown upforwd verify views wildcard \
+ 	xfer xferquota zero zonechecks"
+diff --git a/bin/tests/system/dyndb/driver/db.c b/bin/tests/system/dyndb/driver/db.c
+index 02aa6ab..a77c7de 100644
+--- a/bin/tests/system/dyndb/driver/db.c
++++ b/bin/tests/system/dyndb/driver/db.c
+@@ -629,6 +629,8 @@ static dns_dbmethods_t sampledb_methods = {
+ 	hashsize,
+ 	NULL,
+ 	NULL,
++	NULL,
++	NULL,
+ };
+ 
+ /* Auxiliary driver functions. */
+diff --git a/bin/tests/system/serve-stale/.gitignore b/bin/tests/system/serve-stale/.gitignore
+new file mode 100644
+index 0000000..2272eef
+--- /dev/null
++++ b/bin/tests/system/serve-stale/.gitignore
+@@ -0,0 +1,11 @@
++/ans2/ans.pid
++/ans2/ans.pl
++/dig.out*
++/ns1/named.conf
++/ns3/named.conf
++/ns3/root.bk
++/rndc.out*
++named.lock
++named.pid
++named.port
++named.run
+diff --git a/bin/tests/system/serve-stale/ans2/ans.pl.in b/bin/tests/system/serve-stale/ans2/ans.pl.in
+new file mode 100644
+index 0000000..2b39eca
+--- /dev/null
++++ b/bin/tests/system/serve-stale/ans2/ans.pl.in
+@@ -0,0 +1,178 @@
++#!/usr/bin/env perl
++#
++# Copyright (C) 2014-2016  Internet Systems Consortium, Inc. ("ISC")
++#
++# This Source Code Form is subject to the terms of the Mozilla Public
++# License, v. 2.0. If a copy of the MPL was not distributed with this
++# file, You can obtain one at http://mozilla.org/MPL/2.0/.
++
++use strict;
++use warnings;
++
++use IO::File;
++use IO::Socket;
++use Getopt::Long;
++use Net::DNS;
++use Time::HiRes qw(usleep nanosleep);
++
++my $pidf = new IO::File "ans.pid", "w" or die "cannot open pid file: $!";
++print $pidf "$$\n" or die "cannot write pid file: $!";
++$pidf->close or die "cannot close pid file: $!";
++sub rmpid { unlink "ans.pid"; exit 1; };
++
++$SIG{INT} = \&rmpid;
++$SIG{TERM} = \&rmpid;
++
++my $send_response = 1;
++
++my $localaddr = "10.53.0.2";
++my $localport = @PORT@;
++my $udpsock = IO::Socket::INET->new(LocalAddr => "$localaddr",
++   LocalPort => $localport, Proto => "udp", Reuse => 1) or die "$!";
++
++#
++# Delegation
++#
++my $SOA = "example 300 IN SOA . . 0 0 0 0 300";
++my $NS = "example 300 IN NS ns.example";
++my $A = "ns.example 300 IN A $localaddr";
++#
++# Records to be TTL stretched
++#
++my $TXT = "data.example 1 IN TXT \"A text record with a 1 second ttl\"";
++my $negSOA = "example 1 IN SOA . . 0 0 0 0 300";
++
++sub reply_handler {
++    my ($qname, $qclass, $qtype) = @_;
++    my ($rcode, @ans, @auth, @add);
++
++    print ("request: $qname/$qtype\n");
++    STDOUT->flush();
++
++    # Control whether we send a response or not.
++    # We always respond to control commands.
++    if ($qname eq "enable" ) {
++	if ($qtype eq "TXT") {
++	    $send_response = 1;
++            my $rr = new Net::DNS::RR("$qname 0 $qclass TXT \"$send_response\"");
++            push @ans, $rr;
++	}
++	$rcode = "NOERROR";
++        return ($rcode, \@ans, \@auth, \@add, { aa => 1 });
++    } elsif ($qname eq "disable" ) {
++	if ($qtype eq "TXT") {
++	    $send_response = 0;
++            my $rr = new Net::DNS::RR("$qname 0 $qclass TXT \"$send_response\"");
++            push @ans, $rr;
++	}
++	$rcode = "NOERROR";
++        return ($rcode, \@ans, \@auth, \@add, { aa => 1 });
++    }
++
++    # If we are not responding to queries we are done.
++    return if (!$send_response);
++
++    # Construct the response and send it.
++    if ($qname eq "ns.example" ) {
++	if ($qtype eq "A") {
++	    my $rr = new Net::DNS::RR($A);
++	    push @ans, $rr;
++	} else {
++	    my $rr = new Net::DNS::RR($SOA);
++	    push @auth, $rr;
++	}
++	$rcode = "NOERROR";
++    } elsif ($qname eq "example") {
++	if ($qtype eq "NS") {
++	    my $rr = new Net::DNS::RR($NS);
++	    push @auth, $rr;
++	    $rr = new Net::DNS::RR($A);
++	    push @add, $rr;
++	} elsif ($qtype eq "SOA") {
++	    my $rr = new Net::DNS::RR($SOA);
++	    push @ans, $rr;
++	} else {
++	    my $rr = new Net::DNS::RR($SOA);
++	    push @auth, $rr;
++	}
++	$rcode = "NOERROR";
++    } elsif ($qname eq "nodata.example") {
++	my $rr = new Net::DNS::RR($negSOA);
++	push @auth, $rr;
++	$rcode = "NOERROR";
++    } elsif ($qname eq "data.example") {
++	if ($qtype eq "TXT") {
++	    my $rr = new Net::DNS::RR($TXT);
++	    push @ans, $rr;
++	} else {
++	    my $rr = new Net::DNS::RR($negSOA);
++	    push @auth, $rr;
++	}
++	$rcode = "NOERROR";
++    } elsif ($qname eq "nxdomain.example") {
++	my $rr = new Net::DNS::RR($negSOA);
++	push @auth, $rr;
++	$rcode = "NXDOMAIN";
++    } else {
++        my $rr = new Net::DNS::RR($SOA);
++	push @auth, $rr;
++	$rcode = "NXDOMAIN";
++    }
++
++    # mark the answer as authoritive (by setting the 'aa' flag
++    return ($rcode, \@ans, \@auth, \@add, { aa => 1 });
++}
++
++GetOptions(
++    'port=i' => \$localport,
++);
++
++my $rin;
++my $rout;
++
++for (;;) {
++	$rin = '';
++	vec($rin, fileno($udpsock), 1) = 1;
++
++	select($rout = $rin, undef, undef, undef);
++
++	if (vec($rout, fileno($udpsock), 1)) {
++		my ($buf, $request, $err);
++		$udpsock->recv($buf, 512);
++
++		if ($Net::DNS::VERSION > 0.68) {
++			$request = new Net::DNS::Packet(\$buf, 0);
++			$@ and die $@;
++		} else {
++			my $err;
++			($request, $err) = new Net::DNS::Packet(\$buf, 0);
++			$err and die $err;
++		}
++
++		my @questions = $request->question;
++		my $qname = $questions[0]->qname;
++		my $qclass = $questions[0]->qclass;
++		my $qtype = $questions[0]->qtype;
++		my $id = $request->header->id;
++
++		my ($rcode, $ans, $auth, $add, $headermask) = reply_handler($qname, $qclass, $qtype);
++
++		if (!defined($rcode)) {
++			print "  Silently ignoring query\n";
++			next;
++		}
++
++		my $reply = Net::DNS::Packet->new();
++		$reply->header->qr(1);
++		$reply->header->aa(1) if $headermask->{'aa'};
++		$reply->header->id($id);
++		$reply->header->rcode($rcode);
++		$reply->push("question",   @questions);
++		$reply->push("answer",     @$ans)  if $ans;
++		$reply->push("authority",  @$auth) if $auth;
++		$reply->push("additional", @$add)  if $add;
++
++		my $num_chars = $udpsock->send($reply->data);
++		print "  Sent $num_chars bytes via UDP\n";
++	}
++}
+diff --git a/bin/tests/system/serve-stale/clean.sh b/bin/tests/system/serve-stale/clean.sh
+new file mode 100644
+index 0000000..2397326
+--- /dev/null
++++ b/bin/tests/system/serve-stale/clean.sh
+@@ -0,0 +1,15 @@
++# Copyright (C) 2017  Internet Systems Consortium, Inc. ("ISC")
++#
++# This Source Code Form is subject to the terms of the Mozilla Public
++# License, v. 2.0. If a copy of the MPL was not distributed with this
++# file, You can obtain one at http://mozilla.org/MPL/2.0/.
++
++rm -f test.output
++rm -f dig.out.test*
++rm -f ans2/ans.pl
++rm -f ns3/root.bk
++rm -f rndc.out.test*
++rm -f ns*/named.memstats
++rm -f ns*/managed-keys.bind
++rm -f ns*/named.conf
++rm -f ns*/named.run
+diff --git a/bin/tests/system/serve-stale/ns1/named1.conf.in b/bin/tests/system/serve-stale/ns1/named1.conf.in
+new file mode 100644
+index 0000000..8a75a10
+--- /dev/null
++++ b/bin/tests/system/serve-stale/ns1/named1.conf.in
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (C) 2017  Internet Systems Consortium, Inc. ("ISC")
++ *
++ * This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
++ */
++
++key rndc_key {
++        secret "1234abcd8765";
++        algorithm hmac-sha256;
++};
++
++controls {
++	inet 10.53.0.1 port @CONTROLPORT@ allow { any; } keys { rndc_key; };
++};
++
++options {
++	query-source address 10.53.0.1;
++	notify-source 10.53.0.1;
++	transfer-source 10.53.0.1;
++	port @PORT@;
++	pid-file "named.pid";
++	listen-on { 10.53.0.1; };
++	listen-on-v6 { none; };
++	recursion yes;
++	max-stale-ttl 3600;
++	stale-answer-ttl 1;
++	stale-answer-enable yes;
++};
++
++zone "." {
++	type master;
++	file "root.db";
++};
+diff --git a/bin/tests/system/serve-stale/ns1/named2.conf.in b/bin/tests/system/serve-stale/ns1/named2.conf.in
+new file mode 100644
+index 0000000..072e6ec
+--- /dev/null
++++ b/bin/tests/system/serve-stale/ns1/named2.conf.in
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (C) 2017  Internet Systems Consortium, Inc. ("ISC")
++ *
++ * This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
++ */
++
++key rndc_key {
++        secret "1234abcd8765";
++        algorithm hmac-sha256;
++};
++
++controls {
++	inet 10.53.0.1 port @CONTROLPORT@ allow { any; } keys { rndc_key; };
++};
++
++options {
++	query-source address 10.53.0.1;
++	notify-source 10.53.0.1;
++	transfer-source 10.53.0.1;
++	port @PORT@;
++	pid-file "named.pid";
++	listen-on { 10.53.0.1; };
++	listen-on-v6 { none; };
++	recursion yes;
++	max-stale-ttl 7200;
++	stale-answer-ttl 2;
++	stale-answer-enable yes;
++};
++
++zone "." {
++	type master;
++	file "root.db";
++};
+diff --git a/bin/tests/system/serve-stale/ns1/root.db b/bin/tests/system/serve-stale/ns1/root.db
+new file mode 100644
+index 0000000..eb9ad3e
+--- /dev/null
++++ b/bin/tests/system/serve-stale/ns1/root.db
+@@ -0,0 +1,5 @@
++.		300	SOA	. . 0 0 0 0 0
++.		300	NS	ns.nil.
++ns.nil.		300	A	10.53.0.1
++example.	300	NS	ns.example.
++ns.example.	300	A	10.53.0.2
+diff --git a/bin/tests/system/serve-stale/ns3/named.conf.in b/bin/tests/system/serve-stale/ns3/named.conf.in
+new file mode 100644
+index 0000000..24a3293
+--- /dev/null
++++ b/bin/tests/system/serve-stale/ns3/named.conf.in
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (C) 2017  Internet Systems Consortium, Inc. ("ISC")
++ *
++ * This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
++ */
++
++key rndc_key {
++        secret "1234abcd8765";
++        algorithm hmac-sha256;
++};
++
++controls {
++	inet 10.53.0.3 port @CONTROLPORT@ allow { any; } keys { rndc_key; };
++};
++
++options {
++	query-source address 10.53.0.3;
++	notify-source 10.53.0.3;
++	transfer-source 10.53.0.3;
++	port @PORT@;
++	pid-file "named.pid";
++	listen-on { 10.53.0.3; };
++	listen-on-v6 { none; };
++	recursion yes;
++	// max-stale-ttl 3600;
++	// stale-answer-ttl 3;
++};
++
++zone "." {
++	type slave;
++	masters { 10.53.0.1; };
++	file "root.bk";
++};
+diff --git a/bin/tests/system/serve-stale/prereq.sh b/bin/tests/system/serve-stale/prereq.sh
+new file mode 100644
+index 0000000..a3bbef8
+--- /dev/null
++++ b/bin/tests/system/serve-stale/prereq.sh
+@@ -0,0 +1,38 @@
++#!/bin/sh
++#
++# Copyright (C) 2011, 2012, 2014, 2016  Internet Systems Consortium, Inc. ("ISC")
++#
++# This Source Code Form is subject to the terms of the Mozilla Public
++# License, v. 2.0. If a copy of the MPL was not distributed with this
++# file, You can obtain one at http://mozilla.org/MPL/2.0/.
++
++SYSTEMTESTTOP=..
++. $SYSTEMTESTTOP/conf.sh
++
++if $PERL -e 'use Net::DNS;' 2>/dev/null
++then
++    if $PERL -e 'use Net::DNS; die if ($Net::DNS::VERSION >= 0.69 && $Net::DNS::VERSION <= 0.74);' 2>/dev/null
++    then
++        :
++    else
++        echo "I:Net::DNS versions 0.69 to 0.74 have bugs that cause this test to fail: please update." >&2
++        exit 1
++    fi
++else
++    echo "I:This test requires the Net::DNS library." >&2
++    exit 1
++fi
++if $PERL -e 'use Net::DNS::Nameserver;' 2>/dev/null
++then
++	:
++else
++	echo "I:This test requires the Net::DNS::Nameserver library." >&2
++	exit 1
++fi
++if $PERL -e 'use Time::HiRes;' 2>/dev/null
++then
++	:
++else
++	echo "I:This test requires the Time::HiRes library." >&2
++	exit 1
++fi
+diff --git a/bin/tests/system/serve-stale/setup.sh b/bin/tests/system/serve-stale/setup.sh
+new file mode 100644
+index 0000000..690f43c
+--- /dev/null
++++ b/bin/tests/system/serve-stale/setup.sh
+@@ -0,0 +1,13 @@
++#!/bin/sh
++# Copyright (C) 2017  Internet Systems Consortium, Inc. ("ISC")
++#
++# This Source Code Form is subject to the terms of the Mozilla Public
++# License, v. 2.0. If a copy of the MPL was not distributed with this
++# file, You can obtain one at http://mozilla.org/MPL/2.0/.
++
++SYSTEMTESTTOP=..
++. $SYSTEMTESTTOP/conf.sh
++
++copy_setports ns1/named1.conf.in ns1/named.conf
++copy_setports ans2/ans.pl.in ans2/ans.pl
++copy_setports ns3/named.conf.in ns3/named.conf
+diff --git a/bin/tests/system/serve-stale/tests.sh b/bin/tests/system/serve-stale/tests.sh
+new file mode 100755
+index 0000000..201c996
+--- /dev/null
++++ b/bin/tests/system/serve-stale/tests.sh
+@@ -0,0 +1,536 @@
++#!/bin/sh
++#
++# Copyright (C) 2000, 2001, 2004, 2007, 2009-2016  Internet Systems Consortium, Inc. ("ISC")
++#
++# This Source Code Form is subject to the terms of the Mozilla Public
++# License, v. 2.0. If a copy of the MPL was not distributed with this
++# file, You can obtain one at http://mozilla.org/MPL/2.0/.
++
++SYSTEMTESTTOP=..
++. $SYSTEMTESTTOP/conf.sh
++
++while getopts "p:c:" flag; do
++    case "$flag" in
++	p) port=$OPTARG ;;
++	c) controlport=$OPTARG ;;
++	*) exit 1 ;;
++    esac
++done
++
++RNDCCMD="$RNDC -c $SYSTEMTESTTOP/common/rndc.conf -p ${CONTROLPORT} -s"
++
++echo "RNDCCMD: ${RNDCCMD}"
++
++status=0
++n=0
++
++#echo "I:check ans.pl server ($n)"
++#$DIG -p ${PORT} @10.53.0.2 example NS
++#$DIG -p ${PORT} @10.53.0.2 example SOA
++#$DIG -p ${PORT} @10.53.0.2 ns.example A
++#$DIG -p ${PORT} @10.53.0.2 ns.example AAAA
++#$DIG -p ${PORT} @10.53.0.2 txt enable
++#$DIG -p ${PORT} @10.53.0.2 txt disable
++#$DIG -p ${PORT} @10.53.0.2 ns.example AAAA
++#$DIG -p ${PORT} @10.53.0.2 txt enable
++#$DIG -p ${PORT} @10.53.0.2 ns.example AAAA
++##$DIG -p ${PORT} @10.53.0.2 data.example TXT
++#$DIG -p ${PORT} @10.53.0.2 nodata.example TXT
++#$DIG -p ${PORT} @10.53.0.2 nxdomain.example TXT
++
++n=`expr $n + 1`
++echo "I:prime cache data.example ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 data.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:prime cache nodata.example ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nodata.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:prime cache nxdomain.example ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nxdomain.example TXT > dig.out.test$n
++grep "status: NXDOMAIN" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:disable responses from authoritative server ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.2 txt disable  > dig.out.test$n
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++grep "TXT.\"0\"" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++sleep 1
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: on (stale-answer-ttl=1 max-stale-ttl=3600)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale data.example ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 data.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nodata.example ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nodata.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nxdomain.example ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nxdomain.example TXT > dig.out.test$n
++grep "status: NXDOMAIN" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:running 'rndc serve-stale off' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale off || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: off (rndc) (stale-answer-ttl=1 max-stale-ttl=3600)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale data.example (serve-stale off) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 data.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nodata.example (serve-stale off) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nodata.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nxdomain.example (serve-stale off) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nxdomain.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:running 'rndc serve-stale on' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale on || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: on (rndc) (stale-answer-ttl=1 max-stale-ttl=3600)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale data.example (serve-stale on) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 data.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nodata.example (serve-stale on) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nodata.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nxdomain.example (serve-stale on) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nxdomain.example TXT > dig.out.test$n
++grep "status: NXDOMAIN" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:running 'rndc serve-stale no' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale no || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: off (rndc) (stale-answer-ttl=1 max-stale-ttl=3600)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale data.example (serve-stale no) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 data.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nodata.example (serve-stale no) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nodata.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nxdomain.example (serve-stale no) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nxdomain.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:running 'rndc serve-stale yes' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale yes || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: on (rndc) (stale-answer-ttl=1 max-stale-ttl=3600)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale data.example (serve-stale yes) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 data.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nodata.example (serve-stale yes) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nodata.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nxdomain.example (serve-stale yes) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nxdomain.example TXT > dig.out.test$n
++grep "status: NXDOMAIN" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:running 'rndc serve-stale off' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale off || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:running 'rndc serve-stale reset' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale reset || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: on (stale-answer-ttl=1 max-stale-ttl=3600)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale data.example (serve-stale reset) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 data.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nodata.example (serve-stale reset) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nodata.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check stale nxdomain.example (serve-stale reset) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.1 nxdomain.example TXT > dig.out.test$n
++grep "status: NXDOMAIN" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:running 'rndc serve-stale off' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale off || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: off (rndc) (stale-answer-ttl=1 max-stale-ttl=3600)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:updating ns1/named.conf ($n)"
++ret=0
++sed -e "s/@PORT@/${PORT}/g;s/@CONTROLPORT@/${CONTROLPORT}/g" < ns1/named2.conf.in > ns1/named.conf
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:running 'rndc reload' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 reload > rndc.out.test$n 2>&1 || ret=1
++grep "server reload successful" rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: off (rndc) (stale-answer-ttl=2 max-stale-ttl=7200)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale > rndc.out.test$n 2>&1 && ret=1
++grep "unexpected end of input" rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale unknown' ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 serve-stale unknown > rndc.out.test$n 2>&1 && ret=1
++grep "syntax error" rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo_i "flush cache, re-enable serve-stale and query again ($n)"
++ret=0
++$RNDCCMD 10.53.0.1 flushtree example > rndc.out.test$n.1 2>&1 || ret=1
++$RNDCCMD 10.53.0.1 serve-stale on > rndc.out.test$n.2 2>&1 || ret=1
++$DIG -p ${PORT} @10.53.0.1 data.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo_i "failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++ret=0
++$DIG -p ${PORT} @10.53.0.2 txt enable  > dig.out.test$n
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++grep "TXT.\"1\"" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:prime cache data.example (max-stale-ttl default) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.3 data.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:prime cache nodata.example (max-stale-ttl default) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.3 nodata.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:prime cache nxdomain.example (max-stale-ttl default) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.3 nxdomain.example TXT > dig.out.test$n
++grep "status: NXDOMAIN" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:disable responses from authoritative server ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.2 txt disable  > dig.out.test$n
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++grep "TXT.\"0\"" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++sleep 1
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.3 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: off (stale-answer-ttl=1 max-stale-ttl=604800)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check fail of data.example (max-stale-ttl default) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.3 data.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check fail of nodata.example (max-stale-ttl default) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.3 nodata.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check fail of nxdomain.example (max-stale-ttl default) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.3 nxdomain.example TXT > dig.out.test$n
++grep "status: SERVFAIL" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale on' ($n)"
++ret=0
++$RNDCCMD 10.53.0.3 serve-stale on > rndc.out.test$n 2>&1 || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check 'rndc serve-stale status' ($n)"
++ret=0
++$RNDCCMD 10.53.0.3 serve-stale status > rndc.out.test$n 2>&1 || ret=1
++grep '_default: on (rndc) (stale-answer-ttl=1 max-stale-ttl=604800)' rndc.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check data.example (max-stale-ttl default) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.3 data.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 1," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check nodata.example (max-stale-ttl default) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.3 nodata.example TXT > dig.out.test$n
++grep "status: NOERROR" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++n=`expr $n + 1`
++echo "I:check nxdomain.example (max-stale-ttl default) ($n)"
++ret=0
++$DIG -p ${PORT} @10.53.0.3 nxdomain.example TXT > dig.out.test$n
++grep "status: NXDOMAIN" dig.out.test$n > /dev/null || ret=1
++grep "ANSWER: 0," dig.out.test$n > /dev/null || ret=1
++grep "example.*1.*IN" dig.out.test$n > /dev/null || ret=1
++if [ $ret != 0 ]; then echo "I:failed"; fi
++status=`expr $status + $ret`
++
++echo "I:exit status: $status"
++[ $status -eq 0 ] || exit 1
+diff --git a/doc/arm/Bv9ARM-book.xml b/doc/arm/Bv9ARM-book.xml
+index 539973c..8528649 100644
+--- a/doc/arm/Bv9ARM-book.xml
++++ b/doc/arm/Bv9ARM-book.xml
+@@ -4376,6 +4376,9 @@ badresp:1,adberr:0,findfail:0,valfail:0]
+ 	  statement in the <filename>named.conf</filename> file:
+ 	</para>
+ 	<xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="options.grammar.xml"/>
++  [ <command>max-stale-ttl</command> <replaceable>number</replaceable> ; ]
++  [ <command>stale-answer-enable</command> <replaceable>yes_or_no</replaceable> ; ]
++  [ <command>stale-answer-ttl</command> <replaceable>number</replaceable> ; ]
+       </section>
+ 
+       <section xml:id="options"><info><title><command>options</command> Statement Definition and
+@@ -4469,6 +4472,7 @@ badresp:1,adberr:0,findfail:0,valfail:0]
+ 		  <command>dnssec-validation</command>,
+ 		  <command>max-cache-ttl</command>,
+ 		  <command>max-ncache-ttl</command>,
++		  <command>max-stale-ttl</command>,
+ 		  <command>max-cache-size</command>, and
+ 		  <command>zero-no-soa-ttl</command>.
+ 		</para>
+@@ -5480,7 +5484,6 @@ options {
+ 	    </listitem>
+ 	  </varlistentry>
+ 
+-
+ 	  <varlistentry>
+ 	    <term><command>max-zone-ttl</command></term>
+ 	    <listitem>
+@@ -5516,6 +5519,21 @@ options {
+ 	    </listitem>
+ 	  </varlistentry>
+ 
++	  <varlistentry>
++	    <term><command>stale-answer-ttl</command></term>
++	    <listitem>
++	      <para>
++		Specifies the TTL to be returned on stale answers.
++		The default is 1 second. The minimal allowed is
++		also 1 second; a value of 0 will be updated silently
++		to 1 second.  For stale answers to be returned
++		<option>max-stale-ttl</option> must be set to a
++		non zero value and they must not have been disabled
++		by <command>rndc</command>.
++	      </para>
++	    </listitem>
++	  </varlistentry>
++
+ 	  <varlistentry>
+ 	    <term><command>serial-update-method</command></term>
+ 	    <listitem>
+@@ -6275,6 +6293,22 @@ options {
+ 	      </listitem>
+ 	    </varlistentry>
+ 
++	    <varlistentry>
++	      <term><command>serve-stale-enable</command></term>
++	      <listitem>
++		<para>
++		  Enable the returning of stale answers when the
++		  nameservers for the zone are not answering.  This
++		  is off by default but can be enabled/disabled via
++		  <command>rndc server-stale on</command> and
++		  <command>rndc server-stale off</command> which
++		  override the named.conf setting.  <command>rndc
++		  server-stale reset</command> will restore control
++		  via named.conf.
++		</para>
++	      </listitem>
++	    </varlistentry>
++
+ 	    <varlistentry>
+ 	      <term><command>nocookie-udp-size</command></term>
+ 	      <listitem>
+@@ -7483,14 +7517,20 @@ options {
+ 	      <term><command>resolver-query-timeout</command></term>
+ 	      <listitem>
+ 		<para>
+-		  The amount of time in seconds that the resolver
++		  The amount of time in milliseconds that the resolver
+ 		  will spend attempting to resolve a recursive
+ 		  query before failing.  The default and minimum
+-		  is <literal>10</literal> and the maximum is
+-		  <literal>30</literal>.  Setting it to
++		  is <literal>10000</literal> and the maximum is
++		  <literal>30000</literal>.  Setting it to
+ 		  <literal>0</literal> will result in the default
+ 		  being used.
+ 		</para>
++		<para>
++		  This value was originally specified in seconds.
++		  Values less than or equal to 300 will be be treated
++		  as seconds and converted to milliseconds before
++		  applying the above limits.
++		</para>
+ 	      </listitem>
+ 	    </varlistentry>
+ 	  </variablelist>
+@@ -8976,6 +9016,27 @@ avoid-v6-udp-ports { 40000; range 50000 60000; };
+ 	      </listitem>
+ 	    </varlistentry>
+ 
++	    <varlistentry>
++	      <term><command>max-stale-ttl</command></term>
++	      <listitem>
++		<para>
++		  Sets the maximum time for which the server will
++		  retain records past their normal expiry to
++		  return them as stale records when the servers
++		  for those records are not reachable.  The default
++		  is to not retain the record.
++		</para>
++		<para>
++		  <command>rndc serve-stale</command> can be used
++		  to disable and re-enable the serving of stale
++		  records at runtime.  Reloading or reconfiguring
++		  <command>named</command> will not re-enable serving
++		  of stale records if they have been disabled via
++		  <command>rndc</command>.
++		</para>
++	      </listitem>
++	    </varlistentry>
++
+ 	    <varlistentry>
+ 	      <term><command>min-roots</command></term>
+ 	      <listitem>
+diff --git a/doc/arm/logging-categories.xml b/doc/arm/logging-categories.xml
+index 181def7..59f6afb 100644
+--- a/doc/arm/logging-categories.xml
++++ b/doc/arm/logging-categories.xml
+@@ -311,6 +311,17 @@
+ 	  </para>
+ 	</entry>
+       </row>
++      <row rowsep="0">
++	<entry colname="1">
++	  <para><command>serve-stale</command></para>
++	</entry>
++	<entry colname="2">
++	  <para>
++	    Whether or not a stale answer is used
++	    following a resolver failure.
++	  </para>
++	</entry>
++      </row>
+       <row rowsep="0">
+ 	<entry colname="1">
+ 	  <para><command>spill</command></para>
+diff --git a/doc/arm/notes-rh-changes.xml b/doc/arm/notes-rh-changes.xml
+index 11c3a7c..ba3c2cc 100644
+--- a/doc/arm/notes-rh-changes.xml
++++ b/doc/arm/notes-rh-changes.xml
+@@ -13,6 +13,9 @@
+ <section xml:id="relnotes_rh_changes"><info><title>Red Hat Specific Changes</title></info>
+   <itemizedlist>
+      <listitem>
++      <para>
++        This version includes some features not present in releases by ISC.
++      </para>
+       <para>
+         By default, BIND now uses the random number generation functions
+         in the cryptographic library (i.e., OpenSSL or a PKCS#11
+@@ -37,7 +40,16 @@
+         case <filename>/dev/random</filename> will be the default
+         entropy source.  [RT #31459] [RT #46047]
+       </para>
+-    </listitem>
++      <para>
++        When acting as a recursive resolver, <command>named</command>
++        can now continue returning answers whose TTLs have expired
++        when the authoritative server is under attack and unable to
++        respond. This is controlled by the
++        <command>stale-answer-enable</command>,
++        <command>stale-answer-ttl</command> and
++        <command>max-stale-ttl</command> options. [RT #44790]
++      </para>
++     </listitem>
+   </itemizedlist>
+ </section>
+ 
+diff --git a/doc/misc/options b/doc/misc/options
+index e11beed..fde93c7 100644
+--- a/doc/misc/options
++++ b/doc/misc/options
+@@ -225,6 +225,7 @@ options {
+         max-refresh-time <integer>;
+         max-retry-time <integer>;
+         max-rsa-exponent-size <integer>;
++        max-stale-ttl <ttlval>;
+         max-transfer-idle-in <integer>;
+         max-transfer-idle-out <integer>;
+         max-transfer-time-in <integer>;
+@@ -298,7 +299,9 @@ options {
+         request-sit <boolean>; // obsolete
+         require-server-cookie <boolean>;
+         reserved-sockets <integer>;
++        resolver-nonbackoff-tries <integer>;
+         resolver-query-timeout <integer>;
++        resolver-retry-interval <integer>;
+         response-policy { zone <string> [ log <boolean> ] [ max-policy-ttl
+             <integer> ] [ policy ( cname | disabled | drop | given | no-op
+             | nodata | nxdomain | passthru | tcp-only <quoted_string> ) ] [
+@@ -328,6 +331,8 @@ options {
+         sit-secret <string>; // obsolete
+         sortlist { <address_match_element>; ... };
+         stacksize ( default | unlimited | <sizeval> );
++        stale-answer-enable <boolean>;
++        stale-answer-ttl <ttlval>;
+         startup-notify-rate <integer>;
+         statistics-file <quoted_string>;
+         statistics-interval <integer>; // not yet implemented
+@@ -539,6 +544,7 @@ view <string> [ <class> ] {
+         max-recursion-queries <integer>;
+         max-refresh-time <integer>;
+         max-retry-time <integer>;
++        max-stale-ttl <ttlval>;
+         max-transfer-idle-in <integer>;
+         max-transfer-idle-out <integer>;
+         max-transfer-time-in <integer>;
+@@ -600,7 +606,9 @@ view <string> [ <class> ] {
+         request-nsid <boolean>;
+         request-sit <boolean>; // obsolete
+         require-server-cookie <boolean>;
++        resolver-nonbackoff-tries <integer>;
+         resolver-query-timeout <integer>;
++        resolver-retry-interval <integer>;
+         response-policy { zone <string> [ log <boolean> ] [ max-policy-ttl
+             <integer> ] [ policy ( cname | disabled | drop | given | no-op
+             | nodata | nxdomain | passthru | tcp-only <quoted_string> ) ] [
+@@ -655,6 +663,8 @@ view <string> [ <class> ] {
+         sig-signing-type <integer>;
+         sig-validity-interval <integer> [ <integer> ];
+         sortlist { <address_match_element>; ... };
++        stale-answer-enable <boolean>;
++        stale-answer-ttl <ttlval>;
+         suppress-initial-notify <boolean>; // not yet implemented
+         topology { <address_match_element>; ... }; // not implemented
+         transfer-format ( many-answers | one-answer );
+diff --git a/lib/bind9/check.c b/lib/bind9/check.c
+index 5c057a4..7b82618 100644
+--- a/lib/bind9/check.c
++++ b/lib/bind9/check.c
+@@ -99,7 +99,8 @@ check_orderent(const cfg_obj_t *ent, isc_log_t *logctx) {
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "rrset-order: invalid class '%s'",
+ 				    r.base);
+-			result = ISC_R_FAILURE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_FAILURE;
+ 		}
+ 	}
+ 
+@@ -112,7 +113,8 @@ check_orderent(const cfg_obj_t *ent, isc_log_t *logctx) {
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "rrset-order: invalid type '%s'",
+ 				    r.base);
+-			result = ISC_R_FAILURE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_FAILURE;
+ 		}
+ 	}
+ 
+@@ -126,7 +128,8 @@ check_orderent(const cfg_obj_t *ent, isc_log_t *logctx) {
+ 		if (tresult != ISC_R_SUCCESS) {
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "rrset-order: invalid name '%s'", str);
+-			result = ISC_R_FAILURE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_FAILURE;
+ 		}
+ 	}
+ 
+@@ -135,14 +138,16 @@ check_orderent(const cfg_obj_t *ent, isc_log_t *logctx) {
+ 	    strcasecmp("order", cfg_obj_asstring(obj)) != 0) {
+ 		cfg_obj_log(ent, logctx, ISC_LOG_ERROR,
+ 			    "rrset-order: keyword 'order' missing");
+-		result = ISC_R_FAILURE;
++		if (result == ISC_R_SUCCESS)
++			result = ISC_R_FAILURE;
+ 	}
+ 
+ 	obj = cfg_tuple_get(ent, "ordering");
+ 	if (!cfg_obj_isstring(obj)) {
+ 	    cfg_obj_log(ent, logctx, ISC_LOG_ERROR,
+ 			"rrset-order: missing ordering");
+-		result = ISC_R_FAILURE;
++		if (result == ISC_R_SUCCESS)
++			result = ISC_R_FAILURE;
+ 	} else if (strcasecmp(cfg_obj_asstring(obj), "fixed") == 0) {
+ #if !DNS_RDATASET_FIXED
+ 		cfg_obj_log(obj, logctx, ISC_LOG_WARNING,
+@@ -154,7 +159,8 @@ check_orderent(const cfg_obj_t *ent, isc_log_t *logctx) {
+ 		cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 			    "rrset-order: invalid order '%s'",
+ 			    cfg_obj_asstring(obj));
+-		result = ISC_R_FAILURE;
++		if (result == ISC_R_SUCCESS)
++			result = ISC_R_FAILURE;
+ 	}
+ 	return (result);
+ }
+@@ -174,7 +180,7 @@ check_order(const cfg_obj_t *options, isc_log_t *logctx) {
+ 	     element = cfg_list_next(element))
+ 	{
+ 		tresult = check_orderent(cfg_listelt_value(element), logctx);
+-		if (tresult != ISC_R_SUCCESS)
++		if (result == ISC_R_SUCCESS && tresult != ISC_R_SUCCESS)
+ 			result = tresult;
+ 	}
+ 	return (result);
+@@ -204,7 +210,8 @@ check_dual_stack(const cfg_obj_t *options, isc_log_t *logctx) {
+ 		if (val > UINT16_MAX) {
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "port '%u' out of range", val);
+-			result = ISC_R_FAILURE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_RANGE;
+ 		}
+ 	}
+ 	obj = cfg_tuple_get(alternates, "addresses");
+@@ -224,7 +231,8 @@ check_dual_stack(const cfg_obj_t *options, isc_log_t *logctx) {
+ 		if (tresult != ISC_R_SUCCESS) {
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "bad name '%s'", str);
+-			result = ISC_R_FAILURE;
++			if (result == ISC_R_SUCCESS)
++				result = tresult;
+ 		}
+ 		obj = cfg_tuple_get(value, "port");
+ 		if (cfg_obj_isuint32(obj)) {
+@@ -232,7 +240,8 @@ check_dual_stack(const cfg_obj_t *options, isc_log_t *logctx) {
+ 			if (val > UINT16_MAX) {
+ 				cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 					    "port '%u' out of range", val);
+-				result = ISC_R_FAILURE;
++				if (result == ISC_R_SUCCESS)
++					result = ISC_R_RANGE;
+ 			}
+ 		}
+ 	}
+@@ -1267,7 +1276,8 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "auto-dnssec may only be activated at the "
+ 				    "zone level");
+-			result = ISC_R_FAILURE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_FAILURE;
+ 		}
+ 	}
+ 
+@@ -1287,7 +1297,7 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 		{
+ 			obj = cfg_listelt_value(element);
+ 			tresult = mustbesecure(obj, symtab, logctx, mctx);
+-			if (tresult != ISC_R_SUCCESS)
++			if (result == ISC_R_SUCCESS && tresult != ISC_R_SUCCESS)
+ 				result = tresult;
+ 		}
+ 		if (symtab != NULL)
+@@ -1306,7 +1316,8 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 				cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 					    "%s: invalid name '%s'",
+ 					    server_contact[i], str);
+-				result = ISC_R_FAILURE;
++				if (result == ISC_R_SUCCESS)
++					result = ISC_R_FAILURE;
+ 			}
+ 		}
+ 	}
+@@ -1326,7 +1337,8 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "disable-empty-zone: invalid name '%s'",
+ 				    str);
+-			result = ISC_R_FAILURE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_FAILURE;
+ 		}
+ 	}
+ 
+@@ -1340,11 +1352,12 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 	    strlen(cfg_obj_asstring(obj)) > 1024U) {
+ 		cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 			    "'server-id' too big (>1024 bytes)");
+-		result = ISC_R_FAILURE;
++		if (result == ISC_R_SUCCESS)
++			result = ISC_R_FAILURE;
+ 	}
+ 
+ 	tresult = check_dscp(options, logctx);
+-	if (tresult != ISC_R_SUCCESS)
++	if (result == ISC_R_SUCCESS && tresult != ISC_R_SUCCESS)
+ 		result = tresult;
+ 
+ 	obj = NULL;
+@@ -1354,11 +1367,13 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 		if (lifetime > 604800) {	/* 7 days */
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "'nta-lifetime' cannot exceed one week");
+-			result = ISC_R_RANGE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_RANGE;
+ 		} else if (lifetime == 0) {
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "'nta-lifetime' may not be zero");
+-			result = ISC_R_RANGE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_RANGE;
+ 		}
+ 	}
+ 
+@@ -1369,7 +1384,8 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 		if (recheck > 604800) {		/* 7 days */
+ 			cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 				    "'nta-recheck' cannot exceed one week");
+-			result = ISC_R_RANGE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_RANGE;
+ 		}
+ 
+ 		if (recheck > lifetime)
+@@ -1387,7 +1403,8 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 	if (strcasecmp(ccalg, "aes") == 0) {
+ 		cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 			    "cookie-algorithm: '%s' not supported", ccalg);
+-		result = ISC_R_NOTIMPLEMENTED;
++		if (result == ISC_R_SUCCESS)
++			result = ISC_R_NOTIMPLEMENTED;
+ 	}
+ #endif
+ 
+@@ -1476,7 +1493,8 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 				cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
+ 					    "%s out of range (%u < %u)",
+ 					    fstrm[i].name, value, fstrm[i].min);
+-			result = ISC_R_RANGE;
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_RANGE;
+ 		}
+ 
+ 		if (strcmp(fstrm[i].name, "fstrm-set-input-queue-size") == 0) {
+@@ -1490,7 +1508,8 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 					    "%s '%u' not a power-of-2",
+ 					    fstrm[i].name,
+ 					    cfg_obj_asuint32(obj));
+-				result = ISC_R_RANGE;
++				if (result == ISC_R_SUCCESS)
++					result = ISC_R_RANGE;
+ 			}
+ 		}
+ 	}
+@@ -1508,7 +1527,8 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 				    "%" PRId64 "' "
+ 				    "is too small",
+ 				    mapsize);
+-			return (ISC_R_RANGE);
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_RANGE;
+ 		} else if (mapsize > (1ULL << 40)) { /* 1 terabyte */
+ 			cfg_obj_log(obj, logctx,
+ 				    ISC_LOG_ERROR,
+@@ -1516,10 +1536,20 @@ check_options(const cfg_obj_t *options, isc_log_t *logctx, isc_mem_t *mctx,
+ 				    "%" PRId64 "' "
+ 				    "is too large",
+ 				    mapsize);
+-			return (ISC_R_RANGE);
++			if (result == ISC_R_SUCCESS)
++				result = ISC_R_RANGE;
+ 		}
+ 	}
+ 
++	obj = NULL;
++	(void)cfg_map_get(options, "resolver-nonbackoff-tries", &obj);
++	if (obj != NULL && cfg_obj_asuint32(obj) == 0U) {
++		cfg_obj_log(obj, logctx, ISC_LOG_ERROR,
++			    "'resolver-nonbackoff-tries' must be >= 1");
++		if (result == ISC_R_SUCCESS)
++			result = ISC_R_RANGE;
++	}
++
+ 	return (result);
+ }
+ 
+diff --git a/lib/dns/cache.c b/lib/dns/cache.c
+index 4701ff8..97e427a 100644
+--- a/lib/dns/cache.c
++++ b/lib/dns/cache.c
+@@ -138,6 +138,7 @@ struct dns_cache {
+ 	int			db_argc;
+ 	char			**db_argv;
+ 	size_t			size;
++	dns_ttl_t		serve_stale_ttl;
+ 	isc_stats_t		*stats;
+ 
+ 	/* Locked by 'filelock'. */
+@@ -167,9 +168,13 @@ overmem_cleaning_action(isc_task_t *task, isc_event_t *event);
+ 
+ static inline isc_result_t
+ cache_create_db(dns_cache_t *cache, dns_db_t **db) {
+-	return (dns_db_create(cache->mctx, cache->db_type, dns_rootname,
+-			      dns_dbtype_cache, cache->rdclass,
+-			      cache->db_argc, cache->db_argv, db));
++	isc_result_t result;
++	result = dns_db_create(cache->mctx, cache->db_type, dns_rootname,
++			       dns_dbtype_cache, cache->rdclass,
++			       cache->db_argc, cache->db_argv, db);
++	if (result == ISC_R_SUCCESS)
++		dns_db_setservestalettl(*db, cache->serve_stale_ttl);
++	return (result);
+ }
+ 
+ isc_result_t
+@@ -238,6 +243,7 @@ dns_cache_create3(isc_mem_t *cmctx, isc_mem_t *hmctx, isc_taskmgr_t *taskmgr,
+ 	cache->references = 1;
+ 	cache->live_tasks = 0;
+ 	cache->rdclass = rdclass;
++	cache->serve_stale_ttl = 0;
+ 
+ 	cache->stats = NULL;
+ 	result = isc_stats_create(cmctx, &cache->stats,
+@@ -1092,6 +1098,32 @@ dns_cache_getcachesize(dns_cache_t *cache) {
+ 	return (size);
+ }
+ 
++void
++dns_cache_setservestalettl(dns_cache_t *cache, dns_ttl_t ttl) {
++	REQUIRE(VALID_CACHE(cache));
++
++	LOCK(&cache->lock);
++	cache->serve_stale_ttl = ttl;
++	UNLOCK(&cache->lock);
++
++	(void)dns_db_setservestalettl(cache->db, ttl);
++}
++
++dns_ttl_t
++dns_cache_getservestalettl(dns_cache_t *cache) {
++	dns_ttl_t ttl;
++	isc_result_t result;
++
++	REQUIRE(VALID_CACHE(cache));
++
++	/*
++	 * Could get it straight from the dns_cache_t, but use db
++	 * to confirm the value that the db is really using.
++	 */
++	result = dns_db_getservestalettl(cache->db, &ttl);
++	return result == ISC_R_SUCCESS ? ttl : 0;
++}
++
+ /*
+  * The cleaner task is shutting down; do the necessary cleanup.
+  */
+diff --git a/lib/dns/db.c b/lib/dns/db.c
+index ee3e00d..576aa65 100644
+--- a/lib/dns/db.c
++++ b/lib/dns/db.c
+@@ -1130,3 +1130,25 @@ dns_db_nodefullname(dns_db_t *db, dns_dbnode_t *node, dns_name_t *name) {
+ 		return (ISC_R_NOTIMPLEMENTED);
+ 	return ((db->methods->nodefullname)(db, node, name));
+ }
++
++isc_result_t
++dns_db_setservestalettl(dns_db_t *db, dns_ttl_t ttl)
++{
++	REQUIRE(DNS_DB_VALID(db));
++	REQUIRE((db->attributes & DNS_DBATTR_CACHE) != 0);
++
++	if (db->methods->setservestalettl != NULL)
++		return ((db->methods->setservestalettl)(db, ttl));
++	return (ISC_R_NOTIMPLEMENTED);
++}
++
++isc_result_t
++dns_db_getservestalettl(dns_db_t *db, dns_ttl_t *ttl)
++{
++	REQUIRE(DNS_DB_VALID(db));
++	REQUIRE((db->attributes & DNS_DBATTR_CACHE) != 0);
++
++	if (db->methods->getservestalettl != NULL)
++		return ((db->methods->getservestalettl)(db, ttl));
++	return (ISC_R_NOTIMPLEMENTED);
++}
+diff --git a/lib/dns/ecdb.c b/lib/dns/ecdb.c
+index 47994ea..23bfe7d 100644
+--- a/lib/dns/ecdb.c
++++ b/lib/dns/ecdb.c
+@@ -588,7 +588,9 @@ static dns_dbmethods_t ecdb_methods = {
+ 	NULL,			/* setcachestats */
+ 	NULL,			/* hashsize */
+ 	NULL,			/* nodefullname */
+-	NULL			/* getsize */
++	NULL,			/* getsize */
++	NULL,			/* setservestalettl */
++	NULL			/* getservestalettl */
+ };
+ 
+ static isc_result_t
+diff --git a/lib/dns/include/dns/cache.h b/lib/dns/include/dns/cache.h
+index 62797db..714b78e 100644
+--- a/lib/dns/include/dns/cache.h
++++ b/lib/dns/include/dns/cache.h
+@@ -260,6 +260,27 @@ dns_cache_getcachesize(dns_cache_t *cache);
+  * Get the maximum cache size.
+  */
+ 
++void
++dns_cache_setservestalettl(dns_cache_t *cache, dns_ttl_t ttl);
++/*%<
++ * Sets the maximum length of time that cached answers may be retained
++ * past their normal TTL.  Default value for the library is 0, disabling
++ * the use of stale data.
++ *
++ * Requires:
++ *\li	'cache' to be valid.
++ */
++
++dns_ttl_t
++dns_cache_getservestalettl(dns_cache_t *cache);
++/*%<
++ * Gets the maximum length of time that cached answers may be kept past
++ * normal expiry.
++ *
++ * Requires:
++ *\li	'cache' to be valid.
++ */
++
+ isc_result_t
+ dns_cache_flush(dns_cache_t *cache);
+ /*%<
+diff --git a/lib/dns/include/dns/db.h b/lib/dns/include/dns/db.h
+index ae6ae36..5079053 100644
+--- a/lib/dns/include/dns/db.h
++++ b/lib/dns/include/dns/db.h
+@@ -197,6 +197,8 @@ typedef struct dns_dbmethods {
+ 					dns_name_t *name);
+ 	isc_result_t	(*getsize)(dns_db_t *db, dns_dbversion_t *version,
+ 				   uint64_t *records, uint64_t *bytes);
++	isc_result_t	(*setservestalettl)(dns_db_t *db, dns_ttl_t ttl);
++	isc_result_t	(*getservestalettl)(dns_db_t *db, dns_ttl_t *ttl);
+ } dns_dbmethods_t;
+ 
+ typedef isc_result_t
+@@ -255,6 +257,7 @@ struct dns_dbonupdatelistener {
+ #define DNS_DBFIND_FORCENSEC3		0x0080
+ #define DNS_DBFIND_ADDITIONALOK		0x0100
+ #define DNS_DBFIND_NOZONECUT		0x0200
++#define DNS_DBFIND_STALEOK		0x0400
+ /*@}*/
+ 
+ /*@{*/
+@@ -1685,6 +1688,38 @@ dns_db_nodefullname(dns_db_t *db, dns_dbnode_t *node, dns_name_t *name);
+  * \li	'db' is a valid database
+  * \li	'node' and 'name' are not NULL
+  */
++
++isc_result_t
++dns_db_setservestalettl(dns_db_t *db, dns_ttl_t ttl);
++/*%<
++ * Sets the maximum length of time that cached answers may be retained
++ * past their normal TTL. Default value for the library is 0, disabling
++ * the use of stale data.
++ *
++ * Requires:
++ * \li	'db' is a valid cache database.
++ * \li	'ttl' is the number of seconds to retain data past its normal expiry.
++ *
++ * Returns:
++ * \li	#ISC_R_SUCCESS
++ * \li	#ISC_R_NOTIMPLEMENTED - Not supported by this DB implementation.
++ */
++
++isc_result_t
++dns_db_getservestalettl(dns_db_t *db, dns_ttl_t *ttl);
++/*%<
++ * Gets maximum length of time that cached answers may be kept past
++ * normal TTL expiration.
++ *
++ * Requires:
++ * \li	'db' is a valid cache database.
++ * \li	'ttl' is the number of seconds to retain data past its normal expiry.
++ *
++ * Returns:
++ * \li	#ISC_R_SUCCESS
++ * \li	#ISC_R_NOTIMPLEMENTED - Not supported by this DB implementation.
++ */
++
+ ISC_LANG_ENDDECLS
+ 
+ #endif /* DNS_DB_H */
+diff --git a/lib/dns/include/dns/rdataset.h b/lib/dns/include/dns/rdataset.h
+index 5295d8e..97071ed 100644
+--- a/lib/dns/include/dns/rdataset.h
++++ b/lib/dns/include/dns/rdataset.h
+@@ -128,6 +128,7 @@ struct dns_rdataset {
+ 	unsigned int			magic;		/* XXX ? */
+ 	dns_rdatasetmethods_t *		methods;
+ 	ISC_LINK(dns_rdataset_t)	link;
++
+ 	/*
+ 	 * XXX do we need these, or should they be retrieved by methods?
+ 	 * Leaning towards the latter, since they are not frequently required
+@@ -136,12 +137,19 @@ struct dns_rdataset {
+ 	dns_rdataclass_t		rdclass;
+ 	dns_rdatatype_t			type;
+ 	dns_ttl_t			ttl;
++	/*
++	 * Stale ttl is used to see how long this RRset can still be used
++	 * to serve to clients, after the TTL has expired.
++	 */
++	dns_ttl_t			stale_ttl;
+ 	dns_trust_t			trust;
+ 	dns_rdatatype_t			covers;
++
+ 	/*
+ 	 * attributes
+ 	 */
+ 	unsigned int			attributes;
++
+ 	/*%
+ 	 * the counter provides the starting point in the "cyclic" order.
+ 	 * The value UINT32_MAX has a special meaning of "picking up a
+@@ -149,11 +157,13 @@ struct dns_rdataset {
+ 	 * increment the counter.
+ 	 */
+ 	uint32_t			count;
++
+ 	/*
+ 	 * This RRSIG RRset should be re-generated around this time.
+ 	 * Only valid if DNS_RDATASETATTR_RESIGN is set in attributes.
+ 	 */
+ 	isc_stdtime_t			resign;
++
+ 	/*@{*/
+ 	/*%
+ 	 * These are for use by the rdataset implementation, and MUST NOT
+@@ -206,6 +216,7 @@ struct dns_rdataset {
+ #define DNS_RDATASETATTR_OPTOUT		0x00100000	/*%< OPTOUT proof */
+ #define DNS_RDATASETATTR_NEGATIVE	0x00200000
+ #define DNS_RDATASETATTR_PREFETCH	0x00400000
++#define DNS_RDATASETATTR_STALE		0x01000000
+ 
+ /*%
+  * _OMITDNSSEC:
+diff --git a/lib/dns/include/dns/resolver.h b/lib/dns/include/dns/resolver.h
+index 6da41b7..7b397cb 100644
+--- a/lib/dns/include/dns/resolver.h
++++ b/lib/dns/include/dns/resolver.h
+@@ -547,9 +547,12 @@ dns_resolver_getmustbesecure(dns_resolver_t *resolver, dns_name_t *name);
+ 
+ 
+ void
+-dns_resolver_settimeout(dns_resolver_t *resolver, unsigned int seconds);
++dns_resolver_settimeout(dns_resolver_t *resolver, unsigned int timeout);
+ /*%<
+- * Set the length of time the resolver will work on a query, in seconds.
++ * Set the length of time the resolver will work on a query, in milliseconds.
++ *
++ * 'timeout' was originally defined in seconds, and later redefined to be in
++ * milliseconds.  Values less than or equal to 300 are treated as seconds.
+  *
+  * If timeout is 0, the default timeout will be applied.
+  *
+@@ -560,7 +563,8 @@ dns_resolver_settimeout(dns_resolver_t *resolver, unsigned int seconds);
+ unsigned int
+ dns_resolver_gettimeout(dns_resolver_t *resolver);
+ /*%<
+- * Get the current length of time the resolver will work on a query, in seconds.
++ * Get the current length of time the resolver will work on a query,
++ * in milliseconds.
+  *
+  * Requires:
+  * \li  resolver to be valid.
+@@ -582,6 +586,39 @@ dns_resolver_getzeronosoattl(dns_resolver_t *resolver);
+ void
+ dns_resolver_setzeronosoattl(dns_resolver_t *resolver, bool state);
+ 
++unsigned int
++dns_resolver_getretryinterval(dns_resolver_t *resolver);
++
++void
++dns_resolver_setretryinterval(dns_resolver_t *resolver, unsigned int interval);
++/*%<
++ * Sets the amount of time, in millseconds, that is waited for a reply
++ * to a server before another server is tried.  Interacts with the
++ * value of dns_resolver_getnonbackofftries() by trying that number of times
++ * at this interval, before doing exponential backoff and doubling the interval
++ * on each subsequent try, to a maximum of 10 seconds.  Defaults to 800 ms;
++ * silently capped at 2000 ms.
++ *
++ * Requires:
++ * \li	resolver to be valid.
++ * \li  interval > 0.
++ */
++
++unsigned int
++dns_resolver_getnonbackofftries(dns_resolver_t *resolver);
++
++void
++dns_resolver_setnonbackofftries(dns_resolver_t *resolver, unsigned int tries);
++/*%<
++ * Sets the number of failures of getting a reply from remote servers for
++ * a query before backing off by doubling the retry interval for each
++ * subsequent request sent.  Defaults to 3.
++ *
++ * Requires:
++ * \li	resolver to be valid.
++ * \li  tries > 0.
++ */
++
+ unsigned int
+ dns_resolver_getoptions(dns_resolver_t *resolver);
+ 
+diff --git a/lib/dns/include/dns/types.h b/lib/dns/include/dns/types.h
+index 567e8a8..7bf2b60 100644
+--- a/lib/dns/include/dns/types.h
++++ b/lib/dns/include/dns/types.h
+@@ -385,6 +385,12 @@ typedef enum {
+ 	dns_updatemethod_date
+ } dns_updatemethod_t;
+ 
++typedef enum {
++	dns_stale_answer_no,
++	dns_stale_answer_yes,
++	dns_stale_answer_conf
++} dns_stale_answer_t;
++
+ /*
+  * Functions.
+  */
+diff --git a/lib/dns/include/dns/view.h b/lib/dns/include/dns/view.h
+index c849dec..647ca2a 100644
+--- a/lib/dns/include/dns/view.h
++++ b/lib/dns/include/dns/view.h
+@@ -229,6 +229,9 @@ struct dns_view {
+ 	dns_dtenv_t			*dtenv;		/* Dnstap environment */
+ 	dns_dtmsgtype_t			dttypes;	/* Dnstap message types
+ 							   to log */
++	dns_ttl_t			staleanswerttl;
++	dns_stale_answer_t		staleanswersok;		/* rndc setting */
++	bool				staleanswersenable;	/* named.conf setting */
+ };
+ 
+ #define DNS_VIEW_MAGIC			ISC_MAGIC('V','i','e','w')
+diff --git a/lib/dns/master.c b/lib/dns/master.c
+index 2a87bca..ac4bb19 100644
+--- a/lib/dns/master.c
++++ b/lib/dns/master.c
+@@ -1948,12 +1948,18 @@ load_text(dns_loadctx_t *lctx) {
+ 
+ 		if ((lctx->options & DNS_MASTER_AGETTL) != 0) {
+ 			/*
+-			 * Adjust the TTL for $DATE.  If the RR has already
+-			 * expired, ignore it.
++			 * Adjust the TTL for $DATE. If the RR has
++			 * already expired, set its TTL to 0. This
++			 * should be okay even if the TTL stretching
++			 * feature is not in effect, because it will
++			 * just be quickly expired by the cache, and the
++			 * way this was written before the patch it
++			 * could potentially add 0 TTLs anyway.
+ 			 */
+ 			if (lctx->ttl < ttl_offset)
+-				continue;
+-			lctx->ttl -= ttl_offset;
++				lctx->ttl = 0;
++			else
++				lctx->ttl -= ttl_offset;
+ 		}
+ 
+ 		/*
+diff --git a/lib/dns/masterdump.c b/lib/dns/masterdump.c
+index 13d1a3e..873b694 100644
+--- a/lib/dns/masterdump.c
++++ b/lib/dns/masterdump.c
+@@ -81,6 +81,9 @@ struct dns_master_style {
+  */
+ #define DNS_TOTEXT_LINEBREAK_MAXLEN 100
+ 
++/*% Does the rdataset 'r' contain a stale answer? */
++#define STALE(r) (((r)->attributes & DNS_RDATASETATTR_STALE) != 0)
++
+ /*%
+  * Context structure for a masterfile dump in progress.
+  */
+@@ -94,6 +97,7 @@ typedef struct dns_totext_ctx {
+ 	dns_fixedname_t		origin_fixname;
+ 	uint32_t 		current_ttl;
+ 	bool 			current_ttl_valid;
++	dns_ttl_t		serve_stale_ttl;
+ } dns_totext_ctx_t;
+ 
+ LIBDNS_EXTERNAL_DATA const dns_master_style_t
+@@ -382,6 +386,7 @@ totext_ctx_init(const dns_master_style_t *style, dns_totext_ctx_t *ctx) {
+ 	ctx->neworigin = NULL;
+ 	ctx->current_ttl = 0;
+ 	ctx->current_ttl_valid = false;
++	ctx->serve_stale_ttl = 0;
+ 
+ 	return (ISC_R_SUCCESS);
+ }
+@@ -1028,6 +1033,11 @@ dump_rdatasets_text(isc_mem_t *mctx, dns_name_t *name,
+ 		    (ctx->style.flags & DNS_STYLEFLAG_NCACHE) == 0) {
+ 			/* Omit negative cache entries */
+ 		} else {
++			if (STALE(rds)) {
++				fprintf(f, "; stale (for %u more seconds)\n",
++					(rds->stale_ttl -
++					 ctx->serve_stale_ttl));
++			}
+ 			isc_result_t result =
+ 				dump_rdataset(mctx, name, rds, ctx,
+ 					       buffer, f);
+@@ -1496,6 +1506,16 @@ dumpctx_create(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
+ 	dns_db_attach(db, &dctx->db);
+ 
+ 	dctx->do_date = dns_db_iscache(dctx->db);
++	if (dctx->do_date) {
++		/*
++		 * Adjust the date backwards by the serve-stale TTL, if any.
++		 * This is so the TTL will be loaded correctly when next
++		 * started.
++		 */
++		(void)dns_db_getservestalettl(dctx->db,
++					      &dctx->tctx.serve_stale_ttl);
++		dctx->now -= dctx->tctx.serve_stale_ttl;
++	}
+ 
+ 	if (dctx->format == dns_masterformat_text &&
+ 	    (dctx->tctx.style.flags & DNS_STYLEFLAG_REL_OWNER) != 0) {
+@@ -1555,6 +1575,9 @@ writeheader(dns_dumpctx_t *dctx) {
+ 		 * it in the zone case.
+ 		 */
+ 		if (dctx->do_date) {
++			fprintf(dctx->f,
++				"; using a %d second stale ttl\n",
++				dctx->tctx.serve_stale_ttl);
+ 			result = dns_time32_totext(dctx->now, &buffer);
+ 			RUNTIME_CHECK(result == ISC_R_SUCCESS);
+ 			isc_buffer_usedregion(&buffer, &r);
+diff --git a/lib/dns/rbtdb.c b/lib/dns/rbtdb.c
+index 738aa20..5055fcb 100644
+--- a/lib/dns/rbtdb.c
++++ b/lib/dns/rbtdb.c
+@@ -488,6 +488,7 @@ typedef ISC_LIST(rdatasetheader_t)      rdatasetheaderlist_t;
+ typedef ISC_LIST(dns_rbtnode_t)         rbtnodelist_t;
+ 
+ #define RDATASET_ATTR_NONEXISTENT       0x0001
++/*%< May be potentially served as stale data. */
+ #define RDATASET_ATTR_STALE             0x0002
+ #define RDATASET_ATTR_IGNORE            0x0004
+ #define RDATASET_ATTR_RETAIN            0x0008
+@@ -500,6 +501,8 @@ typedef ISC_LIST(dns_rbtnode_t)         rbtnodelist_t;
+ #define RDATASET_ATTR_CASESET           0x0400
+ #define RDATASET_ATTR_ZEROTTL           0x0800
+ #define RDATASET_ATTR_CASEFULLYLOWER    0x1000
++/*%< Ancient - awaiting cleanup. */
++#define RDATASET_ATTR_ANCIENT           0x2000
+ 
+ typedef struct acache_cbarg {
+ 	dns_rdatasetadditional_t        type;
+@@ -550,6 +553,8 @@ struct acachectl {
+ 	(((header)->attributes & RDATASET_ATTR_ZEROTTL) != 0)
+ #define CASEFULLYLOWER(header) \
+ 	(((header)->attributes & RDATASET_ATTR_CASEFULLYLOWER) != 0)
++#define ANCIENT(header) \
++	(((header)->attributes & RDATASET_ATTR_ANCIENT) != 0)
+ 
+ 
+ #define ACTIVE(header, now) \
+@@ -609,6 +614,12 @@ typedef enum {
+ 	expire_flush
+ } expire_t;
+ 
++typedef enum {
++	rdataset_ttl_fresh,
++	rdataset_ttl_stale,
++	rdataset_ttl_ancient
++} rdataset_ttl_t;
++
+ typedef struct rbtdb_version {
+ 	/* Not locked */
+ 	rbtdb_serial_t                  serial;
+@@ -676,6 +687,12 @@ struct dns_rbtdb {
+ 	dns_dbnode_t                    *soanode;
+ 	dns_dbnode_t                    *nsnode;
+ 
++	/*
++	 * Maximum length of time to keep using a stale answer past its
++	 * normal TTL expiry.
++	*/
++	dns_ttl_t			serve_stale_ttl;
++
+ 	/*
+ 	 * This is a linked list used to implement the LRU cache.  There will
+ 	 * be node_lock_count linked lists here.  Nodes in bucket 1 will be
+@@ -719,6 +736,8 @@ struct dns_rbtdb {
+ #define RBTDB_ATTR_LOADED               0x01
+ #define RBTDB_ATTR_LOADING              0x02
+ 
++#define KEEPSTALE(rbtdb) ((rbtdb)->serve_stale_ttl > 0)
++
+ /*%
+  * Search Context
+  */
+@@ -1784,15 +1803,15 @@ rollback_node(dns_rbtnode_t *node, rbtdb_serial_t serial) {
+ }
+ 
+ static inline void
+-mark_stale_header(dns_rbtdb_t *rbtdb, rdatasetheader_t *header) {
++mark_header_ancient(dns_rbtdb_t *rbtdb, rdatasetheader_t *header) {
+ 
+ 	/*
+-	 * If we are already stale there is nothing to do.
++	 * If we are already ancient there is nothing to do.
+ 	 */
+-	if ((header->attributes & RDATASET_ATTR_STALE) != 0)
++	if (ANCIENT(header))
+ 		return;
+ 
+-	header->attributes |= RDATASET_ATTR_STALE;
++	header->attributes |= RDATASET_ATTR_ANCIENT;
+ 	header->node->dirty = 1;
+ 
+ 	/*
+@@ -1833,8 +1852,8 @@ clean_cache_node(dns_rbtdb_t *rbtdb, dns_rbtnode_t *node) {
+ 		/*
+ 		 * If current is nonexistent or stale, we can clean it up.
+ 		 */
+-		if ((current->attributes &
+-		     (RDATASET_ATTR_NONEXISTENT|RDATASET_ATTR_STALE)) != 0) {
++		if (NONEXISTENT(current) || ANCIENT(current) ||
++		    (STALE(current) && ! KEEPSTALE(rbtdb))) {
+ 			if (top_prev != NULL)
+ 				top_prev->next = current->next;
+ 			else
+@@ -2076,6 +2095,80 @@ delete_node(dns_rbtdb_t *rbtdb, dns_rbtnode_t *node) {
+ 	}
+ }
+ 
++#if 0
++static void
++clean_now_or_later(dns_rbtnode_t *node, dns_rbtdb_t *rbtdb,
++		   rdatasetheader_t *header, rdatasetheader_t **header_prevp)
++{
++	if (dns_rbtnode_refcurrent(node) == 0) {
++		isc_mem_t *mctx;
++
++		/*
++		 * header->down can be non-NULL if the refcount has just
++		 * decremented to 0 but decrement_reference() has not performed
++		 * clean_cache_node(), in which case we need to purge the stale
++		 * headers first.
++		 */
++		mctx = rbtdb->common.mctx;
++		clean_stale_headers(rbtdb, mctx, header);
++		if (*header_prevp != NULL)
++			(*header_prevp)->next = header->next;
++		else
++			node->data = header->next;
++		free_rdataset(rbtdb, mctx, header);
++	} else {
++		header->attributes |= RDATASET_ATTR_STALE |
++		                      RDATASET_ATTR_ANCIENT;
++		node->dirty = 1;
++		*header_prevp = header;
++	}
++}
++
++static rdataset_ttl_t
++check_ttl(dns_rbtnode_t *node, rbtdb_search_t *search,
++	  rdatasetheader_t *header, rdatasetheader_t **header_prevp,
++	  nodelock_t *lock, isc_rwlocktype_t *locktype)
++{
++	dns_rbtdb_t *rbtdb = search->rbtdb;
++
++	if (header->rdh_ttl > search->now)
++		return rdataset_ttl_fresh;
++
++	/*
++	 * This rdataset is stale, but perhaps still usable.
++	 */
++	if (KEEPSTALE(rbtdb) &&
++	    header->rdh_ttl + rbtdb->serve_stale_ttl > search->now) {
++		header->attributes |= RDATASET_ATTR_STALE;
++		/* Doesn't set dirty because it doesn't need removal. */
++		return rdataset_ttl_stale;
++	}
++
++	/*
++	 * This rdataset is so stale it is no longer usable, even with
++	 * KEEPSTALE.  If no one else is using the node, we can clean it up
++	 * right now, otherwise we mark it as ancient, and the node as dirty,
++	 * so it will get cleaned up later.
++	 */
++	if ((header->rdh_ttl <= search->now - RBTDB_VIRTUAL) &&
++	    (*locktype == isc_rwlocktype_write ||
++	     NODE_TRYUPGRADE(lock) == ISC_R_SUCCESS)) {
++		/*
++		 * We update the node's status only when we can get write
++		 * access; otherwise, we leave others to this work.  Periodical
++		 * cleaning will eventually take the job as the last resort.
++		 * We won't downgrade the lock, since other rdatasets are
++		 * probably stale, too.
++		 */
++		*locktype = isc_rwlocktype_write;
++		clean_now_or_later(node, rbtdb, header, header_prevp);
++	} else
++		*header_prevp = header;
++
++	return rdataset_ttl_ancient;
++}
++#endif
++
+ /*
+  * Caller must be holding the node lock.
+  */
+@@ -3308,6 +3401,12 @@ bind_rdataset(dns_rbtdb_t *rbtdb, dns_rbtnode_t *node,
+ 		rdataset->attributes |= DNS_RDATASETATTR_OPTOUT;
+ 	if (PREFETCH(header))
+ 		rdataset->attributes |= DNS_RDATASETATTR_PREFETCH;
++	if (STALE(header)) {
++		rdataset->attributes |= DNS_RDATASETATTR_STALE;
++		rdataset->stale_ttl =
++			(rbtdb->serve_stale_ttl + header->rdh_ttl) - now;
++		rdataset->ttl = 0;
++	}
+ 	rdataset->private1 = rbtdb;
+ 	rdataset->private2 = node;
+ 	raw = (unsigned char *)header + sizeof(*header);
+@@ -4648,6 +4747,19 @@ check_stale_header(dns_rbtnode_t *node, rdatasetheader_t *header,
+ #endif
+ 
+ 	if (!ACTIVE(header, search->now)) {
++		dns_ttl_t stale = header->rdh_ttl +
++				  search->rbtdb->serve_stale_ttl;
++		/*
++		 * If this data is in the stale window keep it and if
++		 * DNS_DBFIND_STALEOK is not set we tell the caller to
++		 * skip this record.
++		 */
++		if (KEEPSTALE(search->rbtdb) && stale > search->now) {
++			header->attributes |= RDATASET_ATTR_STALE;
++			*header_prev = header;
++			return ((search->options & DNS_DBFIND_STALEOK) == 0);
++		}
++
+ 		/*
+ 		 * This rdataset is stale.  If no one else is using the
+ 		 * node, we can clean it up right now, otherwise we mark
+@@ -4687,7 +4799,7 @@ check_stale_header(dns_rbtnode_t *node, rdatasetheader_t *header,
+ 					node->data = header->next;
+ 				free_rdataset(search->rbtdb, mctx, header);
+ 			} else {
+-				mark_stale_header(search->rbtdb, header);
++				mark_header_ancient(search->rbtdb, header);
+ 				*header_prev = header;
+ 			}
+ 		} else
+@@ -5125,7 +5237,7 @@ cache_find(dns_db_t *db, dns_name_t *name, dns_dbversion_t *version,
+ 				       &locktype, lock, &search,
+ 				       &header_prev)) {
+ 			/* Do nothing. */
+-		} else if (EXISTS(header) && (!STALE(header))) {
++		} else if (EXISTS(header) && !ANCIENT(header)) {
+ 			/*
+ 			 * We now know that there is at least one active
+ 			 * non-stale rdataset at this node.
+@@ -5603,7 +5715,7 @@ expirenode(dns_db_t *db, dns_dbnode_t *node, isc_stdtime_t now) {
+ 			 * refcurrent(rbtnode) must be non-zero.  This is so
+ 			 * because 'node' is an argument to the function.
+ 			 */
+-			mark_stale_header(rbtdb, header);
++			mark_header_ancient(rbtdb, header);
+ 			if (log)
+ 				isc_log_write(dns_lctx, category, module,
+ 					      level, "overmem cache: stale %s",
+@@ -5611,7 +5723,7 @@ expirenode(dns_db_t *db, dns_dbnode_t *node, isc_stdtime_t now) {
+ 		} else if (force_expire) {
+ 			if (! RETAIN(header)) {
+ 				set_ttl(rbtdb, header, 0);
+-				mark_stale_header(rbtdb, header);
++				mark_header_ancient(rbtdb, header);
+ 			} else if (log) {
+ 				isc_log_write(dns_lctx, category, module,
+ 					      level, "overmem cache: "
+@@ -5868,9 +5980,9 @@ cache_findrdataset(dns_db_t *db, dns_dbnode_t *node, dns_dbversion_t *version,
+ 				 * non-zero.  This is so because 'node' is an
+ 				 * argument to the function.
+ 				 */
+-				mark_stale_header(rbtdb, header);
++				mark_header_ancient(rbtdb, header);
+ 			}
+-		} else if (EXISTS(header) && (!STALE(header))) {
++		} else if (EXISTS(header) && !ANCIENT(header)) {
+ 			if (header->type == matchtype)
+ 				found = header;
+ 			else if (header->type == RBTDB_RDATATYPE_NCACHEANY ||
+@@ -6160,7 +6272,7 @@ add32(dns_rbtdb_t *rbtdb, dns_rbtnode_t *rbtnode, rbtdb_version_t *rbtversion,
+ 				     topheader = topheader->next)
+ 				{
+ 					set_ttl(rbtdb, topheader, 0);
+-					mark_stale_header(rbtdb, topheader);
++					mark_header_ancient(rbtdb, topheader);
+ 				}
+ 				goto find_header;
+ 			}
+@@ -6218,7 +6330,7 @@ add32(dns_rbtdb_t *rbtdb, dns_rbtnode_t *rbtnode, rbtdb_version_t *rbtversion,
+ 				 * ncache entry.
+ 				 */
+ 				set_ttl(rbtdb, topheader, 0);
+-				mark_stale_header(rbtdb, topheader);
++				mark_header_ancient(rbtdb, topheader);
+ 				topheader = NULL;
+ 				goto find_header;
+ 			}
+@@ -6256,8 +6368,11 @@ add32(dns_rbtdb_t *rbtdb, dns_rbtnode_t *rbtnode, rbtdb_version_t *rbtversion,
+ 		}
+ 
+ 		/*
+-		 * Trying to add an rdataset with lower trust to a cache DB
+-		 * has no effect, provided that the cache data isn't stale.
++		 * Trying to add an rdataset with lower trust to a cache
++		 * DB has no effect, provided that the cache data isn't
++		 * stale. If the cache data is stale, new lower trust
++		 * data will supersede it below. Unclear what the best
++		 * policy is here.
+ 		 */
+ 		if (rbtversion == NULL && trust < header->trust &&
+ 		    (ACTIVE(header, now) || header_nx)) {
+@@ -6286,6 +6401,10 @@ add32(dns_rbtdb_t *rbtdb, dns_rbtnode_t *rbtnode, rbtdb_version_t *rbtversion,
+ 
+ 			if ((options & DNS_DBADD_EXACT) != 0)
+ 				flags |= DNS_RDATASLAB_EXACT;
++			/*
++			 * TTL use here is irrelevant to the cache;
++			 * merge is only done with zonedbs.
++			 */
+ 			if ((options & DNS_DBADD_EXACTTTL) != 0 &&
+ 			     newheader->rdh_ttl != header->rdh_ttl)
+ 					result = DNS_R_NOTEXACT;
+@@ -6329,11 +6448,12 @@ add32(dns_rbtdb_t *rbtdb, dns_rbtnode_t *rbtnode, rbtdb_version_t *rbtversion,
+ 			}
+ 		}
+ 		/*
+-		 * Don't replace existing NS, A and AAAA RRsets
+-		 * in the cache if they are already exist.  This
+-		 * prevents named being locked to old servers.
+-		 * Don't lower trust of existing record if the
+-		 * update is forced.
++		 * Don't replace existing NS, A and AAAA RRsets in the
++		 * cache if they are already exist. This prevents named
++		 * being locked to old servers. Don't lower trust of
++		 * existing record if the update is forced. Nothing
++		 * special to be done w.r.t stale data; it gets replaced
++		 * normally further down.
+ 		 */
+ 		if (IS_CACHE(rbtdb) && ACTIVE(header, now) &&
+ 		    header->type == dns_rdatatype_ns &&
+@@ -6508,10 +6628,10 @@ add32(dns_rbtdb_t *rbtdb, dns_rbtnode_t *rbtnode, rbtdb_version_t *rbtversion,
+ 				changed->dirty = true;
+ 			if (rbtversion == NULL) {
+ 				set_ttl(rbtdb, header, 0);
+-				mark_stale_header(rbtdb, header);
++				mark_header_ancient(rbtdb, header);
+ 				if (sigheader != NULL) {
+ 					set_ttl(rbtdb, sigheader, 0);
+-					mark_stale_header(rbtdb, sigheader);
++					mark_header_ancient(rbtdb, sigheader);
+ 				}
+ 			}
+ 			if (rbtversion != NULL && !header_nx) {
+@@ -8310,6 +8430,30 @@ nodefullname(dns_db_t *db, dns_dbnode_t *node, dns_name_t *name) {
+ 	return (result);
+ }
+ 
++static isc_result_t
++setservestalettl(dns_db_t *db, dns_ttl_t ttl) {
++	dns_rbtdb_t *rbtdb = (dns_rbtdb_t *)db;
++
++	REQUIRE(VALID_RBTDB(rbtdb));
++	REQUIRE(IS_CACHE(rbtdb));
++
++	/* currently no bounds checking.  0 means disable. */
++	rbtdb->serve_stale_ttl = ttl;
++	return ISC_R_SUCCESS;
++}
++
++static isc_result_t
++getservestalettl(dns_db_t *db, dns_ttl_t *ttl) {
++	dns_rbtdb_t *rbtdb = (dns_rbtdb_t *)db;
++
++	REQUIRE(VALID_RBTDB(rbtdb));
++	REQUIRE(IS_CACHE(rbtdb));
++
++	*ttl = rbtdb->serve_stale_ttl;
++	return ISC_R_SUCCESS;
++}
++
++
+ static dns_dbmethods_t zone_methods = {
+ 	attach,
+ 	detach,
+@@ -8355,7 +8499,9 @@ static dns_dbmethods_t zone_methods = {
+ 	NULL,
+ 	hashsize,
+ 	nodefullname,
+-	getsize
++	getsize,
++	NULL,
++	NULL
+ };
+ 
+ static dns_dbmethods_t cache_methods = {
+@@ -8403,7 +8549,9 @@ static dns_dbmethods_t cache_methods = {
+ 	setcachestats,
+ 	hashsize,
+ 	nodefullname,
+-	NULL
++	NULL,
++	setservestalettl,
++	getservestalettl
+ };
+ 
+ isc_result_t
+@@ -8674,7 +8822,7 @@ dns_rbtdb_create
+ 	rbtdb->rpzs = NULL;
+ 	rbtdb->load_rpzs = NULL;
+ 	rbtdb->rpz_num = DNS_RPZ_INVALID_NUM;
+-
++	rbtdb->serve_stale_ttl = 0;
+ 	/*
+ 	 * Version Initialization.
+ 	 */
+@@ -9092,7 +9240,8 @@ rdatasetiter_first(dns_rdatasetiter_t *iterator) {
+ 				 * rdatasets to work.
+ 				 */
+ 				if (NONEXISTENT(header) ||
+-				    (now != 0 && now > header->rdh_ttl))
++				    (now != 0 && now > header->rdh_ttl
++						     + rbtdb->serve_stale_ttl))
+ 					header = NULL;
+ 				break;
+ 			} else
+@@ -10280,7 +10429,7 @@ static inline bool
+ need_headerupdate(rdatasetheader_t *header, isc_stdtime_t now) {
+ 	if ((header->attributes &
+ 	     (RDATASET_ATTR_NONEXISTENT |
+-	      RDATASET_ATTR_STALE |
++	      RDATASET_ATTR_ANCIENT |
+ 	      RDATASET_ATTR_ZEROTTL)) != 0)
+ 		return (false);
+ 
+@@ -10386,7 +10535,7 @@ expire_header(dns_rbtdb_t *rbtdb, rdatasetheader_t *header,
+ 	      bool tree_locked, expire_t reason)
+ {
+ 	set_ttl(rbtdb, header, 0);
+-	mark_stale_header(rbtdb, header);
++	mark_header_ancient(rbtdb, header);
+ 
+ 	/*
+ 	 * Caller must hold the node (write) lock.
+diff --git a/lib/dns/resolver.c b/lib/dns/resolver.c
+index 04a58c0..164fc01 100644
+--- a/lib/dns/resolver.c
++++ b/lib/dns/resolver.c
+@@ -141,16 +141,17 @@
+ #endif /* WANT_QUERYTRACE */
+ 
+ #define US_PER_SEC 1000000U
++#define US_PER_MSEC 1000U
+ /*
+  * The maximum time we will wait for a single query.
+  */
+-#define MAX_SINGLE_QUERY_TIMEOUT 9U
+-#define MAX_SINGLE_QUERY_TIMEOUT_US (MAX_SINGLE_QUERY_TIMEOUT*US_PER_SEC)
++#define MAX_SINGLE_QUERY_TIMEOUT 9000U
++#define MAX_SINGLE_QUERY_TIMEOUT_US (MAX_SINGLE_QUERY_TIMEOUT*US_PER_MSEC)
+ 
+ /*
+  * We need to allow a individual query time to complete / timeout.
+  */
+-#define MINIMUM_QUERY_TIMEOUT (MAX_SINGLE_QUERY_TIMEOUT + 1U)
++#define MINIMUM_QUERY_TIMEOUT (MAX_SINGLE_QUERY_TIMEOUT + 1000U)
+ 
+ /* The default time in seconds for the whole query to live. */
+ #ifndef DEFAULT_QUERY_TIMEOUT
+@@ -159,7 +160,7 @@
+ 
+ /* The maximum time in seconds for the whole query to live. */
+ #ifndef MAXIMUM_QUERY_TIMEOUT
+-#define MAXIMUM_QUERY_TIMEOUT 30
++#define MAXIMUM_QUERY_TIMEOUT 30000
+ #endif
+ 
+ /* The default maximum number of recursions to follow before giving up. */
+@@ -496,6 +497,10 @@ struct dns_resolver {
+ 	unsigned int			maxqueries;
+ 	isc_result_t			quotaresp[2];
+ 
++	/* Additions for serve-stale feature. */
++	unsigned int			retryinterval; /* in milliseconds */
++	unsigned int			nonbackofftries;
++
+ 	/* Locked by lock. */
+ 	unsigned int			references;
+ 	bool			exiting;
+@@ -1617,14 +1622,12 @@ fctx_setretryinterval(fetchctx_t *fctx, unsigned int rtt) {
+ 	unsigned int seconds;
+ 	unsigned int us;
+ 
++	us = fctx->res->retryinterval * 1000;
+ 	/*
+-	 * We retry every .8 seconds the first two times through the address
+-	 * list, and then we do exponential back-off.
++	 * Exponential backoff after the first few tries.
+ 	 */
+-	if (fctx->restarts < 3)
+-		us = 800000;
+-	else
+-		us = (800000 << (fctx->restarts - 2));
++	if (fctx->restarts >= fctx->res->nonbackofftries)
++		us <<= (fctx->restarts - fctx->res->nonbackofftries - 1);
+ 
+ 	/*
+ 	 * Add a fudge factor to the expected rtt based on the current
+@@ -4481,7 +4484,8 @@ fctx_create(dns_resolver_t *res, dns_name_t *name, dns_rdatatype_t type,
+ 	/*
+ 	 * Compute an expiration time for the entire fetch.
+ 	 */
+-	isc_interval_set(&interval, res->query_timeout, 0);
++	isc_interval_set(&interval, res->query_timeout / 1000,
++			 res->query_timeout % 1000 * 1000000);
+ 	iresult = isc_time_nowplusinterval(&fctx->expires, &interval);
+ 	if (iresult != ISC_R_SUCCESS) {
+ 		UNEXPECTED_ERROR(__FILE__, __LINE__,
+@@ -8965,6 +8969,8 @@ dns_resolver_create(dns_view_t *view,
+ 	res->spillattimer = NULL;
+ 	res->zspill = 0;
+ 	res->zero_no_soa_ttl = false;
++	res->retryinterval = 30000;
++	res->nonbackofftries = 3;
+ 	res->query_timeout = DEFAULT_QUERY_TIMEOUT;
+ 	res->maxdepth = DEFAULT_RECURSION_DEPTH;
+ 	res->maxqueries = DEFAULT_MAX_QUERIES;
+@@ -10291,17 +10297,20 @@ dns_resolver_gettimeout(dns_resolver_t *resolver) {
+ }
+ 
+ void
+-dns_resolver_settimeout(dns_resolver_t *resolver, unsigned int seconds) {
++dns_resolver_settimeout(dns_resolver_t *resolver, unsigned int timeout) {
+ 	REQUIRE(VALID_RESOLVER(resolver));
+ 
+-	if (seconds == 0)
+-		seconds = DEFAULT_QUERY_TIMEOUT;
+-	if (seconds > MAXIMUM_QUERY_TIMEOUT)
+-		seconds = MAXIMUM_QUERY_TIMEOUT;
+-	if (seconds < MINIMUM_QUERY_TIMEOUT)
+-		seconds =  MINIMUM_QUERY_TIMEOUT;
++	if (timeout <= 300)
++		timeout *= 1000;
++
++	if (timeout == 0)
++		timeout = DEFAULT_QUERY_TIMEOUT;
++	if (timeout > MAXIMUM_QUERY_TIMEOUT)
++		timeout = MAXIMUM_QUERY_TIMEOUT;
++	if (timeout < MINIMUM_QUERY_TIMEOUT)
++		timeout =  MINIMUM_QUERY_TIMEOUT;
+ 
+-	resolver->query_timeout = seconds;
++	resolver->query_timeout = timeout;
+ }
+ 
+ void
+@@ -10398,3 +10407,34 @@ dns_resolver_getquotaresponse(dns_resolver_t *resolver, dns_quotatype_t which)
+ 
+ 	return (resolver->quotaresp[which]);
+ }
++
++unsigned int
++dns_resolver_getretryinterval(dns_resolver_t *resolver) {
++	REQUIRE(VALID_RESOLVER(resolver));
++
++	return (resolver->retryinterval);
++}
++
++void
++dns_resolver_setretryinterval(dns_resolver_t *resolver, unsigned int interval)
++{
++	REQUIRE(VALID_RESOLVER(resolver));
++	REQUIRE(interval > 0);
++
++	resolver->retryinterval = ISC_MIN(interval, 2000);
++}
++
++unsigned int
++dns_resolver_getnonbackofftries(dns_resolver_t *resolver) {
++	REQUIRE(VALID_RESOLVER(resolver));
++
++	return (resolver->nonbackofftries);
++}
++
++void
++dns_resolver_setnonbackofftries(dns_resolver_t *resolver, unsigned int tries) {
++	REQUIRE(VALID_RESOLVER(resolver));
++	REQUIRE(tries > 0);
++
++	resolver->nonbackofftries = tries;
++}
+diff --git a/lib/dns/sdb.c b/lib/dns/sdb.c
+index d4c8c67..ee9be79 100644
+--- a/lib/dns/sdb.c
++++ b/lib/dns/sdb.c
+@@ -1368,7 +1368,9 @@ static dns_dbmethods_t sdb_methods = {
+ 	NULL,			/* setcachestats */
+ 	NULL,			/* hashsize */
+ 	NULL,			/* nodefullname */
+-	NULL			/* getsize */
++	NULL,			/* getsize */
++	NULL,			/* setservestalettl */
++	NULL			/* getservestalettl */
+ };
+ 
+ static isc_result_t
+diff --git a/lib/dns/sdlz.c b/lib/dns/sdlz.c
+index 0b9620c..331992e 100644
+--- a/lib/dns/sdlz.c
++++ b/lib/dns/sdlz.c
+@@ -1336,7 +1336,9 @@ static dns_dbmethods_t sdlzdb_methods = {
+ 	NULL,			/* setcachestats */
+ 	NULL,			/* hashsize */
+ 	NULL,			/* nodefullname */
+-	NULL			/* getsize */
++	NULL,			/* getsize */
++	NULL,			/* setservestalettl */
++	NULL			/* getservestalettl */
+ };
+ 
+ /*
+diff --git a/lib/dns/tests/db_test.c b/lib/dns/tests/db_test.c
+index 35cf21d..bf39545 100644
+--- a/lib/dns/tests/db_test.c
++++ b/lib/dns/tests/db_test.c
+@@ -28,8 +28,9 @@
+ 
+ #include <dns/db.h>
+ #include <dns/dbiterator.h>
+-#include <dns/name.h>
+ #include <dns/journal.h>
++#include <dns/name.h>
++#include <dns/rdatalist.h>
+ 
+ #include "dnstest.h"
+ 
+@@ -76,7 +77,7 @@ getoriginnode_test(void **state) {
+ 	assert_int_equal(result, ISC_R_SUCCESS);
+ 
+ 	result = dns_db_create(mymctx, "rbt", dns_rootname, dns_dbtype_zone,
+-			    dns_rdataclass_in, 0, NULL, &db);
++			       dns_rdataclass_in, 0, NULL, &db);
+ 	assert_int_equal(result, ISC_R_SUCCESS);
+ 
+ 	result = dns_db_getoriginnode(db, &node);
+@@ -91,6 +92,197 @@ getoriginnode_test(void **state) {
+ 	isc_mem_detach(&mymctx);
+ }
+ 
++/* test getservestalettl and setservestalettl */
++static void
++getsetservestalettl_test(void **state) {
++	dns_db_t *db = NULL;
++	isc_mem_t *mymctx = NULL;
++	isc_result_t result;
++	dns_ttl_t ttl;
++
++	UNUSED(state);
++
++	result = isc_mem_create(0, 0, &mymctx);
++	assert_int_equal(result, ISC_R_SUCCESS);
++
++	result = dns_db_create(mymctx, "rbt", dns_rootname, dns_dbtype_cache,
++			       dns_rdataclass_in, 0, NULL, &db);
++	assert_int_equal(result, ISC_R_SUCCESS);
++
++	ttl = 5000;
++	result = dns_db_getservestalettl(db, &ttl);
++	assert_int_equal(result, ISC_R_SUCCESS);
++	assert_int_equal(ttl, 0);
++
++	ttl = 6 * 3600;
++	result = dns_db_setservestalettl(db, ttl);
++	assert_int_equal(result, ISC_R_SUCCESS);
++
++	ttl = 5000;
++	result = dns_db_getservestalettl(db, &ttl);
++	assert_int_equal(result, ISC_R_SUCCESS);
++	assert_int_equal(ttl, 6 * 3600);
++
++	dns_db_detach(&db);
++	isc_mem_detach(&mymctx);
++}
++
++/* check DNS_DBFIND_STALEOK works */
++static void
++dns_dbfind_staleok_test(void **state) {
++	dns_db_t *db = NULL;
++	dns_dbnode_t *node = NULL;
++	dns_fixedname_t example_fixed;
++	dns_fixedname_t found_fixed;
++	dns_name_t *example;
++	dns_name_t *found;
++	dns_rdatalist_t rdatalist;
++	dns_rdataset_t rdataset;
++	int count;
++	int pass;
++	isc_mem_t *mymctx = NULL;
++	isc_result_t result;
++	unsigned char data[] = { 0x0a, 0x00, 0x00, 0x01 };
++
++	UNUSED(state);
++
++	result = isc_mem_create(0, 0, &mymctx);
++	assert_int_equal(result, ISC_R_SUCCESS);
++
++	result = dns_db_create(mymctx, "rbt", dns_rootname, dns_dbtype_cache,
++			       dns_rdataclass_in, 0, NULL, &db);
++	assert_int_equal(result, ISC_R_SUCCESS);
++
++	example = dns_fixedname_initname(&example_fixed);
++	found = dns_fixedname_initname(&found_fixed);
++
++	result = dns_name_fromstring(example, "example", 0, NULL);
++	assert_int_equal(result, ISC_R_SUCCESS);
++
++	/*
++	 * Pass 0: default; no stale processing permitted.
++	 * Pass 1: stale processing for 1 second.
++	 * Pass 2: stale turned off after being on.
++	 */
++	for (pass = 0; pass < 3; pass++) {
++		dns_rdata_t rdata = DNS_RDATA_INIT;
++
++		/* 10.0.0.1 */
++		rdata.data = data;
++		rdata.length = 4;
++		rdata.rdclass = dns_rdataclass_in;
++		rdata.type = dns_rdatatype_a;
++
++		dns_rdatalist_init(&rdatalist);
++		rdatalist.ttl = 2;
++		rdatalist.type = dns_rdatatype_a;
++		rdatalist.rdclass = dns_rdataclass_in;
++		ISC_LIST_APPEND(rdatalist.rdata, &rdata, link);
++
++		switch (pass) {
++		case 0:
++			/* default: stale processing off */
++			break;
++		case 1:
++			/* turn on stale processing */
++			result = dns_db_setservestalettl(db, 1);
++			assert_int_equal(result, ISC_R_SUCCESS);
++			break;
++		case 2:
++			/* turn off stale processing */
++			result = dns_db_setservestalettl(db, 0);
++			assert_int_equal(result, ISC_R_SUCCESS);
++			break;
++		}
++
++		dns_rdataset_init(&rdataset);
++		result = dns_rdatalist_tordataset(&rdatalist, &rdataset);
++		assert_int_equal(result, ISC_R_SUCCESS);
++
++		result = dns_db_findnode(db, example, true, &node);
++		assert_int_equal(result, ISC_R_SUCCESS);
++
++		result = dns_db_addrdataset(db, node, NULL, 0, &rdataset, 0,
++					    NULL);
++		assert_int_equal(result, ISC_R_SUCCESS);
++
++		dns_db_detachnode(db, &node);
++		dns_rdataset_disassociate(&rdataset);
++
++		result = dns_db_find(db, example, NULL, dns_rdatatype_a,
++				     0, 0, &node, found, &rdataset, NULL);
++		assert_int_equal(result, ISC_R_SUCCESS);
++
++		/*
++		 * May loop for up to 2 seconds performing non stale lookups.
++		 */
++		count = 0;
++		do {
++			count++;
++			assert_in_range(count, 0, 20); /* loop sanity */
++			assert_int_equal(rdataset.attributes &
++				     DNS_RDATASETATTR_STALE, 0);
++			assert_true(rdataset.ttl > 0);
++			dns_db_detachnode(db, &node);
++			dns_rdataset_disassociate(&rdataset);
++
++			usleep(100000);	/* 100 ms */
++
++			result = dns_db_find(db, example, NULL,
++					     dns_rdatatype_a, 0, 0,
++					     &node, found, &rdataset, NULL);
++		} while (result == ISC_R_SUCCESS);
++
++		assert_int_equal(result, ISC_R_NOTFOUND);
++
++		/*
++		 * Check whether we can get stale data.
++		 */
++		result = dns_db_find(db, example, NULL, dns_rdatatype_a,
++				     DNS_DBFIND_STALEOK, 0,
++				     &node, found, &rdataset, NULL);
++		switch (pass) {
++		case 0:
++			assert_int_equal(result, ISC_R_NOTFOUND);
++			break;
++		case 1:
++			/*
++			 * Should loop for 1 second with stale lookups then
++			 * stop.
++			 */
++			count = 0;
++			do {
++				count++;
++				assert_in_range(count, 0, 49); /* loop sanity */
++				assert_int_equal(result, ISC_R_SUCCESS);
++				assert_int_equal(rdataset.ttl, 0);
++				assert_int_equal(rdataset.attributes &
++					     DNS_RDATASETATTR_STALE,
++					     DNS_RDATASETATTR_STALE);
++				dns_db_detachnode(db, &node);
++				dns_rdataset_disassociate(&rdataset);
++
++				usleep(100000);	/* 100 ms */
++
++				result = dns_db_find(db, example, NULL,
++						     dns_rdatatype_a,
++						     DNS_DBFIND_STALEOK,
++						     0, &node, found,
++						     &rdataset, NULL);
++			} while (result == ISC_R_SUCCESS);
++			assert_in_range(count, 1, 10);
++			assert_int_equal(result, ISC_R_NOTFOUND);
++			break;
++		case 2:
++			assert_int_equal(result, ISC_R_NOTFOUND);
++			break;
++		}
++	}
++
++	dns_db_detach(&db);
++	isc_mem_detach(&mymctx);
++}
++
+ /* database class */
+ static void
+ class_test(void **state) {
+@@ -213,6 +405,8 @@ int
+ main(void) {
+ 	const struct CMUnitTest tests[] = {
+ 		cmocka_unit_test(getoriginnode_test),
++		cmocka_unit_test(getsetservestalettl_test),
++		cmocka_unit_test(dns_dbfind_staleok_test),
+ 		cmocka_unit_test_setup_teardown(class_test,
+ 						_setup, _teardown),
+ 		cmocka_unit_test_setup_teardown(dbtype_test,
+diff --git a/lib/dns/view.c b/lib/dns/view.c
+index a1a4301..abf6a4c 100644
+--- a/lib/dns/view.c
++++ b/lib/dns/view.c
+@@ -229,6 +229,9 @@ dns_view_create(isc_mem_t *mctx, dns_rdataclass_t rdclass,
+ 	view->flush = false;
+ 	view->dlv = NULL;
+ 	view->maxudp = 0;
++	view->staleanswerttl = 1;
++	view->staleanswersok = dns_stale_answer_conf;
++	view->staleanswersenable = false;
+ 	view->nocookieudp = 0;
+ 	view->maxbits = 0;
+ 	view->v4_aaaa = dns_aaaa_ok;
+diff --git a/lib/isccfg/namedconf.c b/lib/isccfg/namedconf.c
+index 7bad989..bbf4b45 100644
+--- a/lib/isccfg/namedconf.c
++++ b/lib/isccfg/namedconf.c
+@@ -1778,6 +1778,7 @@ view_clauses[] = {
+ 	{ "max-ncache-ttl", &cfg_type_uint32, 0 },
+ 	{ "max-recursion-depth", &cfg_type_uint32, 0 },
+ 	{ "max-recursion-queries", &cfg_type_uint32, 0 },
++	{ "max-stale-ttl", &cfg_type_ttlval, 0 },
+ 	{ "max-udp-size", &cfg_type_uint32, 0 },
+ 	{ "message-compression", &cfg_type_boolean, 0 },
+ 	{ "min-roots", &cfg_type_uint32, CFG_CLAUSEFLAG_NOTIMP },
+@@ -1806,7 +1807,9 @@ view_clauses[] = {
+ 	{ "request-nsid", &cfg_type_boolean, 0 },
+ 	{ "request-sit", &cfg_type_boolean, CFG_CLAUSEFLAG_OBSOLETE },
+ 	{ "require-server-cookie", &cfg_type_boolean, 0 },
++	{ "resolver-nonbackoff-tries", &cfg_type_uint32, 0 },
+ 	{ "resolver-query-timeout", &cfg_type_uint32, 0 },
++	{ "resolver-retry-interval", &cfg_type_uint32, 0 },
+ 	{ "response-policy", &cfg_type_rpz, 0 },
+ 	{ "rfc2308-type1", &cfg_type_boolean, CFG_CLAUSEFLAG_NYI },
+ 	{ "root-delegation-only",  &cfg_type_optional_exclude, 0 },
+@@ -1815,6 +1818,8 @@ view_clauses[] = {
+ 	{ "send-cookie", &cfg_type_boolean, 0 },
+ 	{ "servfail-ttl", &cfg_type_ttlval, 0 },
+ 	{ "sortlist", &cfg_type_bracketed_aml, 0 },
++	{ "stale-answer-enable", &cfg_type_boolean, 0 },
++	{ "stale-answer-ttl", &cfg_type_ttlval, 0 },
+ 	{ "suppress-initial-notify", &cfg_type_boolean, CFG_CLAUSEFLAG_NYI },
+ 	{ "topology", &cfg_type_bracketed_aml, CFG_CLAUSEFLAG_NOTIMP },
+ 	{ "transfer-format", &cfg_type_transferformat, 0 },
+-- 
+2.20.1
+

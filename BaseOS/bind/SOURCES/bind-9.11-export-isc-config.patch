@@ -1,0 +1,35 @@
+diff --git a/export-libs/Makefile b/export-libs/Makefile
+index df15ea8..13f416b 100644
+--- a/export-libs/Makefile
++++ b/export-libs/Makefile
+@@ -404,20 +404,18 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man1
+ 
+ install:: isc-config.sh installdirs
+-	${INSTALL_SCRIPT} isc-config.sh ${DESTDIR}${bindir}
+-	rm -f ${DESTDIR}${bindir}/bind9-config
+-	ln ${DESTDIR}${bindir}/isc-config.sh ${DESTDIR}${bindir}/bind9-config
+-	${INSTALL_DATA} ${top_srcdir}/isc-config.sh.1 ${DESTDIR}${mandir}/man1
+-	rm -f ${DESTDIR}${mandir}/man1/bind9-config.1
+-	ln ${DESTDIR}${mandir}/man1/isc-config.sh.1 ${DESTDIR}${mandir}/man1/bind9-config.1
+-	${INSTALL_DATA} ${top_srcdir}/bind.keys ${DESTDIR}${sysconfdir}
++	${INSTALL_SCRIPT} isc-config.sh ${DESTDIR}${bindir}/isc-export-config.sh
++	rm -f ${DESTDIR}${bindir}/bind9-export-config
++	ln ${DESTDIR}${bindir}/isc-export-config.sh ${DESTDIR}${bindir}/bind9-export-config
++	${INSTALL_DATA} ${top_srcdir}/isc-config.sh.1 ${DESTDIR}${mandir}/man1/isc-export-config.sh.1
++	rm -f ${DESTDIR}${mandir}/man1/bind9-export-config.1
++	ln ${DESTDIR}${mandir}/man1/isc-export-config.sh.1 ${DESTDIR}${mandir}/man1/bind9-export-config.1
+ 
+ uninstall::
+-	rm -f ${DESTDIR}${sysconfdir}/bind.keys
+-	rm -f ${DESTDIR}${mandir}/man1/bind9-config.1
+-	rm -f ${DESTDIR}${mandir}/man1/isc-config.sh.1
+-	rm -f ${DESTDIR}${bindir}/bind9-config
+-	rm -f ${DESTDIR}${bindir}/isc-config.sh
++	rm -f ${DESTDIR}${mandir}/man1/bind9-export-config.1
++	rm -f ${DESTDIR}${mandir}/man1/isc-export-config.sh.1
++	rm -f ${DESTDIR}${bindir}/bind9-export-config
++	rm -f ${DESTDIR}${bindir}/isc-export-config.sh
+ 
+ tags:
+ 	rm -f TAGS

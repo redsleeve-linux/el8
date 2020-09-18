@@ -1,0 +1,256 @@
+From 8ca95f47231822df2b9c171a4da1e93ca5b748eb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20Men=C5=A1=C3=ADk?= <pemensik@redhat.com>
+Date: Wed, 25 Jul 2018 12:24:16 +0200
+Subject: [PATCH] Use make automatic variables to install updated manuals
+
+Make will choose modified manual from build directory or original from source
+directory automagically. Take advantage of install tool feature.
+Install all files in single command instead of iterating on each of them.
+---
+ bin/check/Makefile.in   |  8 +++++---
+ bin/confgen/Makefile.in |  9 +++++----
+ bin/delv/Makefile.in    |  6 ++++--
+ bin/dig/Makefile.in     |  8 ++++----
+ bin/dnssec/Makefile.in  |  6 ++++--
+ bin/named/Makefile.in   | 13 +++++++++----
+ bin/pkcs11/Makefile.in  |  9 ++++-----
+ bin/python/Makefile.in  |  8 ++++----
+ bin/tools/Makefile.in   | 25 +++++++++++++++----------
+ 9 files changed, 54 insertions(+), 38 deletions(-)
+
+diff --git a/bin/check/Makefile.in b/bin/check/Makefile.in
+index c124e80..1174f8d 100644
+--- a/bin/check/Makefile.in
++++ b/bin/check/Makefile.in
+@@ -83,12 +83,14 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${sbindir}
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man8
+ 
+-install:: named-checkconf@EXEEXT@ named-checkzone@EXEEXT@ installdirs
++install-man8: ${MANPAGES}
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man8
++	(cd ${DESTDIR}${mandir}/man8; rm -f named-compilezone.8; ${LINK_PROGRAM} named-checkzone.8 named-compilezone.8)
++
++install:: named-checkconf@EXEEXT@ named-checkzone@EXEEXT@ installdirs install-man8
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} named-checkconf@EXEEXT@ ${DESTDIR}${sbindir}
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} named-checkzone@EXEEXT@ ${DESTDIR}${sbindir}
+ 	(cd ${DESTDIR}${sbindir}; rm -f named-compilezone@EXEEXT@; ${LINK_PROGRAM} named-checkzone@EXEEXT@ named-compilezone@EXEEXT@)
+-	for m in ${MANPAGES}; do ${INSTALL_DATA} ${srcdir}/$$m ${DESTDIR}${mandir}/man8 || exit 1; done
+-	(cd ${DESTDIR}${mandir}/man8; rm -f named-compilezone.8; ${LINK_PROGRAM} named-checkzone.8 named-compilezone.8)
+ 
+ uninstall::
+ 	rm -f ${DESTDIR}${mandir}/man8/named-compilezone.8
+diff --git a/bin/confgen/Makefile.in b/bin/confgen/Makefile.in
+index 87f13dd..7865c0c 100644
+--- a/bin/confgen/Makefile.in
++++ b/bin/confgen/Makefile.in
+@@ -95,13 +95,14 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${sbindir}
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man8
+ 
+-install:: rndc-confgen@EXEEXT@ ddns-confgen@EXEEXT@ installdirs
++install-man8: rndc-confgen.8 ddns-confgen.8
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man8
++	(cd ${DESTDIR}${mandir}/man8; rm -f tsig-keygen.8; ${LINK_PROGRAM} ddns-confgen.8 tsig-keygen.8)
++
++install:: rndc-confgen@EXEEXT@ ddns-confgen@EXEEXT@ installdirs install-man8
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} rndc-confgen@EXEEXT@ ${DESTDIR}${sbindir}
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} ddns-confgen@EXEEXT@ ${DESTDIR}${sbindir}
+-	${INSTALL_DATA} ${srcdir}/rndc-confgen.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/ddns-confgen.8 ${DESTDIR}${mandir}/man8
+ 	(cd ${DESTDIR}${sbindir}; rm -f tsig-keygen@EXEEXT@; ${LINK_PROGRAM} ddns-confgen@EXEEXT@ tsig-keygen@EXEEXT@)
+-	(cd ${DESTDIR}${mandir}/man8; rm -f tsig-keygen.8; ${LINK_PROGRAM} ddns-confgen.8 tsig-keygen.8)
+ 
+ uninstall::
+ 	rm -f ${DESTDIR}${mandir}/man8/tsig-keygen.8
+diff --git a/bin/delv/Makefile.in b/bin/delv/Makefile.in
+index e2d2802..19361a8 100644
+--- a/bin/delv/Makefile.in
++++ b/bin/delv/Makefile.in
+@@ -63,10 +63,12 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${bindir}
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man1
+ 
+-install:: delv@EXEEXT@ installdirs
++install-man1: delv.1
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man1
++
++install:: delv@EXEEXT@ installdirs install-man1
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} \
+ 		delv@EXEEXT@ ${DESTDIR}${bindir}
+-	${INSTALL_DATA} ${srcdir}/delv.1 ${DESTDIR}${mandir}/man1
+ 
+ uninstall::
+ 	rm -f ${DESTDIR}${mandir}/man1/delv.1
+diff --git a/bin/dig/Makefile.in b/bin/dig/Makefile.in
+index a9830a9..d7ac0b6 100644
+--- a/bin/dig/Makefile.in
++++ b/bin/dig/Makefile.in
+@@ -91,16 +91,16 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${bindir}
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man1
+ 
+-install:: dig@EXEEXT@ host@EXEEXT@ nslookup@EXEEXT@ installdirs
++install-man1: ${MANPAGES}
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man1
++
++install:: dig@EXEEXT@ host@EXEEXT@ nslookup@EXEEXT@ installdirs install-man1
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} \
+ 		dig@EXEEXT@ ${DESTDIR}${bindir}
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} \
+ 		host@EXEEXT@ ${DESTDIR}${bindir}
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} \
+ 		nslookup@EXEEXT@ ${DESTDIR}${bindir}
+-	for m in ${MANPAGES}; do \
+-		${INSTALL_DATA} ${srcdir}/$$m ${DESTDIR}${mandir}/man1 || exit 1; \
+-	done
+ 
+ uninstall::
+ 	for m in ${MANPAGES}; do \
+diff --git a/bin/dnssec/Makefile.in b/bin/dnssec/Makefile.in
+index 2239ad1..ce0a177 100644
+--- a/bin/dnssec/Makefile.in
++++ b/bin/dnssec/Makefile.in
+@@ -110,9 +110,11 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${sbindir}
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man8
+ 
+-install:: ${TARGETS} installdirs
++install-man8: ${MANPAGES}
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man8
++
++install:: ${TARGETS} installdirs install-man8
+ 	for t in ${TARGETS}; do ${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} $$t ${DESTDIR}${sbindir} || exit 1; done
+-	for m in ${MANPAGES}; do ${INSTALL_DATA} ${srcdir}/$$m ${DESTDIR}${mandir}/man8 || exit 1; done
+ 
+ uninstall::
+ 	for m in ${MANPAGES}; do rm -f ${DESTDIR}${mandir}/man8/$$m || exit 1; done
+diff --git a/bin/named/Makefile.in b/bin/named/Makefile.in
+index e1f85a9..d92bc9a 100644
+--- a/bin/named/Makefile.in
++++ b/bin/named/Makefile.in
+@@ -176,12 +176,17 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man5
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man8
+ 
+-install:: named@EXEEXT@ lwresd@EXEEXT@ installdirs
++install-man5: named.conf.5
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man5
++
++install-man8: named.8 lwresd.8
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man8
++
++install-man: install-man5 install-man8
++
++install:: named@EXEEXT@ lwresd@EXEEXT@ installdirs install-man
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} named@EXEEXT@ ${DESTDIR}${sbindir}
+ 	(cd ${DESTDIR}${sbindir}; rm -f lwresd@EXEEXT@; @LN@ named@EXEEXT@ lwresd@EXEEXT@)
+-	${INSTALL_DATA} ${srcdir}/named.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/lwresd.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/named.conf.5 ${DESTDIR}${mandir}/man5
+ 
+ uninstall::
+ 	rm -f ${DESTDIR}${mandir}/man5/named.conf.5
+diff --git a/bin/pkcs11/Makefile.in b/bin/pkcs11/Makefile.in
+index ae90616..a058c91 100644
+--- a/bin/pkcs11/Makefile.in
++++ b/bin/pkcs11/Makefile.in
+@@ -71,7 +71,10 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${sbindir}
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man8
+ 
+-install:: ${TARGETS} installdirs
++install-man8: ${MANPAGES}
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man8
++
++install:: ${TARGETS} installdirs install-man8
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} pkcs11-list@EXEEXT@ \
+ 		${DESTDIR}${sbindir}
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} pkcs11-destroy@EXEEXT@ \
+@@ -80,10 +83,6 @@ install:: ${TARGETS} installdirs
+ 		${DESTDIR}${sbindir}
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} pkcs11-tokens@EXEEXT@ \
+ 		${DESTDIR}${sbindir}
+-	${INSTALL_DATA} ${srcdir}/pkcs11-list.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/pkcs11-destroy.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/pkcs11-keygen.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/pkcs11-tokens.8 ${DESTDIR}${mandir}/man8
+ 
+ uninstall::
+ 	rm -f ${DESTDIR}${mandir}/man8/pkcs11-tokens.8
+diff --git a/bin/python/Makefile.in b/bin/python/Makefile.in
+index aa678d4..064c404 100644
+--- a/bin/python/Makefile.in
++++ b/bin/python/Makefile.in
+@@ -47,13 +47,13 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${sbindir}
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man8
+ 
+-install:: ${TARGETS} installdirs
++install-man8: ${MANPAGES}
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man8
++
++install:: ${TARGETS} installdirs install-man8
+ 	${INSTALL_SCRIPT} dnssec-checkds ${DESTDIR}${sbindir}
+ 	${INSTALL_SCRIPT} dnssec-coverage ${DESTDIR}${sbindir}
+ 	${INSTALL_SCRIPT} dnssec-keymgr ${DESTDIR}${sbindir}
+-	${INSTALL_DATA} ${srcdir}/dnssec-checkds.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/dnssec-coverage.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/dnssec-keymgr.8 ${DESTDIR}${mandir}/man8
+ 	if test -n "${PYTHON}" ; then \
+ 		if test -n "${DESTDIR}" ; then \
+ 			${PYTHON} ${srcdir}/setup.py install --root=${DESTDIR} --prefix=${prefix} @PYTHON_INSTALL_LIB@ ; \
+diff --git a/bin/tools/Makefile.in b/bin/tools/Makefile.in
+index 7bf2af4..c395bc7 100644
+--- a/bin/tools/Makefile.in
++++ b/bin/tools/Makefile.in
+@@ -119,17 +119,27 @@ installdirs:
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man1
+ 	$(SHELL) ${top_srcdir}/mkinstalldirs ${DESTDIR}${mandir}/man8
+ 
+-nzd:
++nzd-man: named-nzd2nzf.8
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man8
++
++nzd: nzd-man
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} named-nzd2nzf@EXEEXT@ \
+ 		${DESTDIR}${sbindir}
+-	${INSTALL_DATA} ${srcdir}/named-nzd2nzf.8 ${DESTDIR}${mandir}/man8
+ 
+-dnstap:
++dnstap-man: dnstap-read.1
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man1
++
++dnstap: dnstap-man
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} dnstap-read@EXEEXT@ \
+ 		${DESTDIR}${bindir}
+-	${INSTALL_DATA} ${srcdir}/dnstap-read.1 ${DESTDIR}${mandir}/man1
+ 
+-install:: ${TARGETS} installdirs @DNSTAP@ @NZD_TOOLS@
++install-man1: arpaname.1 named-rrchecker.1 mdig.1
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man1
++
++install-man8: named-journalprint.8 nsec3hash.8
++	${INSTALL_DATA} $^ ${DESTDIR}${mandir}/man8
++
++install:: ${TARGETS} installdirs @DNSTAP@ @NZD_TOOLS@ install-man1 install-man8
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} arpaname@EXEEXT@ \
+ 		${DESTDIR}${bindir}
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} named-journalprint@EXEEXT@ \
+@@ -144,13 +154,8 @@ install:: ${TARGETS} installdirs @DNSTAP@ @NZD_TOOLS@
+ 		${DESTDIR}${sbindir}
+ 	${LIBTOOL_MODE_INSTALL} ${INSTALL_PROGRAM} mdig@EXEEXT@ \
+ 		${DESTDIR}${bindir}
+-	${INSTALL_DATA} ${srcdir}/arpaname.1 ${DESTDIR}${mandir}/man1
+ 	${INSTALL_DATA} ${srcdir}/isc-hmac-fixup.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/named-journalprint.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/named-rrchecker.1 ${DESTDIR}${mandir}/man1
+-	${INSTALL_DATA} ${srcdir}/nsec3hash.8 ${DESTDIR}${mandir}/man8
+ 	${INSTALL_DATA} ${srcdir}/genrandom.8 ${DESTDIR}${mandir}/man8
+-	${INSTALL_DATA} ${srcdir}/mdig.1 ${DESTDIR}${mandir}/man1
+ 
+ uninstall::
+ 	rm -f ${DESTDIR}${mandir}/man1/mdig.1
+-- 
+2.14.4
+

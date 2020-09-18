@@ -1,0 +1,39 @@
+From 68baeb7211ba2fcd4eff53d987e9b70ba38294cb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20Men=C5=A1=C3=ADk?= <pemensik@redhat.com>
+Date: Thu, 20 Dec 2018 11:52:12 +0100
+Subject: [PATCH] Fix implicit declaration warning
+
+isc_md5_available() function is not declared before its use. Include
+header providing it in files that use it.
+---
+ bin/tests/system/tkey/keydelete.c | 1 +
+ lib/dns/tsig.c                    | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/bin/tests/system/tkey/keydelete.c b/bin/tests/system/tkey/keydelete.c
+index 36ee6c7..6051cd2 100644
+--- a/bin/tests/system/tkey/keydelete.c
++++ b/bin/tests/system/tkey/keydelete.c
+@@ -21,6 +21,7 @@
+ #include <isc/hash.h>
+ #include <isc/log.h>
+ #include <isc/mem.h>
++#include <isc/md5.h>
+ #include <isc/print.h>
+ #include <isc/sockaddr.h>
+ #include <isc/socket.h>
+diff --git a/lib/dns/tsig.c b/lib/dns/tsig.c
+index 70805bb..33870f3 100644
+--- a/lib/dns/tsig.c
++++ b/lib/dns/tsig.c
+@@ -18,6 +18,7 @@
+ 
+ #include <isc/buffer.h>
+ #include <isc/mem.h>
++#include <isc/md5.h>
+ #include <isc/print.h>
+ #include <isc/refcount.h>
+ #include <isc/serial.h>
+-- 
+2.14.5
+

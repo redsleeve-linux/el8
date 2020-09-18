@@ -1,0 +1,65 @@
+From f9a37643528dc83b981156d0a1cf52e3d9a38322 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20K=C4=99pie=C5=84?= <michal@isc.org>
+Date: Mon, 2 Dec 2019 15:15:06 +0100
+Subject: [PATCH] Fix GeoIP2 memory leak upon reconfiguration
+
+Loaded GeoIP2 databases are only released when named is shut down, but
+not during server reconfiguration.  This causes memory to be leaked
+every time "rndc reconfig" or "rndc reload" is used, as long as any
+GeoIP2 database is in use.  Fix by releasing any loaded GeoIP2 databases
+before reloading them.  Do not call dns_geoip_shutdown() until server
+shutdown as that function releases the memory context used for caching
+GeoIP2 lookup results.
+
+(cherry picked from commit 670afbe84a87e202fa795079d9d6d1639bcf391d)
+(cherry picked from commit 95a5589fa2ac3956fecfef780158a2745718c860)
+---
+ bin/named/geoip.c  | 2 --
+ bin/named/server.c | 6 ++++++
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/bin/named/geoip.c b/bin/named/geoip.c
+index d560f8fbcf..0b11f6b803 100644
+--- a/bin/named/geoip.c
++++ b/bin/named/geoip.c
+@@ -243,6 +243,4 @@ ns_geoip_shutdown(void) {
+ 		ns_g_geoip->domain = NULL;
+ 	}
+ #endif /* HAVE_GEOIP2 */
+-
+-	dns_geoip_shutdown();
+ }
+diff --git a/bin/named/server.c b/bin/named/server.c
+index ebe7ad4702..4d7d2210ff 100644
+--- a/bin/named/server.c
++++ b/bin/named/server.c
+@@ -72,6 +72,7 @@
+ #include <dns/events.h>
+ #include <dns/forward.h>
+ #include <dns/fixedname.h>
++#include <dns/geoip.h>
+ #include <dns/journal.h>
+ #include <dns/keytable.h>
+ #include <dns/keyvalues.h>
+@@ -7684,6 +7685,10 @@ load_configuration(const char *filename, ns_server_t *server,
+ 	isc__socketmgr_setreserved(ns_g_socketmgr, reserved);
+ 
+ #if defined(HAVE_GEOIP) || defined(HAVE_GEOIP2)
++	/*
++	 * Release any previously opened GeoIP2 databases.
++	 */
++	ns_geoip_shutdown();
+ 	/*
+ 	 * Initialize GeoIP databases from the configured location.
+ 	 * This should happen before configuring any ACLs, so that we
+@@ -9030,6 +9035,7 @@ shutdown_server(isc_task_t *task, isc_event_t *event) {
+ #endif
+ #if defined(HAVE_GEOIP) || defined(HAVE_GEOIP2)
+ 	ns_geoip_shutdown();
++	dns_geoip_shutdown();
+ #endif /* HAVE_GEOIP || HAVE_GEOIP2 */
+ 
+ 	dns_db_detach(&server->in_roothints);
+-- 
+2.21.1
+

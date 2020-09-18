@@ -1,0 +1,121 @@
+From 83b889c238282b210f874a3ad81bb56299767495 Mon Sep 17 00:00:00 2001
+From: Petr Mensik <pemensik@redhat.com>
+Date: Mon, 5 Aug 2019 11:54:03 +0200
+Subject: [PATCH] Allow explicit disabling of autodisabled MD5
+
+Default security policy might include explicitly disabled RSAMD5
+algorithm. Current FIPS code automatically disables in FIPS mode. But if
+RSAMD5 is included in security policy, it fails to start, because that
+algorithm is not recognized. Allow it disabled, but fail on any
+other usage.
+---
+ bin/named/server.c |  4 ++--
+ lib/bind9/check.c  |  4 ++++
+ lib/dns/rcode.c    | 33 +++++++++++++++------------------
+ 3 files changed, 21 insertions(+), 20 deletions(-)
+
+diff --git a/bin/named/server.c b/bin/named/server.c
+index 5b57371..51702ab 100644
+--- a/bin/named/server.c
++++ b/bin/named/server.c
+@@ -1547,12 +1547,12 @@ disable_algorithms(const cfg_obj_t *disabled, dns_resolver_t *resolver) {
+ 		r.length = strlen(r.base);
+ 
+ 		result = dns_secalg_fromtext(&alg, &r);
+-		if (result != ISC_R_SUCCESS) {
++		if (result != ISC_R_SUCCESS && result != ISC_R_DISABLED) {
+ 			uint8_t ui;
+ 			result = isc_parse_uint8(&ui, r.base, 10);
+ 			alg = ui;
+ 		}
+-		if (result != ISC_R_SUCCESS) {
++		if (result != ISC_R_SUCCESS && result != ISC_R_DISABLED) {
+ 			cfg_obj_log(cfg_listelt_value(element),
+ 				    ns_g_lctx, ISC_LOG_ERROR,
+ 				    "invalid algorithm");
+diff --git a/lib/bind9/check.c b/lib/bind9/check.c
+index e0803d4..8023784 100644
+--- a/lib/bind9/check.c
++++ b/lib/bind9/check.c
+@@ -302,6 +302,10 @@ disabled_algorithms(const cfg_obj_t *disabled, isc_log_t *logctx) {
+ 		r.length = strlen(r.base);
+ 
+ 		tresult = dns_secalg_fromtext(&alg, &r);
++		if (tresult == ISC_R_DISABLED) {
++			// Recognize disabled algorithms, disable it explicitly
++			tresult = ISC_R_SUCCESS;
++		}
+ 		if (tresult != ISC_R_SUCCESS) {
+ 			cfg_obj_log(cfg_listelt_value(element), logctx,
+ 				    ISC_LOG_ERROR, "invalid algorithm '%s'",
+diff --git a/lib/dns/rcode.c b/lib/dns/rcode.c
+index f51d548..c49b8d1 100644
+--- a/lib/dns/rcode.c
++++ b/lib/dns/rcode.c
+@@ -126,7 +126,6 @@
+ #endif
+ 
+ #define SECALGNAMES \
+-	MD5_SECALGNAMES \
+ 	DH_SECALGNAMES \
+ 	DSA_SECALGNAMES \
+ 	{ DNS_KEYALG_ECC, "ECC", 0 }, \
+@@ -178,6 +177,7 @@ static struct tbl rcodes[] = { RCODENAMES ERCODENAMES };
+ static struct tbl tsigrcodes[] = { RCODENAMES TSIGRCODENAMES };
+ static struct tbl certs[] = { CERTNAMES };
+ static struct tbl secalgs[] = { SECALGNAMES };
++static struct tbl md5_secalgs[] = { MD5_SECALGNAMES };
+ static struct tbl secprotos[] = { SECPROTONAMES };
+ static struct tbl hashalgs[] = { HASHALGNAMES };
+ static struct tbl dsdigests[] = { DSDIGESTNAMES };
+@@ -358,33 +358,30 @@ dns_cert_totext(dns_cert_t cert, isc_buffer_t *target) {
+ 	return (dns_mnemonic_totext(cert, target, certs));
+ }
+ 
+-static inline struct tbl *
+-secalgs_tbl_start() {
+-	struct tbl *algs = secalgs;
+-
+-#ifndef PK11_MD5_DISABLE
+-	if (!isc_md5_available()) {
+-		while (algs->name != NULL &&
+-		       algs->value == DNS_KEYALG_RSAMD5)
+-			++algs;
+-	}
+-#endif
+-	return algs;
+-}
+-
+ isc_result_t
+ dns_secalg_fromtext(dns_secalg_t *secalgp, isc_textregion_t *source) {
+ 	unsigned int value;
++	isc_result_t result;
+ 
+-	RETERR(dns_mnemonic_fromtext(&value, source,
+-	                             secalgs_tbl_start(), 0xff));
++	result = dns_mnemonic_fromtext(&value, source,
++	                               secalgs, 0xff);
++	if (result != ISC_R_SUCCESS) {
++		result = dns_mnemonic_fromtext(&value, source,
++	                                       md5_secalgs, 0xff);
++		if (result != ISC_R_SUCCESS) {
++			return (result);
++		} else if (!isc_md5_available()) {
++			*secalgp = value;
++			return (ISC_R_DISABLED);
++		}
++	}
+ 	*secalgp = value;
+ 	return (ISC_R_SUCCESS);
+ }
+ 
+ isc_result_t
+ dns_secalg_totext(dns_secalg_t secalg, isc_buffer_t *target) {
+-	return (dns_mnemonic_totext(secalg, target, secalgs_tbl_start()));
++	return (dns_mnemonic_totext(secalg, target, secalgs));
+ }
+ 
+ void
+-- 
+2.20.1
+

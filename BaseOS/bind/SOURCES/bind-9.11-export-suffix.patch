@@ -1,0 +1,39 @@
+diff --git a/configure.ac b/configure.ac
+index c1bfd62..7c5ad51 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -5333,6 +5333,8 @@ AC_SUBST(BUILD_CPPFLAGS)
+ AC_SUBST(BUILD_LDFLAGS)
+ AC_SUBST(BUILD_LIBS)
+ 
++AC_SUBST(LIBDIR_SUFFIX)
++
+ #
+ # Commands to run at the end of config.status.
+ # Don't just put these into configure, it won't work right if somebody
+diff --git a/isc-config.sh.in b/isc-config.sh.in
+index b5e94ed..d2857e0 100644
+--- a/isc-config.sh.in
++++ b/isc-config.sh.in
+@@ -13,16 +13,17 @@ prefix=@prefix@
+ exec_prefix=@exec_prefix@
+ exec_prefix_set=
+ includedir=@includedir@
++libdir_suffix=@LIBDIR_SUFFIX@
+ arch=$(uname -m)
+ 
+ case $arch in
+ 	x86_64 | amd64 | sparc64 | s390x | ppc64)
+-		libdir=/usr/lib64
+-		sec_libdir=/usr/lib
++		libdir=/usr/lib64${libdir_suffix}
++		sec_libdir=/usr/lib${libdir_suffix}
+ 		;;
+ 	* )
+-		libdir=/usr/lib
+-		sec_libdir=/usr/lib64
++		libdir=/usr/lib${libdir_suffix}
++		sec_libdir=/usr/lib64${libdir_suffix}
+ 		;;
+ esac
+ 

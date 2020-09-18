@@ -1,0 +1,27 @@
+From 37f89ccfc439f8d86c401d9ae10e94e53b924961 Mon Sep 17 00:00:00 2001
+From: Petr Mensik <pemensik@redhat.com>
+Date: Tue, 27 Aug 2019 20:39:59 +0200
+Subject: [PATCH] Do not set engine for native PKCS11
+
+It resets already set lib_path to pkcs11, which is invalid in native
+pkcs11 crypto. Engine has to be path to PKCS#11 module.
+---
+ bin/named/include/named/globals.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/bin/named/include/named/globals.h b/bin/named/include/named/globals.h
+index eda2214..2a611d5 100644
+--- a/bin/named/include/named/globals.h
++++ b/bin/named/include/named/globals.h
+@@ -160,7 +160,7 @@ EXTERN const char *		ns_g_defaultdnstap	INIT(NULL);
+ 
+ EXTERN const char *		ns_g_username		INIT(NULL);
+ 
+-#if defined(USE_PKCS11)
++#if defined(USE_PKCS11) && !defined(PKCS11CRYPTO)
+ EXTERN const char *		ns_g_engine		INIT(PKCS11_ENGINE);
+ #else
+ EXTERN const char *		ns_g_engine		INIT(NULL);
+-- 
+2.20.1
+

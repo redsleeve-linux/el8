@@ -1,0 +1,37 @@
+From 16c1bd61384e993fef13d7be88fdd34551a2b3ce Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20Men=C5=A1=C3=ADk?= <pemensik@redhat.com>
+Date: Wed, 23 Jan 2019 20:12:51 +0100
+Subject: [PATCH] Use custom random generator only for bind build
+
+Do not test random entropy on startup when used by DHCP. On most cases
+random entropy is not even used by DHCP. In cases it is (LDAP SSL), fail
+whenever it is not available.
+
+Resolves: rhbz#1668682
+---
+ lib/dns/openssl_link.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/lib/dns/openssl_link.c b/lib/dns/openssl_link.c
+index 91e87d0..2551b0a 100644
+--- a/lib/dns/openssl_link.c
++++ b/lib/dns/openssl_link.c
+@@ -289,6 +289,7 @@ dst__openssl_init(const char *engine) {
+ #endif
+ #endif /* !defined(OPENSSL_NO_ENGINE) */
+ 
++#ifdef ISC_PLATFORM_USETHREADS
+ 	/* Protect ourselves against unseeded PRNG */
+ 	if (RAND_status() != 1) {
+ 		FATAL_ERROR(__FILE__, __LINE__,
+@@ -296,6 +297,7 @@ dst__openssl_init(const char *engine) {
+ 			    "cannot be initialized (see the `PRNG not "
+ 			    "seeded' message in the OpenSSL FAQ)");
+ 	}
++#endif /* ISC_PLATFORM_USETHREADS */
+ 
+ 	return (ISC_R_SUCCESS);
+ 
+-- 
+2.20.1
+

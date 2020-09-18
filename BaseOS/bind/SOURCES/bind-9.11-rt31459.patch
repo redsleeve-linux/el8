@@ -1,0 +1,2122 @@
+From 7e61714a5d1509ec79af42391e41eb1afc53063a Mon Sep 17 00:00:00 2001
+From: Evan Hunt <each@isc.org>
+Date: Tue, 12 Sep 2017 19:05:46 -0700
+Subject: [PATCH] rebased rt31459c
+
+[rt31459d] update the newer tools
+
+[rt31459d] setup entropy in dns_lib_init()
+
+[rt31459d] silence compiler warning
+
+DNS_OPENSSL_LIBS -> DST_OPENSSL_LIBS
+
+Include new unit test
+---
+ bin/confgen/keygen.c                     |   7 +
+ bin/dnssec/dnssec-dsfromkey.c            |   8 +-
+ bin/dnssec/dnssec-importkey.c            |   8 +-
+ bin/dnssec/dnssec-revoke.c               |   8 +-
+ bin/dnssec/dnssec-settime.c              |   8 +-
+ bin/dnssec/dnssec-signzone.c             |  11 +-
+ bin/dnssec/dnssec-verify.c               |   8 +-
+ bin/dnssec/dnssectool.c                  |  11 +-
+ bin/named/server.c                       |   6 +
+ bin/nsupdate/nsupdate.c                  |  14 +-
+ bin/tests/makejournal.c                  |   6 +-
+ bin/tests/system/pipelined/pipequeries.c |  20 +-
+ bin/tests/system/pipelined/tests.sh      |   4 +-
+ bin/tests/system/rsabigexponent/bigkey.c |   4 +
+ bin/tests/system/tkey/keycreate.c        |  26 ++-
+ bin/tests/system/tkey/keydelete.c        |  26 ++-
+ bin/tests/system/tkey/tests.sh           |   8 +-
+ bin/tools/mdig.c                         |   3 +-
+ configure                                | 250 +++++++++++++----------
+ configure.ac                             |  77 ++++++-
+ lib/dns/dst_api.c                        |  21 +-
+ lib/dns/include/dst/dst.h                |   8 +
+ lib/dns/lib.c                            |  15 +-
+ lib/dns/openssl_link.c                   |  72 ++++++-
+ lib/dns/pkcs11.c                         |  29 ++-
+ lib/dns/tests/Kyuafile                   |   1 +
+ lib/dns/tests/Makefile.in                |   7 +
+ lib/dns/tests/dstrandom_test.c           | 115 +++++++++++
+ lib/dns/win32/libdns.def.in              |   7 +
+ lib/isc/entropy.c                        |  24 +++
+ lib/isc/include/isc/entropy.h            |  12 ++
+ lib/isc/include/isc/platform.h.in        |   5 +
+ lib/isc/include/isc/types.h              |   2 +
+ lib/isc/pk11.c                           |  12 +-
+ lib/isc/win32/include/isc/platform.h.in  |   5 +
+ win32utils/Configure                     |  28 ++-
+ 36 files changed, 701 insertions(+), 175 deletions(-)
+ create mode 100644 lib/dns/tests/dstrandom_test.c
+
+diff --git a/bin/confgen/keygen.c b/bin/confgen/keygen.c
+index 5015abb..295e16f 100644
+--- a/bin/confgen/keygen.c
++++ b/bin/confgen/keygen.c
+@@ -165,6 +165,13 @@ generate_key(isc_mem_t *mctx, const char *randomfile, dns_secalg_t alg,
+ 		randomfile = NULL;
+ 		open_keyboard = ISC_ENTROPY_KEYBOARDYES;
+ 	}
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	if (randomfile != NULL &&
++	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
++		randomfile = NULL;
++		isc_entropy_usehook(ectx, true);
++	}
++#endif
+ 	DO("start entropy source", isc_entropy_usebestsource(ectx,
+ 							     &entropy_source,
+ 							     randomfile,
+diff --git a/bin/dnssec/dnssec-dsfromkey.c b/bin/dnssec/dnssec-dsfromkey.c
+index 2c0c308..3e585af 100644
+--- a/bin/dnssec/dnssec-dsfromkey.c
++++ b/bin/dnssec/dnssec-dsfromkey.c
+@@ -494,14 +494,14 @@ main(int argc, char **argv) {
+ 
+ 	if (ectx == NULL)
+ 		setup_entropy(mctx, NULL, &ectx);
+-	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
+-	if (result != ISC_R_SUCCESS)
+-		fatal("could not initialize hash");
+ 	result = dst_lib_init(mctx, ectx,
+ 			      ISC_ENTROPY_BLOCKING | ISC_ENTROPY_GOODONLY);
+ 	if (result != ISC_R_SUCCESS)
+ 		fatal("could not initialize dst: %s",
+ 		      isc_result_totext(result));
++	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
++	if (result != ISC_R_SUCCESS)
++		fatal("could not initialize hash");
+ 	isc_entropy_stopcallbacksources(ectx);
+ 
+ 	setup_logging(mctx, &log);
+@@ -571,8 +571,8 @@ main(int argc, char **argv) {
+ 	if (dns_rdataset_isassociated(&rdataset))
+ 		dns_rdataset_disassociate(&rdataset);
+ 	cleanup_logging(&log);
+-	dst_lib_destroy();
+ 	isc_hash_destroy();
++	dst_lib_destroy();
+ 	cleanup_entropy(&ectx);
+ 	dns_name_destroy();
+ 	if (verbose > 10)
+diff --git a/bin/dnssec/dnssec-importkey.c b/bin/dnssec/dnssec-importkey.c
+index 0d1e7f8..79c4d74 100644
+--- a/bin/dnssec/dnssec-importkey.c
++++ b/bin/dnssec/dnssec-importkey.c
+@@ -407,14 +407,14 @@ main(int argc, char **argv) {
+ 
+ 	if (ectx == NULL)
+ 		setup_entropy(mctx, NULL, &ectx);
+-	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
+-	if (result != ISC_R_SUCCESS)
+-		fatal("could not initialize hash");
+ 	result = dst_lib_init(mctx, ectx,
+ 			      ISC_ENTROPY_BLOCKING | ISC_ENTROPY_GOODONLY);
+ 	if (result != ISC_R_SUCCESS)
+ 		fatal("could not initialize dst: %s",
+ 		      isc_result_totext(result));
++	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
++	if (result != ISC_R_SUCCESS)
++		fatal("could not initialize hash");
+ 	isc_entropy_stopcallbacksources(ectx);
+ 
+ 	setup_logging(mctx, &log);
+@@ -458,8 +458,8 @@ main(int argc, char **argv) {
+ 	if (dns_rdataset_isassociated(&rdataset))
+ 		dns_rdataset_disassociate(&rdataset);
+ 	cleanup_logging(&log);
+-	dst_lib_destroy();
+ 	isc_hash_destroy();
++	dst_lib_destroy();
+ 	cleanup_entropy(&ectx);
+ 	dns_name_destroy();
+ 	if (verbose > 10)
+diff --git a/bin/dnssec/dnssec-revoke.c b/bin/dnssec/dnssec-revoke.c
+index 7d82dbf..10f9359 100644
+--- a/bin/dnssec/dnssec-revoke.c
++++ b/bin/dnssec/dnssec-revoke.c
+@@ -184,14 +184,14 @@ main(int argc, char **argv) {
+ 
+ 	if (ectx == NULL)
+ 		setup_entropy(mctx, NULL, &ectx);
+-	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
+-	if (result != ISC_R_SUCCESS)
+-		fatal("Could not initialize hash");
+ 	result = dst_lib_init2(mctx, ectx, engine,
+ 			       ISC_ENTROPY_BLOCKING | ISC_ENTROPY_GOODONLY);
+ 	if (result != ISC_R_SUCCESS)
+ 		fatal("Could not initialize dst: %s",
+ 		      isc_result_totext(result));
++	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
++	if (result != ISC_R_SUCCESS)
++		fatal("Could not initialize hash");
+ 	isc_entropy_stopcallbacksources(ectx);
+ 
+ 	result = dst_key_fromnamedfile(filename, dir,
+@@ -273,8 +273,8 @@ main(int argc, char **argv) {
+ 
+ cleanup:
+ 	dst_key_free(&key);
+-	dst_lib_destroy();
+ 	isc_hash_destroy();
++	dst_lib_destroy();
+ 	cleanup_entropy(&ectx);
+ 	if (verbose > 10)
+ 		isc_mem_stats(mctx, stdout);
+diff --git a/bin/dnssec/dnssec-settime.c b/bin/dnssec/dnssec-settime.c
+index f355903..6a2ca59 100644
+--- a/bin/dnssec/dnssec-settime.c
++++ b/bin/dnssec/dnssec-settime.c
+@@ -382,14 +382,14 @@ main(int argc, char **argv) {
+ 
+ 	if (ectx == NULL)
+ 		setup_entropy(mctx, NULL, &ectx);
+-	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
+-	if (result != ISC_R_SUCCESS)
+-		fatal("Could not initialize hash");
+ 	result = dst_lib_init2(mctx, ectx, engine,
+ 			       ISC_ENTROPY_BLOCKING | ISC_ENTROPY_GOODONLY);
+ 	if (result != ISC_R_SUCCESS)
+ 		fatal("Could not initialize dst: %s",
+ 		      isc_result_totext(result));
++	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
++	if (result != ISC_R_SUCCESS)
++		fatal("Could not initialize hash");
+ 	isc_entropy_stopcallbacksources(ectx);
+ 
+ 	if (predecessor != NULL) {
+@@ -674,8 +674,8 @@ main(int argc, char **argv) {
+ 	if (prevkey != NULL)
+ 		dst_key_free(&prevkey);
+ 	dst_key_free(&key);
+-	dst_lib_destroy();
+ 	isc_hash_destroy();
++	dst_lib_destroy();
+ 	cleanup_entropy(&ectx);
+ 	if (verbose > 10)
+ 		isc_mem_stats(mctx, stdout);
+diff --git a/bin/dnssec/dnssec-signzone.c b/bin/dnssec/dnssec-signzone.c
+index c6a0313..6ddaebe 100644
+--- a/bin/dnssec/dnssec-signzone.c
++++ b/bin/dnssec/dnssec-signzone.c
+@@ -3460,14 +3460,15 @@ main(int argc, char *argv[]) {
+ 	if (!pseudorandom)
+ 		eflags |= ISC_ENTROPY_GOODONLY;
+ 
+-	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
+-	if (result != ISC_R_SUCCESS)
+-		fatal("could not create hash context");
+-
+ 	result = dst_lib_init2(mctx, ectx, engine, eflags);
+ 	if (result != ISC_R_SUCCESS)
+ 		fatal("could not initialize dst: %s",
+ 		      isc_result_totext(result));
++
++	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
++	if (result != ISC_R_SUCCESS)
++		fatal("could not create hash context");
++
+ 	isc_stdtime_get(&now);
+ 
+ 	if (startstr != NULL) {
+@@ -3879,8 +3880,8 @@ main(int argc, char *argv[]) {
+ 	dns_master_styledestroy(&dsstyle, mctx);
+ 
+ 	cleanup_logging(&log);
+-	dst_lib_destroy();
+ 	isc_hash_destroy();
++	dst_lib_destroy();
+ 	cleanup_entropy(&ectx);
+ 	dns_name_destroy();
+ 	if (verbose > 10)
+diff --git a/bin/dnssec/dnssec-verify.c b/bin/dnssec/dnssec-verify.c
+index 4c293bf..3263cbc 100644
+--- a/bin/dnssec/dnssec-verify.c
++++ b/bin/dnssec/dnssec-verify.c
+@@ -281,15 +281,15 @@ main(int argc, char *argv[]) {
+ 	if (ectx == NULL)
+ 		setup_entropy(mctx, NULL, &ectx);
+ 
+-	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
+-	if (result != ISC_R_SUCCESS)
+-		fatal("could not create hash context");
+-
+ 	result = dst_lib_init2(mctx, ectx, engine, ISC_ENTROPY_BLOCKING);
+ 	if (result != ISC_R_SUCCESS)
+ 		fatal("could not initialize dst: %s",
+ 		      isc_result_totext(result));
+ 
++	result = isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE);
++	if (result != ISC_R_SUCCESS)
++		fatal("could not create hash context");
++
+ 	isc_stdtime_get(&now);
+ 
+ 	rdclass = strtoclass(classname);
+diff --git a/bin/dnssec/dnssectool.c b/bin/dnssec/dnssectool.c
+index fbc7ece..31a99e7 100644
+--- a/bin/dnssec/dnssectool.c
++++ b/bin/dnssec/dnssectool.c
+@@ -34,6 +34,7 @@
+ #include <isc/heap.h>
+ #include <isc/list.h>
+ #include <isc/mem.h>
++#include <isc/platform.h>
+ #include <isc/print.h>
+ #include <isc/string.h>
+ #include <isc/time.h>
+@@ -235,7 +236,8 @@ setup_entropy(isc_mem_t *mctx, const char *randomfile, isc_entropy_t **ectx) {
+ 	if (*ectx == NULL) {
+ 		result = isc_entropy_create(mctx, ectx);
+ 		if (result != ISC_R_SUCCESS)
+-			fatal("could not create entropy object");
++			fatal("could not create entropy object: %s",
++			      isc_result_totext(result));
+ 		ISC_LIST_INIT(sources);
+ 	}
+ 
+@@ -244,6 +246,13 @@ setup_entropy(isc_mem_t *mctx, const char *randomfile, isc_entropy_t **ectx) {
+ 		randomfile = NULL;
+ 	}
+ 
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	if (randomfile != NULL &&
++	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
++		randomfile = NULL;
++		isc_entropy_usehook(*ectx, true);
++	}
++#endif
+ 	result = isc_entropy_usebestsource(*ectx, &source, randomfile,
+ 					   usekeyboard);
+ 
+diff --git a/bin/named/server.c b/bin/named/server.c
+index 7d85d3b..c782073 100644
+--- a/bin/named/server.c
++++ b/bin/named/server.c
+@@ -36,6 +36,7 @@
+ #include <isc/lex.h>
+ #include <isc/meminfo.h>
+ #include <isc/parseint.h>
++#include <isc/platform.h>
+ #include <isc/portset.h>
+ #include <isc/print.h>
+ #include <isc/random.h>
+@@ -8211,6 +8212,10 @@ load_configuration(const char *filename, ns_server_t *server,
+ 				      "no source of entropy found");
+ 		} else {
+ 			const char *randomdev = cfg_obj_asstring(obj);
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++			if (strcmp(randomdev, ISC_PLATFORM_CRYPTORANDOM) == 0)
++				isc_entropy_usehook(ns_g_entropy, true);
++#else
+ 			int level = ISC_LOG_ERROR;
+ 			result = isc_entropy_createfilesource(ns_g_entropy,
+ 							      randomdev);
+@@ -8245,6 +8250,7 @@ load_configuration(const char *filename, ns_server_t *server,
+ 				}
+ 				isc_entropy_detach(&ns_g_fallbackentropy);
+ 			}
++#endif
+ #endif
+ 		}
+ 
+diff --git a/bin/nsupdate/nsupdate.c b/bin/nsupdate/nsupdate.c
+index bbb3936..0286987 100644
+--- a/bin/nsupdate/nsupdate.c
++++ b/bin/nsupdate/nsupdate.c
+@@ -272,7 +272,8 @@ setup_entropy(isc_mem_t *mctx, const char *randomfile, isc_entropy_t **ectx) {
+ 	if (*ectx == NULL) {
+ 		result = isc_entropy_create(mctx, ectx);
+ 		if (result != ISC_R_SUCCESS)
+-			fatal("could not create entropy object");
++			fatal("could not create entropy object: %s",
++			      isc_result_totext(result));
+ 		ISC_LIST_INIT(sources);
+ 	}
+ 
+@@ -281,6 +282,13 @@ setup_entropy(isc_mem_t *mctx, const char *randomfile, isc_entropy_t **ectx) {
+ 		randomfile = NULL;
+ 	}
+ 
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	if (randomfile != NULL &&
++	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
++		randomfile = NULL;
++		isc_entropy_usehook(*ectx, true);
++	}
++#endif
+ 	result = isc_entropy_usebestsource(*ectx, &source, randomfile,
+ 					   usekeyboard);
+ 
+@@ -979,11 +987,11 @@ setup_system(void) {
+ 		}
+ 	}
+ 
+-	setup_entropy(gmctx, NULL, &entropy);
++	if (entropy == NULL)
++		setup_entropy(gmctx, NULL, &entropy);
+ 
+ 	result = isc_hash_create(gmctx, entropy, DNS_NAME_MAXWIRE);
+ 	check_result(result, "isc_hash_create");
+-	isc_hash_init();
+ 
+ 	result = dns_dispatchmgr_create(gmctx, entropy, &dispatchmgr);
+ 	check_result(result, "dns_dispatchmgr_create");
+diff --git a/bin/tests/makejournal.c b/bin/tests/makejournal.c
+index 61a41b0..acc71a1 100644
+--- a/bin/tests/makejournal.c
++++ b/bin/tests/makejournal.c
+@@ -102,12 +102,12 @@ main(int argc, char **argv) {
+ 	CHECK(isc_mem_create(0, 0, &mctx));
+ 	CHECK(isc_entropy_create(mctx, &ectx));
+ 
+-	CHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
+-	hash_active = true;
+-
+ 	CHECK(dst_lib_init(mctx, ectx, ISC_ENTROPY_BLOCKING));
+ 	dst_active = true;
+ 
++	CHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
++	hash_active = true;
++
+ 	CHECK(isc_log_create(mctx, &lctx, &logconfig));
+ 	isc_log_registercategories(lctx, categories);
+ 	isc_log_setcontext(lctx);
+diff --git a/bin/tests/system/pipelined/pipequeries.c b/bin/tests/system/pipelined/pipequeries.c
+index c6ab7f8..f0a6ff2 100644
+--- a/bin/tests/system/pipelined/pipequeries.c
++++ b/bin/tests/system/pipelined/pipequeries.c
+@@ -204,6 +204,7 @@ sendqueries(isc_task_t *task, isc_event_t *event) {
+ 
+ int
+ main(int argc, char *argv[]) {
++	char *randomfile = NULL;
+ 	isc_sockaddr_t bind_any;
+ 	struct in_addr inaddr;
+ 	isc_result_t result;
+@@ -222,7 +223,7 @@ main(int argc, char *argv[]) {
+ 	int c;
+ 
+ 	isc_commandline_errprint = false;
+-	while ((c = isc_commandline_parse(argc, argv, "p:")) != -1) {
++	while ((c = isc_commandline_parse(argc, argv, "p:r:")) != -1) {
+ 		switch (c) {
+ 		case 'p':
+ 			result = isc_parse_uint16(&port,
+@@ -233,6 +234,9 @@ main(int argc, char *argv[]) {
+ 				exit(1);
+ 			}
+ 			break;
++		case 'r':
++			randomfile = isc_commandline_argument;
++			break;
+ 		case '?':
+ 			fprintf(stderr, "%s: invalid argument '%c'",
+ 				argv[0], c);
+@@ -275,10 +279,18 @@ main(int argc, char *argv[]) {
+ 
+ 	ectx = NULL;
+ 	RUNCHECK(isc_entropy_create(mctx, &ectx));
+-	RUNCHECK(isc_entropy_createfilesource(ectx, "../random.data"));
+-	RUNCHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	if (randomfile != NULL &&
++	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
++		randomfile = NULL;
++		isc_entropy_usehook(ectx, true);
++	}
++#endif
++	if (randomfile != NULL)
++		RUNCHECK(isc_entropy_createfilesource(ectx, randomfile));
+ 
+ 	RUNCHECK(dst_lib_init(mctx, ectx, ISC_ENTROPY_GOODONLY));
++	RUNCHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
+ 
+ 	taskmgr = NULL;
+ 	RUNCHECK(isc_taskmgr_create(mctx, 1, 0, &taskmgr));
+@@ -331,8 +343,8 @@ main(int argc, char *argv[]) {
+ 	isc_task_detach(&task);
+ 	isc_taskmgr_destroy(&taskmgr);
+ 
+-	dst_lib_destroy();
+ 	isc_hash_destroy();
++	dst_lib_destroy();
+ 	isc_entropy_detach(&ectx);
+ 
+ 	isc_log_destroy(&lctx);
+diff --git a/bin/tests/system/pipelined/tests.sh b/bin/tests/system/pipelined/tests.sh
+index 61f1ff7..ed1302a 100644
+--- a/bin/tests/system/pipelined/tests.sh
++++ b/bin/tests/system/pipelined/tests.sh
+@@ -19,7 +19,7 @@ status=0
+ 
+ echo_i "check pipelined TCP queries"
+ ret=0
+-$PIPEQUERIES -p ${PORT} < input > raw || ret=1
++$PIPEQUERIES -p ${PORT} -r $RANDFILE < input > raw || ret=1
+ awk '{ print $1 " " $5 }' < raw > output
+ sort < output > output-sorted
+ $DIFF ref output-sorted || { ret=1 ; echo_i "diff sorted failed"; }
+@@ -43,7 +43,7 @@ status=`expr $status + $ret`
+ 
+ echo_i "check keep-response-order"
+ ret=0
+-$PIPEQUERIES -p ${PORT} ++ < inputb > rawb || ret=1
++$PIPEQUERIES -p ${PORT} -r $RANDFILE ++ < inputb > rawb || ret=1
+ awk '{ print $1 " " $5 }' < rawb > outputb
+ $DIFF refb outputb || ret=1
+ if [ $ret != 0 ]; then echo_i "failed"; fi
+diff --git a/bin/tests/system/rsabigexponent/bigkey.c b/bin/tests/system/rsabigexponent/bigkey.c
+index 4462f2e..f06268d 100644
+--- a/bin/tests/system/rsabigexponent/bigkey.c
++++ b/bin/tests/system/rsabigexponent/bigkey.c
+@@ -20,6 +20,7 @@
+ #include <isc/buffer.h>
+ #include <isc/entropy.h>
+ #include <isc/mem.h>
++#include <isc/platform.h>
+ #include <isc/print.h>
+ #include <isc/region.h>
+ #include <isc/stdio.h>
+@@ -183,6 +184,9 @@ main(int argc, char **argv) {
+ 
+ 	CHECK(isc_mem_create(0, 0, &mctx), "isc_mem_create()");
+ 	CHECK(isc_entropy_create(mctx, &ectx), "isc_entropy_create()");
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	isc_entropy_usehook(ectx, true);
++#endif
+ 	CHECK(isc_entropy_usebestsource(ectx, &source,
+ 					"../random.data",
+ 					ISC_ENTROPY_KEYBOARDNO),
+diff --git a/bin/tests/system/tkey/keycreate.c b/bin/tests/system/tkey/keycreate.c
+index 653c951..fe8698e 100644
+--- a/bin/tests/system/tkey/keycreate.c
++++ b/bin/tests/system/tkey/keycreate.c
+@@ -206,6 +206,7 @@ sendquery(isc_task_t *task, isc_event_t *event) {
+ int
+ main(int argc, char *argv[]) {
+ 	char *ourkeyname;
++	char *randomfile;
+ 	isc_taskmgr_t *taskmgr;
+ 	isc_timermgr_t *timermgr;
+ 	isc_socketmgr_t *socketmgr;
+@@ -225,10 +226,21 @@ main(int argc, char *argv[]) {
+ 
+ 	RUNCHECK(isc_app_start());
+ 
++	randomfile = NULL;
++
+ 	if (argc < 2) {
+ 		fprintf(stderr, "I:no DH key provided\n");
+ 		exit(-1);
+ 	}
++	if (strcmp(argv[1], "-r") == 0) {
++		if (argc < 4) {
++			fprintf(stderr, "I:no DH key provided\n");
++			exit(-1);
++		}
++		randomfile = argv[2];
++		argv += 2;
++		argc -= 2;
++	}
+ 	ourkeyname = argv[1];
+ 
+ 	if (argc >= 3)
+@@ -242,14 +254,22 @@ main(int argc, char *argv[]) {
+ 
+ 	ectx = NULL;
+ 	RUNCHECK(isc_entropy_create(mctx, &ectx));
+-	RUNCHECK(isc_entropy_createfilesource(ectx, "../random.data"));
+-	RUNCHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	if (randomfile != NULL &&
++	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
++		randomfile = NULL;
++		isc_entropy_usehook(ectx, true);
++	}
++#endif
++	if (randomfile != NULL)
++		RUNCHECK(isc_entropy_createfilesource(ectx, randomfile));
+ 
+ 	log = NULL;
+ 	logconfig = NULL;
+ 	RUNCHECK(isc_log_create(mctx, &log, &logconfig));
+ 
+ 	RUNCHECK(dst_lib_init(mctx, ectx, ISC_ENTROPY_GOODONLY));
++	RUNCHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
+ 
+ 	taskmgr = NULL;
+ 	RUNCHECK(isc_taskmgr_create(mctx, 1, 0, &taskmgr));
+@@ -328,8 +348,8 @@ main(int argc, char *argv[]) {
+ 
+ 	isc_log_destroy(&log);
+ 
+-	dst_lib_destroy();
+ 	isc_hash_destroy();
++	dst_lib_destroy();
+ 	isc_entropy_detach(&ectx);
+ 
+ 	isc_mem_destroy(&mctx);
+diff --git a/bin/tests/system/tkey/keydelete.c b/bin/tests/system/tkey/keydelete.c
+index 70a40c3..2146f9b 100644
+--- a/bin/tests/system/tkey/keydelete.c
++++ b/bin/tests/system/tkey/keydelete.c
+@@ -136,6 +136,7 @@ sendquery(isc_task_t *task, isc_event_t *event) {
+ int
+ main(int argc, char **argv) {
+ 	char *keyname;
++	char *randomfile;
+ 	isc_taskmgr_t *taskmgr;
+ 	isc_timermgr_t *timermgr;
+ 	isc_socketmgr_t *socketmgr;
+@@ -156,10 +157,21 @@ main(int argc, char **argv) {
+ 
+ 	RUNCHECK(isc_app_start());
+ 
++	randomfile = NULL;
++
+ 	if (argc < 2) {
+ 		fprintf(stderr, "I:no key to delete\n");
+ 		exit(-1);
+ 	}
++	if (strcmp(argv[1], "-r") == 0) {
++		if (argc < 4) {
++			fprintf(stderr, "I:no DH key provided\n");
++			exit(-1);
++		}
++		randomfile = argv[2];
++		argv += 2;
++		argc -= 2;
++	}
+ 	keyname = argv[1];
+ 
+ 	dns_result_register();
+@@ -169,14 +181,22 @@ main(int argc, char **argv) {
+ 
+ 	ectx = NULL;
+ 	RUNCHECK(isc_entropy_create(mctx, &ectx));
+-	RUNCHECK(isc_entropy_createfilesource(ectx, "../random.data"));
+-	RUNCHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	if (randomfile != NULL &&
++	    strcmp(randomfile, ISC_PLATFORM_CRYPTORANDOM) == 0) {
++		randomfile = NULL;
++		isc_entropy_usehook(ectx, true);
++	}
++#endif
++	if (randomfile != NULL)
++		RUNCHECK(isc_entropy_createfilesource(ectx, randomfile));
+ 
+ 	log = NULL;
+ 	logconfig = NULL;
+ 	RUNCHECK(isc_log_create(mctx, &log, &logconfig));
+ 
+ 	RUNCHECK(dst_lib_init(mctx, ectx, ISC_ENTROPY_GOODONLY));
++	RUNCHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
+ 
+ 	taskmgr = NULL;
+ 	RUNCHECK(isc_taskmgr_create(mctx, 1, 0, &taskmgr));
+@@ -264,8 +284,8 @@ main(int argc, char **argv) {
+ 
+ 	isc_log_destroy(&log);
+ 
+-	dst_lib_destroy();
+ 	isc_hash_destroy();
++	dst_lib_destroy();
+ 	isc_entropy_detach(&ectx);
+ 
+ 	isc_mem_destroy(&mctx);
+diff --git a/bin/tests/system/tkey/tests.sh b/bin/tests/system/tkey/tests.sh
+index 9f90dd7..fad6c83 100644
+--- a/bin/tests/system/tkey/tests.sh
++++ b/bin/tests/system/tkey/tests.sh
+@@ -33,7 +33,7 @@ for owner in . foo.example.
+ do
+ 	echo "I:creating new key using owner name \"$owner\""
+ 	ret=0
+-	keyname=`$KEYCREATE $dhkeyname $owner` || ret=1
++	keyname=`$KEYCREATE -r $RANDFILE $dhkeyname $owner` || ret=1
+ 	if [ $ret != 0 ]; then
+ 		echo "I:failed"
+ 		status=`expr $status + $ret`
+@@ -55,7 +55,7 @@ do
+ 
+ 	echo "I:deleting new key"
+ 	ret=0
+-	$KEYDELETE $keyname || ret=1
++	$KEYDELETE -r $RANDFILE $keyname || ret=1
+ 	if [ $ret != 0 ]; then
+ 		echo "I:failed"
+ 	fi
+@@ -75,7 +75,7 @@ done
+ 
+ echo "I:creating new key using owner name bar.example."
+ ret=0
+-keyname=`$KEYCREATE $dhkeyname bar.example.` || ret=1
++keyname=`$KEYCREATE -r $RANDFILE $dhkeyname bar.example.` || ret=1
+ if [ $ret != 0 ]; then
+         echo "I:failed"
+ 	status=`expr $status + $ret`
+@@ -116,7 +116,7 @@ status=`expr $status + $ret`
+ 
+ echo "I:recreating the bar.example. key"
+ ret=0
+-keyname=`$KEYCREATE $dhkeyname bar.example.` || ret=1
++keyname=`$KEYCREATE -r $RANDFILE $dhkeyname bar.example.` || ret=1
+ if [ $ret != 0 ]; then
+         echo "I:failed"
+ 	status=`expr $status + $ret`
+diff --git a/bin/tools/mdig.c b/bin/tools/mdig.c
+index bf6dbb6..0416b21 100644
+--- a/bin/tools/mdig.c
++++ b/bin/tools/mdig.c
+@@ -1972,12 +1972,11 @@ main(int argc, char *argv[]) {
+ 
+ 	ectx = NULL;
+ 	RUNCHECK(isc_entropy_create(mctx, &ectx));
++	RUNCHECK(dst_lib_init(mctx, ectx, ISC_ENTROPY_GOODONLY));
+ 	RUNCHECK(isc_hash_create(mctx, ectx, DNS_NAME_MAXWIRE));
+ 	RUNCHECK(isc_entropy_getdata(ectx, cookie_secret,
+ 				     sizeof(cookie_secret), NULL, 0));
+ 
+-	RUNCHECK(dst_lib_init(mctx, ectx, ISC_ENTROPY_GOODONLY));
+-
+ 	ISC_LIST_INIT(queries);
+ 	parse_args(false, argc, argv);
+ 	if (server == NULL)
+diff --git a/configure b/configure
+index ed002e0..a578874 100755
+--- a/configure
++++ b/configure
+@@ -640,6 +640,7 @@ ac_includes_default="\
+ 
+ ac_subst_vars='LTLIBOBJS
+ LIBOBJS
++LIBDIR_SUFFIX
+ BUILD_LIBS
+ BUILD_LDFLAGS
+ BUILD_CPPFLAGS
+@@ -821,6 +822,7 @@ XMLSTATS
+ NZDTARGETS
+ NZDSRCS
+ NZD_TOOLS
++ISC_PLATFORM_CRYPTORANDOM
+ PKCS11_TEST
+ PKCS11_ED25519
+ PKCS11_GOST
+@@ -1045,6 +1047,7 @@ with_eddsa
+ with_aes
+ enable_openssl_hash
+ with_cc_alg
++enable_crypto_rand
+ with_lmdb
+ with_libxml2
+ with_libjson
+@@ -1744,6 +1747,7 @@ Optional Features:
+   --enable-threads        enable multithreading
+   --enable-native-pkcs11  use native PKCS11 for all crypto [default=no]
+   --enable-openssl-hash   use OpenSSL for hash functions [default=no]
++  --enable-crypto-rand    use the crypto provider for random [default=yes]
+   --enable-largefile      64-bit file support
+   --enable-backtrace      log stack backtrace on abort [default=yes]
+   --enable-symtable       use internal symbol table for backtrace
+@@ -17115,6 +17119,7 @@ case "$use_openssl" in
+ $as_echo "disabled because of native PKCS11" >&6; }
+ 		DST_OPENSSL_INC=""
+ 		CRYPTO="-DPKCS11CRYPTO"
++		CRYPTOLIB="pkcs11"
+ 		OPENSSLECDSALINKOBJS=""
+ 		OPENSSLECDSALINKSRCS=""
+ 		OPENSSLEDDSALINKOBJS=""
+@@ -17129,6 +17134,7 @@ $as_echo "disabled because of native PKCS11" >&6; }
+ $as_echo "no" >&6; }
+ 		DST_OPENSSL_INC=""
+ 		CRYPTO=""
++		CRYPTOLIB=""
+ 		OPENSSLECDSALINKOBJS=""
+ 		OPENSSLECDSALINKSRCS=""
+ 		OPENSSLEDDSALINKOBJS=""
+@@ -17141,6 +17147,7 @@ $as_echo "no" >&6; }
+ 	auto)
+ 		DST_OPENSSL_INC=""
+ 		CRYPTO=""
++		CRYPTOLIB=""
+ 		OPENSSLECDSALINKOBJS=""
+ 		OPENSSLECDSALINKSRCS=""
+ 		OPENSSLEDDSALINKOBJS=""
+@@ -17150,7 +17157,7 @@ $as_echo "no" >&6; }
+ 		OPENSSLLINKOBJS=""
+ 		OPENSSLLINKSRCS=""
+ 		as_fn_error $? "OpenSSL was not found in any of $openssldirs; use --with-openssl=/path
+-If you don't want OpenSSL, use --without-openssl" "$LINENO" 5
++If you do not want OpenSSL, use --without-openssl" "$LINENO" 5
+ 		;;
+ 	*)
+ 		if test "yes" = "$want_native_pkcs11"
+@@ -17181,6 +17188,7 @@ $as_echo "not found" >&6; }
+ 			as_fn_error $? "\"$use_openssl/include/openssl/opensslv.h\" not found" "$LINENO" 5
+ 		fi
+ 		CRYPTO='-DOPENSSL'
++		CRYPTOLIB="openssl"
+ 		if test "/usr" = "$use_openssl"
+ 		then
+ 			DST_OPENSSL_INC=""
+@@ -17806,8 +17814,6 @@ fi
+ # Use OpenSSL for hash functions
+ #
+ 
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for using OpenSSL for hash functions" >&5
+-$as_echo_n "checking for using OpenSSL for hash functions... " >&6; }
+ ISC_PLATFORM_OPENSSLHASH="#undef ISC_PLATFORM_OPENSSLHASH"
+ case $want_openssl_hash in
+ 	yes)
+@@ -18182,6 +18188,86 @@ if test "rt" = "$have_clock_gt"; then
+ 	LIBS="-lrt $LIBS"
+ fi
+ 
++#
++# Use the crypto provider (OpenSSL/PKCS#11) for random functions
++#
++
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for using the crypto library (vs. builtin) for random functions" >&5
++$as_echo_n "checking for using the crypto library (vs. builtin) for random functions... " >&6; }
++# Check whether --enable-crypto-rand was given.
++if test "${enable_crypto_rand+set}" = set; then :
++  enableval=$enable_crypto_rand; want_crypto_rand="$enableval"
++else
++  want_crypto_rand="auto"
++fi
++
++if test "$want_crypto_rand" = "auto"
++then
++	case "$CRYPTOLIB" in
++	"")
++		want_crypto_rand="no"
++		;;
++	pkcs11)
++		want_crypto_rand="yes"
++		;;
++	openssl)
++		saved_cflags="$CFLAGS"
++		saved_libs="$LIBS"
++		CFLAGS="$CFLAGS $DST_OPENSSL_INC"
++		LIBS="$LIBS $DST_OPENSSL_LIBS"
++		if test "$cross_compiling" = yes; then :
++  want_crypto_rand="yes"
++else
++  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++
++#include <openssl/rand.h>
++
++unsigned char buf[128];
++
++int main()
++{
++	if (RAND_bytes(buf, 128) != 1)
++		return (1);
++	return (0);
++}
++
++_ACEOF
++if ac_fn_c_try_run "$LINENO"; then :
++  want_crypto_rand="yes"
++else
++  want_crypto_rand="no"
++fi
++rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
++  conftest.$ac_objext conftest.beam conftest.$ac_ext
++fi
++
++		CFLAGS="$saved_cflags"
++		LIBS="$saved_libs"
++		;;
++	*)
++		as_fn_error $? "Unknown crypto library define $CRYPTOLIB" "$LINENO" 5
++		;;
++	esac
++fi
++case $want_crypto_rand in
++	yes)
++		if test "$CRYPTOLIB" = ""
++		then
++			as_fn_error $? "No crypto library for random functions" "$LINENO" 5
++		fi
++		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: \"$CRYPTOLIB\"" >&5
++$as_echo "\"$CRYPTOLIB\"" >&6; }
++		ISC_PLATFORM_CRYPTORANDOM="#define ISC_PLATFORM_CRYPTORANDOM \"$CRYPTOLIB\""
++		;;
++	no)
++		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++		ISC_PLATFORM_CRYPTORANDOM="#undef ISC_PLATFORM_CRYPTORANDOM"
++		;;
++esac
++
++
+ #
+ # was --with-lmdb specified?
+ #
+@@ -20264,9 +20350,12 @@ _ACEOF
+ if ac_fn_c_try_compile "$LINENO"; then :
+   { $as_echo "$as_me:${as_lineno-$LINENO}: result: size_t for buflen; int for flags" >&5
+ $as_echo "size_t for buflen; int for flags" >&6; }
+-	 $as_echo "#define IRS_GETNAMEINFO_SOCKLEN_T size_t" >>confdefs.h
++	# Changed to solve multilib conflict on Fedora
++	# AC_DEFINE(IRS_GETNAMEINFO_SOCKLEN_T, size_t)
++	# AC_DEFINE(IRS_GETNAMEINFO_BUFLEN_T, size_t)
++	 $as_echo "#define IRS_GETNAMEINFO_SOCKLEN_T socklen_t" >>confdefs.h
+ 
+-	 $as_echo "#define IRS_GETNAMEINFO_BUFLEN_T size_t" >>confdefs.h
++	 $as_echo "#define IRS_GETNAMEINFO_BUFLEN_T socklen_t" >>confdefs.h
+ 
+ 	 $as_echo "#define IRS_GETNAMEINFO_FLAGS_T int" >>confdefs.h
+ 
+@@ -21581,12 +21670,7 @@ ISC_PLATFORM_USEGCCASM="#undef ISC_PLATFORM_USEGCCASM"
+ ISC_PLATFORM_USESTDASM="#undef ISC_PLATFORM_USESTDASM"
+ ISC_PLATFORM_USEMACASM="#undef ISC_PLATFORM_USEMACASM"
+ if test "yes" = "$use_atomic"; then
+-	have_atomic=yes		# set default
+-	case "$host" in
+-	i[3456]86-*)
+-		# XXX: some old x86 architectures actually do not support
+-		#      (some of) these operations.  Do we need stricter checks?
+-		# The cast to long int works around a bug in the HP C Compiler
++	# The cast to long int works around a bug in the HP C Compiler
+ # version HP92453-01 B.11.11.23709.GP, which incorrectly rejects
+ # declarations like `int a3[[(sizeof (unsigned char)) >= 0]];'.
+ # This bug is HP SR number 8606223364.
+@@ -21619,6 +21703,11 @@ cat >>confdefs.h <<_ACEOF
+ _ACEOF
+ 
+ 
++	have_atomic=yes		# set default
++	case "$host" in
++	i[3456]86-*)
++		# XXX: some old x86 architectures actually do not support
++		#      (some of) these operations.  Do we need stricter checks?
+ 		if test $ac_cv_sizeof_void_p = 8; then
+ 			arch=x86_64
+ 			have_xaddq=yes
+@@ -21627,39 +21716,6 @@ _ACEOF
+ 		fi
+ 	;;
+ 	x86_64-*|amd64-*)
+-		# The cast to long int works around a bug in the HP C Compiler
+-# version HP92453-01 B.11.11.23709.GP, which incorrectly rejects
+-# declarations like `int a3[[(sizeof (unsigned char)) >= 0]];'.
+-# This bug is HP SR number 8606223364.
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking size of void *" >&5
+-$as_echo_n "checking size of void *... " >&6; }
+-if ${ac_cv_sizeof_void_p+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  if ac_fn_c_compute_int "$LINENO" "(long int) (sizeof (void *))" "ac_cv_sizeof_void_p"        "$ac_includes_default"; then :
+-
+-else
+-  if test "$ac_cv_type_void_p" = yes; then
+-     { { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+-$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
+-as_fn_error 77 "cannot compute sizeof (void *)
+-See \`config.log' for more details" "$LINENO" 5; }
+-   else
+-     ac_cv_sizeof_void_p=0
+-   fi
+-fi
+-
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_sizeof_void_p" >&5
+-$as_echo "$ac_cv_sizeof_void_p" >&6; }
+-
+-
+-
+-cat >>confdefs.h <<_ACEOF
+-#define SIZEOF_VOID_P $ac_cv_sizeof_void_p
+-_ACEOF
+-
+-
+ 		if test $ac_cv_sizeof_void_p = 8; then
+ 			arch=x86_64
+ 			have_xaddq=yes
+@@ -21690,6 +21746,10 @@ $as_echo_n "checking architecture type for atomic operations... " >&6; }
+ $as_echo "$arch" >&6; }
+ fi
+ 
++if test ! "$arch" = "x86_64" -a "$have_xaddq" = "yes"; then
++	as_fn_error $? "XADDQ present but disabled by Fedora patch!" "$LINENO" 5
++fi
++
+ if test "yes" = "$have_atomic"; then
+ 	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking compiler support for inline assembly code" >&5
+ $as_echo_n "checking compiler support for inline assembly code... " >&6; }
+@@ -24244,6 +24304,30 @@ CFLAGS="$CFLAGS $SO_CFLAGS"
+ #
+ dlzdir='${DLZ_DRIVER_DIR}'
+ 
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for target libdir" >&5
++$as_echo_n "checking for target libdir... " >&6; }
++if test "$cross_compiling" = yes; then :
++  { { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
++$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
++as_fn_error $? "cannot run test program while cross compiling
++See \`config.log' for more details" "$LINENO" 5; }
++else
++  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++int main(void) {exit((sizeof(void *) == 8) ? 0 : 1);}
++_ACEOF
++if ac_fn_c_try_run "$LINENO"; then :
++  target_lib=lib64
++else
++  target_lib=lib
++fi
++rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
++  conftest.$ac_objext conftest.beam conftest.$ac_ext
++fi
++
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: \"$target_lib\"" >&5
++$as_echo "\"$target_lib\"" >&6; }
++
+ #
+ # Private autoconf macro to simplify configuring drivers:
+ #
+@@ -24574,11 +24658,11 @@ $as_echo "no" >&6; }
+ $as_echo "using mysql with libs ${mysql_lib} and includes ${mysql_include}" >&6; }
+ 		;;
+ 	*)
+-		if test -d "$use_dlz_mysql/lib/mysql"
++		if test -d $use_dlz_mysql/${target_lib}/mysql
+ 		then
+-			mysql_lib="$use_dlz_mysql/lib/mysql"
++			mysql_lib=$use_dlz_mysql/${target_lib}/mysql
+ 		else
+-			mysql_lib="$use_dlz_mysql/lib"
++			mysql_lib=$use_dlz_mysql/${target_lib}
+ 		fi
+ 
+ 	CONTRIB_DLZ="$CONTRIB_DLZ -DDLZ_MYSQL"
+@@ -24663,7 +24747,7 @@ $as_echo "" >&6; }
+ 			# Check other locations for includes.
+ 			# Order is important (sigh).
+ 
+-			bdb_incdirs="/db53 /db51 /db48 /db47 /db46 /db45 /db44 /db43 /db42 /db41 /db4 /db"
++			bdb_incdirs="/db53 /db51 /db48 /db47 /db46 /db45 /db44 /db43 /db42 /db41 /db4 /libdb /db"
+ 			# include a blank element first
+ 			for d in "" $bdb_incdirs
+ 			do
+@@ -24688,57 +24772,9 @@ $as_echo "" >&6; }
+ 			bdb_libnames="db53 db-5.3 db51 db-5.1 db48 db-4.8 db47 db-4.7 db46 db-4.6 db45 db-4.5 db44 db-4.4 db43 db-4.3 db42 db-4.2 db41 db-4.1 db"
+ 			for d in $bdb_libnames
+ 			do
+-				if test "$dd" = "/usr"
+-				then
+-					as_ac_Lib=`$as_echo "ac_cv_lib_$d''_db_create" | $as_tr_sh`
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for db_create in -l$d" >&5
+-$as_echo_n "checking for db_create in -l$d... " >&6; }
+-if eval \${$as_ac_Lib+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  ac_check_lib_save_LIBS=$LIBS
+-LIBS="-l$d  $LIBS"
+-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-
+-/* Override any GCC internal prototype to avoid an error.
+-   Use char because int might match the return type of a GCC
+-   builtin and then its argument prototype would still apply.  */
+-#ifdef __cplusplus
+-extern "C"
+-#endif
+-char db_create ();
+-int
+-main ()
+-{
+-return db_create ();
+-  ;
+-  return 0;
+-}
+-_ACEOF
+-if ac_fn_c_try_link "$LINENO"; then :
+-  eval "$as_ac_Lib=yes"
+-else
+-  eval "$as_ac_Lib=no"
+-fi
+-rm -f core conftest.err conftest.$ac_objext \
+-    conftest$ac_exeext conftest.$ac_ext
+-LIBS=$ac_check_lib_save_LIBS
+-fi
+-eval ac_res=\$$as_ac_Lib
+-	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+-$as_echo "$ac_res" >&6; }
+-if eval test \"x\$"$as_ac_Lib"\" = x"yes"; then :
+-  dlz_bdb_libs="-l${d}"
+-fi
+-
+-					if test $dlz_bdb_libs != "yes"
+-					then
+-						break
+-					fi
+-				elif test -f "$dd/lib/lib${d}.so"
++				if test -f "$dd/${target_lib}/lib${d}.so"
+ 				then
+-					dlz_bdb_libs="-L${dd}/lib -l${d}"
++					dlz_bdb_libs="-L${dd}/${target_lib}/libdb -l${d}"
+ 					break
+ 				fi
+ 			done
+@@ -24897,10 +24933,10 @@ $as_echo "no" >&6; }
+ 		DLZ_DRIVER_INCLUDES="$DLZ_DRIVER_INCLUDES -I$use_dlz_ldap/include"
+ 		DLZ_DRIVER_LDAP_INCLUDES="-I$use_dlz_ldap/include"
+ 	fi
+-	if test -n "-L$use_dlz_ldap/lib -lldap -llber"
++	if test -n "-L$use_dlz_ldap/${target_lib} -lldap -llber"
+ 	then
+-		DLZ_DRIVER_LIBS="$DLZ_DRIVER_LIBS -L$use_dlz_ldap/lib -lldap -llber"
+-		DLZ_DRIVER_LDAP_LIBS="-L$use_dlz_ldap/lib -lldap -llber"
++		DLZ_DRIVER_LIBS="$DLZ_DRIVER_LIBS -L$use_dlz_ldap/${target_lib} -lldap -llber"
++		DLZ_DRIVER_LDAP_LIBS="-L$use_dlz_ldap/${target_lib} -lldap -llber"
+ 	fi
+ 
+ 
+@@ -24986,11 +25022,11 @@ fi
+ 		odbcdirs="/usr /usr/local /usr/pkg"
+ 		for d in $odbcdirs
+ 		do
+-			if test -f $d/include/sql.h -a -f $d/lib/libodbc.a
++			if test -f $d/include/sql.h -a -f $d/${target_lib}/libodbc.a
+ 			then
+ 				use_dlz_odbc=$d
+ 				dlz_odbc_include="-I$use_dlz_odbc/include"
+-				dlz_odbc_libs="-L$use_dlz_odbc/lib -lodbc"
++				dlz_odbc_libs="-L$use_dlz_odbc/${target_lib} -lodbc"
+ 				break
+ 			fi
+ 		done
+@@ -25265,6 +25301,8 @@ DNS_CRYPTO_LIBS="$NEWFLAGS"
+ 
+ 
+ 
++
++
+ #
+ # Commands to run at the end of config.status.
+ # Don't just put these into configure, it won't work right if somebody
+@@ -27644,6 +27682,8 @@ report() {
+ 	    echo "    IPv6 support (--enable-ipv6)"
+ 	test "X$CRYPTO" = "X" -o "yes" = "$want_native_pkcs11" || \
+ 		echo "    OpenSSL cryptography/DNSSEC (--with-openssl)"
++        test "no" = "$want_crypto_rand" || \
++                echo "    Crypto provider entropy source (--enable-crypto-rand)"
+ 	test "X$PYTHON" = "X" || echo "    Python tools (--with-python)"
+ 	test "X$XMLSTATS" = "X" || echo "    XML statistics (--with-libxml2)"
+ 	test "X$JSONSTATS" = "X" || echo "    JSON statistics (--with-libjson)"
+@@ -27684,6 +27724,8 @@ report() {
+ 	echo "    Very verbose query trace logging (--enable-querytrace)"
+     test "no" = "$with_cmocka" || echo "    CMocka Unit Testing Framework (--with-cmocka)"
+ 
++    echo "    Cryptographic library for DNSSEC: $CRYPTOLIB"
++
+     echo "    Dynamically loadable zone (DLZ) drivers:"
+     test "no" = "$use_dlz_bdb" || \
+ 	echo "        Berkeley DB (--with-dlz-bdb)"
+@@ -27731,6 +27773,8 @@ report() {
+ 	echo "    ECDSA algorithm support (--with-ecdsa)"
+     test "X$CRYPTO" = "X" -o "yes" = "$OPENSSL_ED25519" -o "yes" = "$PKCS11_ED25519" || \
+ 	echo "    EDDSA algorithm support (--with-eddsa)"
++    test "yes" = "$want_crypto_rand" || \
++        echo "    Crypto provider entropy source (--enable-crypto-rand)"
+ 
+     test "yes" = "$enable_seccomp" || \
+ 	echo "    Use libseccomp system call filtering (--enable-seccomp)"
+diff --git a/configure.ac b/configure.ac
+index 45a8126..bb1345b 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1537,6 +1537,7 @@ case "$use_openssl" in
+ 		AC_MSG_RESULT(disabled because of native PKCS11)
+ 		DST_OPENSSL_INC=""
+ 		CRYPTO="-DPKCS11CRYPTO"
++		CRYPTOLIB="pkcs11"
+ 		OPENSSLECDSALINKOBJS=""
+ 		OPENSSLECDSALINKSRCS=""
+ 		OPENSSLEDDSALINKOBJS=""
+@@ -1550,6 +1551,7 @@ case "$use_openssl" in
+ 		AC_MSG_RESULT(no)
+ 		DST_OPENSSL_INC=""
+ 		CRYPTO=""
++		CRYPTOLIB=""
+ 		OPENSSLECDSALINKOBJS=""
+ 		OPENSSLECDSALINKSRCS=""
+ 		OPENSSLEDDSALINKOBJS=""
+@@ -1562,6 +1564,7 @@ case "$use_openssl" in
+ 	auto)
+ 		DST_OPENSSL_INC=""
+ 		CRYPTO=""
++		CRYPTOLIB=""
+ 		OPENSSLECDSALINKOBJS=""
+ 		OPENSSLECDSALINKSRCS=""
+ 		OPENSSLEDDSALINKOBJS=""
+@@ -1572,7 +1575,7 @@ case "$use_openssl" in
+ 		OPENSSLLINKSRCS=""
+ 		AC_MSG_ERROR(
+ [OpenSSL was not found in any of $openssldirs; use --with-openssl=/path
+-If you don't want OpenSSL, use --without-openssl])
++If you do not want OpenSSL, use --without-openssl])
+ 		;;
+ 	*)
+ 		if test "yes" = "$want_native_pkcs11"
+@@ -1602,6 +1605,7 @@ If you don't want OpenSSL, use --without-openssl])
+ 			AC_MSG_ERROR(["$use_openssl/include/openssl/opensslv.h" not found])
+ 		fi
+ 		CRYPTO='-DOPENSSL'
++		CRYPTOLIB="openssl"
+ 		if test "/usr" = "$use_openssl"
+ 		then
+ 			DST_OPENSSL_INC=""
+@@ -2037,7 +2041,6 @@ fi
+ # Use OpenSSL for hash functions
+ #
+ 
+-AC_MSG_CHECKING(for using OpenSSL for hash functions)
+ ISC_PLATFORM_OPENSSLHASH="#undef ISC_PLATFORM_OPENSSLHASH"
+ case $want_openssl_hash in
+ 	yes)
+@@ -2309,6 +2312,67 @@ if test "rt" = "$have_clock_gt"; then
+ 	LIBS="-lrt $LIBS"
+ fi
+ 
++#
++# Use the crypto provider (OpenSSL/PKCS#11) for random functions
++#
++
++AC_MSG_CHECKING(for using the crypto library (vs. builtin) for random functions)
++AC_ARG_ENABLE(crypto-rand,
++	[  --enable-crypto-rand    use the crypto provider for random [[default=yes]]],
++	want_crypto_rand="$enableval", want_crypto_rand="auto")
++if test "$want_crypto_rand" = "auto"
++then
++	case "$CRYPTOLIB" in
++	"")
++		want_crypto_rand="no"
++		;;
++	pkcs11)
++		want_crypto_rand="yes"
++		;;
++	openssl)
++		saved_cflags="$CFLAGS"
++		saved_libs="$LIBS"
++		CFLAGS="$CFLAGS $DST_OPENSSL_INC"
++		LIBS="$LIBS $DST_OPENSSL_LIBS"
++		AC_TRY_RUN([
++#include <openssl/rand.h>
++
++unsigned char buf[128];
++
++int main()
++{
++	if (RAND_bytes(buf, 128) != 1)
++		return (1);
++	return (0);
++}
++],
++		[want_crypto_rand="yes"],
++		[want_crypto_rand="no"],
++		[want_crypto_rand="yes"])
++		CFLAGS="$saved_cflags"
++		LIBS="$saved_libs"
++		;;
++	*)
++		AC_MSG_ERROR([Unknown crypto library define $CRYPTOLIB])
++		;;
++	esac
++fi
++case $want_crypto_rand in
++	yes)
++		if test "$CRYPTOLIB" = ""
++		then
++			AC_MSG_ERROR([No crypto library for random functions])
++		fi
++		AC_MSG_RESULT(["$CRYPTOLIB"])
++		ISC_PLATFORM_CRYPTORANDOM="#define ISC_PLATFORM_CRYPTORANDOM \"$CRYPTOLIB\""
++		;;
++	no)
++		AC_MSG_RESULT(no)
++		ISC_PLATFORM_CRYPTORANDOM="#undef ISC_PLATFORM_CRYPTORANDOM"
++		;;
++esac
++AC_SUBST(ISC_PLATFORM_CRYPTORANDOM)
++
+ #
+ # was --with-lmdb specified?
+ #
+@@ -4105,12 +4169,12 @@ ISC_PLATFORM_USEGCCASM="#undef ISC_PLATFORM_USEGCCASM"
+ ISC_PLATFORM_USESTDASM="#undef ISC_PLATFORM_USESTDASM"
+ ISC_PLATFORM_USEMACASM="#undef ISC_PLATFORM_USEMACASM"
+ if test "yes" = "$use_atomic"; then
++	AC_CHECK_SIZEOF([void *])
+ 	have_atomic=yes		# set default
+ 	case "$host" in
+ 	[i[3456]86-*])
+ 		# XXX: some old x86 architectures actually do not support
+ 		#      (some of) these operations.  Do we need stricter checks?
+-		AC_CHECK_SIZEOF([void *])
+ 		if test $ac_cv_sizeof_void_p = 8; then
+ 			arch=x86_64
+ 			have_xaddq=yes
+@@ -4119,7 +4183,6 @@ if test "yes" = "$use_atomic"; then
+ 		fi
+ 	;;
+ 	x86_64-*|amd64-*)
+-		AC_CHECK_SIZEOF([void *])
+ 		if test $ac_cv_sizeof_void_p = 8; then
+ 			arch=x86_64
+ 			have_xaddq=yes
+@@ -5527,6 +5590,8 @@ report() {
+ 	    echo "    IPv6 support (--enable-ipv6)"
+ 	test "X$CRYPTO" = "X" -o "yes" = "$want_native_pkcs11" || \
+ 		echo "    OpenSSL cryptography/DNSSEC (--with-openssl)"
++        test "no" = "$want_crypto_rand" || \
++                echo "    Crypto provider entropy source (--enable-crypto-rand)"
+ 	test "X$PYTHON" = "X" || echo "    Python tools (--with-python)"
+ 	test "X$XMLSTATS" = "X" || echo "    XML statistics (--with-libxml2)"
+ 	test "X$JSONSTATS" = "X" || echo "    JSON statistics (--with-libjson)"
+@@ -5567,6 +5632,8 @@ report() {
+ 	echo "    Very verbose query trace logging (--enable-querytrace)"
+     test "no" = "$with_cmocka" || echo "    CMocka Unit Testing Framework (--with-cmocka)"
+ 
++    echo "    Cryptographic library for DNSSEC: $CRYPTOLIB"
++
+     echo "    Dynamically loadable zone (DLZ) drivers:"
+     test "no" = "$use_dlz_bdb" || \
+ 	echo "        Berkeley DB (--with-dlz-bdb)"
+@@ -5614,6 +5681,8 @@ report() {
+ 	echo "    ECDSA algorithm support (--with-ecdsa)"
+     test "X$CRYPTO" = "X" -o "yes" = "$OPENSSL_ED25519" -o "yes" = "$PKCS11_ED25519" || \
+ 	echo "    EDDSA algorithm support (--with-eddsa)"
++    test "yes" = "$want_crypto_rand" || \
++        echo "    Crypto provider entropy source (--enable-crypto-rand)"
+ 
+     test "yes" = "$enable_seccomp" || \
+ 	echo "    Use libseccomp system call filtering (--enable-seccomp)"
+diff --git a/lib/dns/dst_api.c b/lib/dns/dst_api.c
+index ec6e00e..1614afa 100644
+--- a/lib/dns/dst_api.c
++++ b/lib/dns/dst_api.c
+@@ -277,6 +277,12 @@ dst_lib_init2(isc_mem_t *mctx, isc_entropy_t *ectx,
+ #ifdef GSSAPI
+ 	RETERR(dst__gssapi_init(&dst_t_func[DST_ALG_GSSAPI]));
+ #endif
++#if defined(OPENSSL) || defined(PKCS11CRYPTO)
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	if (dst_entropy_pool != NULL)
++		isc_entropy_sethook(dst_random_getdata);
++#endif
++#endif /* defined(OPENSSL) || defined(PKCS11CRYPTO) */
+ 	dst_initialized = true;
+ 	return (ISC_R_SUCCESS);
+ 
+@@ -296,11 +302,19 @@ dst_lib_destroy(void) {
+ 	for (i = 0; i < DST_MAX_ALGS; i++)
+ 		if (dst_t_func[i] != NULL && dst_t_func[i]->cleanup != NULL)
+ 			dst_t_func[i]->cleanup();
++#if defined(OPENSSL) || defined(PKCS11CRYPTO)
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	if (dst_entropy_pool != NULL) {
++		isc_entropy_usehook(dst_entropy_pool, false);
++		isc_entropy_sethook(NULL);
++	}
++#endif
+ #ifdef OPENSSL
+ 	dst__openssl_destroy();
+ #elif PKCS11CRYPTO
+ 	(void) dst__pkcs11_destroy();
+ #endif /* if OPENSSL, elif PKCS11CRYPTO */
++#endif /* defined(OPENSSL) || defined(PKCS11CRYPTO) */
+ 	if (dst__memory_pool != NULL)
+ 		isc_mem_detach(&dst__memory_pool);
+ 	if (dst_entropy_pool != NULL)
+@@ -2002,13 +2016,17 @@ dst__entropy_getdata(void *buf, unsigned int len, bool pseudo) {
+ 		flags &= ~ISC_ENTROPY_GOODONLY;
+ 	else
+ 		flags |= ISC_ENTROPY_BLOCKING;
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	return (dst_random_getdata(buf, len, NULL, flags));
++#else
+ 	return (isc_entropy_getdata(dst_entropy_pool, buf, len, NULL, flags));
++#endif
+ #endif /* PKCS11CRYPTO */
+ }
+ 
+ unsigned int
+ dst__entropy_status(void) {
+-#ifndef PKCS11CRYPTO
++#if !defined(PKCS11CRYPTO) && !defined(ISC_PLATFORM_CRYPTORANDOM)
+ #ifdef GSSAPI
+ 	unsigned int flags = dst_entropy_flags;
+ 	isc_result_t ret;
+@@ -2031,6 +2049,7 @@ dst__entropy_status(void) {
+ #endif
+ 	return (isc_entropy_status(dst_entropy_pool));
+ #else
++	/* Doesn't matter as it is not used in this case. */
+ 	return (0);
+ #endif
+ }
+diff --git a/lib/dns/include/dst/dst.h b/lib/dns/include/dst/dst.h
+index 1924e74..6813c96 100644
+--- a/lib/dns/include/dst/dst.h
++++ b/lib/dns/include/dst/dst.h
+@@ -159,6 +159,14 @@ dst_lib_destroy(void);
+  * Releases all resources allocated by DST.
+  */
+ 
++isc_result_t
++dst_random_getdata(void *data, unsigned int length,
++		   unsigned int *returned, unsigned int flags);
++/*%<
++ * \brief Return data from the crypto random generator.
++ * Specialization of isc_entropy_getdata().
++ */
++
+ bool
+ dst_algorithm_supported(unsigned int alg);
+ /*%<
+diff --git a/lib/dns/lib.c b/lib/dns/lib.c
+index 304814b..60543c4 100644
+--- a/lib/dns/lib.c
++++ b/lib/dns/lib.c
+@@ -18,6 +18,7 @@
+ #include <stdbool.h>
+ #include <stddef.h>
+ 
++#include <isc/entropy.h>
+ #include <isc/hash.h>
+ #include <isc/mem.h>
+ #include <isc/msgcat.h>
+@@ -78,6 +79,7 @@ static unsigned int references = 0;
+ static void
+ initialize(void) {
+ 	isc_result_t result;
++	isc_entropy_t *ectx = NULL;
+ 
+ 	REQUIRE(initialize_done == false);
+ 
+@@ -88,11 +90,14 @@ initialize(void) {
+ 	result = dns_ecdb_register(dns_g_mctx, &dbimp);
+ 	if (result != ISC_R_SUCCESS)
+ 		goto cleanup_mctx;
+-	result = isc_hash_create(dns_g_mctx, NULL, DNS_NAME_MAXWIRE);
++	result = isc_entropy_create(dns_g_mctx, &ectx);
+ 	if (result != ISC_R_SUCCESS)
+ 		goto cleanup_db;
++	result = isc_hash_create(dns_g_mctx, NULL, DNS_NAME_MAXWIRE);
++	if (result != ISC_R_SUCCESS)
++		goto cleanup_ectx;
+ 
+-	result = dst_lib_init(dns_g_mctx, NULL, 0);
++	result = dst_lib_init(dns_g_mctx, ectx, 0);
+ 	if (result != ISC_R_SUCCESS)
+ 		goto cleanup_hash;
+ 
+@@ -100,11 +105,17 @@ initialize(void) {
+ 	if (result != ISC_R_SUCCESS)
+ 		goto cleanup_dst;
+ 
++	isc_hash_init();
++	isc_entropy_detach(&ectx);
++
+ 	initialize_done = true;
+ 	return;
+ 
+   cleanup_dst:
+ 	dst_lib_destroy();
++  cleanup_ectx:
++	if (ectx != NULL)
++		isc_entropy_detach(&ectx);
+   cleanup_hash:
+ 	isc_hash_destroy();
+   cleanup_db:
+diff --git a/lib/dns/openssl_link.c b/lib/dns/openssl_link.c
+index d65ce26..6849732 100644
+--- a/lib/dns/openssl_link.c
++++ b/lib/dns/openssl_link.c
+@@ -31,6 +31,7 @@
+ #include <isc/mem.h>
+ #include <isc/mutex.h>
+ #include <isc/mutexblock.h>
++#include <isc/platform.h>
+ #include <isc/string.h>
+ #include <isc/thread.h>
+ #include <isc/util.h>
+@@ -46,8 +47,6 @@
+ #include <openssl/engine.h>
+ #endif
+ 
+-static RAND_METHOD *rm = NULL;
+-
+ #if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+ static isc_mutex_t *locks = NULL;
+ static int nlocks;
+@@ -57,6 +56,9 @@ static int nlocks;
+ static ENGINE *e = NULL;
+ #endif
+ 
++#ifndef ISC_PLATFORM_CRYPTORANDOM
++static RAND_METHOD *rm = NULL;
++
+ static int
+ entropy_get(unsigned char *buf, int num) {
+ 	isc_result_t result;
+@@ -102,6 +104,7 @@ entropy_add(const void *buf, int num, double entropy) {
+ 	return (1);
+ }
+ #endif
++#endif /* !ISC_PLATFORM_CRYPTORANDOM */
+ 
+ #if OPENSSL_VERSION_NUMBER >= 0x10000000L && OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+ static void
+@@ -192,7 +195,7 @@ _set_thread_id(CRYPTO_THREADID *id)
+ isc_result_t
+ dst__openssl_init(const char *engine) {
+ 	isc_result_t result;
+-#if !defined(OPENSSL_NO_ENGINE)
++#if !defined(OPENSSL_NO_ENGINE) && !defined(ISC_PLATFORM_CRYPTORANDOM)
+ 	ENGINE *re;
+ #else
+ 	UNUSED(engine);
+@@ -222,6 +225,7 @@ dst__openssl_init(const char *engine) {
+ 	ERR_load_crypto_strings();
+ #endif
+ 
++#ifndef ISC_PLATFORM_CRYPTORANDOM
+ 	rm = mem_alloc(sizeof(RAND_METHOD) FILELINE);
+ 	if (rm == NULL) {
+ 		result = ISC_R_NOMEMORY;
+@@ -233,6 +237,7 @@ dst__openssl_init(const char *engine) {
+ 	rm->add = entropy_add;
+ 	rm->pseudorand = entropy_getpseudo;
+ 	rm->status = entropy_status;
++#endif
+ 
+ #if !defined(OPENSSL_NO_ENGINE)
+ #if !defined(CONF_MFLAGS_DEFAULT_SECTION)
+@@ -266,6 +271,7 @@ dst__openssl_init(const char *engine) {
+ 		}
+ 	}
+ 
++#ifndef ISC_PLATFORM_CRYPTORANDOM
+ 	re = ENGINE_get_default_RAND();
+ 	if (re == NULL) {
+ 		re = ENGINE_new();
+@@ -278,9 +284,21 @@ dst__openssl_init(const char *engine) {
+ 		ENGINE_free(re);
+ 	} else
+ 		ENGINE_finish(re);
++#endif
+ #else
++#ifndef ISC_PLATFORM_CRYPTORANDOM
+ 	RAND_set_rand_method(rm);
++#endif
+ #endif /* !defined(OPENSSL_NO_ENGINE) */
++
++	/* Protect ourselves against unseeded PRNG */
++	if (RAND_status() != 1) {
++		FATAL_ERROR(__FILE__, __LINE__,
++			    "OpenSSL pseudorandom number generator "
++			    "cannot be initialized (see the `PRNG not "
++			    "seeded' message in the OpenSSL FAQ)");
++	}
++
+ 	return (ISC_R_SUCCESS);
+ 
+ #if !defined(OPENSSL_NO_ENGINE)
+@@ -288,10 +306,14 @@ dst__openssl_init(const char *engine) {
+ 	if (e != NULL)
+ 		ENGINE_free(e);
+ 	e = NULL;
++#ifndef ISC_PLATFORM_CRYPTORANDOM
+ 	mem_free(rm FILELINE);
+ 	rm = NULL;
+ #endif
++#endif
++#ifndef ISC_PLATFORM_CRYPTORANDOM
+  cleanup_mutexinit:
++#endif
+ #if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+ 	CRYPTO_set_locking_callback(NULL);
+ 	DESTROYMUTEXBLOCK(locks, nlocks);
+@@ -306,14 +328,17 @@ void
+ dst__openssl_destroy(void) {
+ #if !defined(LIBRESSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+ 	OPENSSL_cleanup();
++#ifndef ISC_PLATFORM_CRYPTORANDOM
+ 	if (rm != NULL) {
+ 		mem_free(rm FILELINE);
+ 		rm = NULL;
+ 	}
++#endif
+ #else
+ 	/*
+ 	 * Sequence taken from apps_shutdown() in <apps/apps.h>.
+ 	 */
++#ifndef ISC_PLATFORM_CRYPTORANDOM
+ 	if (rm != NULL) {
+ #if OPENSSL_VERSION_NUMBER >= 0x00907000L
+ 		RAND_cleanup();
+@@ -321,6 +346,7 @@ dst__openssl_destroy(void) {
+ 		mem_free(rm FILELINE);
+ 		rm = NULL;
+ 	}
++#endif
+ #if (OPENSSL_VERSION_NUMBER >= 0x00907000L)
+ 	CONF_modules_free();
+ #endif
+@@ -456,11 +482,45 @@ dst__openssl_getengine(const char *engine) {
+ }
+ #endif
+ 
+-#else /* OPENSSL */
++isc_result_t
++dst_random_getdata(void *data, unsigned int length,
++		   unsigned int *returned, unsigned int flags) {
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++#ifndef DONT_REQUIRE_DST_LIB_INIT
++	INSIST(dst__memory_pool != NULL);
++#endif
++	REQUIRE(data != NULL);
++	REQUIRE(length > 0);
+ 
+-#include <isc/util.h>
++#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
++	if ((flags & ISC_ENTROPY_GOODONLY) == 0) {
++		if (RAND_pseudo_bytes((unsigned char *)data, (int)length) < 0)
++			return (dst__openssl_toresult2("RAND_pseudo_bytes",
++						       DST_R_OPENSSLFAILURE));
++	} else {
++		if (RAND_bytes((unsigned char *)data, (int)length) != 1)
++			return (dst__openssl_toresult2("RAND_bytes",
++						       DST_R_OPENSSLFAILURE));
++	}
++#else
++	UNUSED(flags);
+ 
+-EMPTY_TRANSLATION_UNIT
++	if (RAND_bytes((unsigned char *)data, (int)length) != 1)
++		return (dst__openssl_toresult2("RAND_bytes",
++					       DST_R_OPENSSLFAILURE));
++#endif
++	if (returned != NULL)
++		*returned = length;
++	return (ISC_R_SUCCESS);
++#else
++	UNUSED(data);
++	UNUSED(length);
++	UNUSED(returned);
++	UNUSED(flags);
++
++	return (ISC_R_NOTIMPLEMENTED);
++#endif
++}
+ 
+ #endif /* OPENSSL */
+ /*! \file */
+diff --git a/lib/dns/pkcs11.c b/lib/dns/pkcs11.c
+index 5a2c502..8eaef53 100644
+--- a/lib/dns/pkcs11.c
++++ b/lib/dns/pkcs11.c
+@@ -13,12 +13,15 @@
+ 
+ #include <config.h>
+ 
++#include <isc/util.h>
++
+ #include <dns/log.h>
+ #include <dns/result.h>
+ 
+ #include <pk11/pk11.h>
+ #include <pk11/internal.h>
+ 
++#include "dst_internal.h"
+ #include "dst_pkcs11.h"
+ 
+ isc_result_t
+@@ -34,12 +37,32 @@ dst__pkcs11_toresult(const char *funcname, const char *file, int line,
+ 	return (fallback);
+ }
+ 
++isc_result_t
++dst_random_getdata(void *data, unsigned int length,
++		   unsigned int *returned, unsigned int flags) {
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	isc_result_t ret;
+ 
+-#else /* PKCS11CRYPTO */
++#ifndef DONT_REQUIRE_DST_LIB_INIT
++	INSIST(dst__memory_pool != NULL);
++#endif
++	REQUIRE(data != NULL);
++	REQUIRE(length > 0);
++	UNUSED(flags);
+ 
+-#include <isc/util.h>
++	ret = pk11_rand_bytes(data, (int) length);
++	if ((ret == ISC_R_SUCCESS) && (returned != NULL))
++		*returned = length;
++	return (ret);
++#else
++	UNUSED(data);
++	UNUSED(length);
++	UNUSED(returned);
++	UNUSED(flags);
+ 
+-EMPTY_TRANSLATION_UNIT
++	return (ISC_R_NOTIMPLEMENTED);
++#endif
++}
+ 
+ #endif /* PKCS11CRYPTO */
+ /*! \file */
+diff --git a/lib/dns/tests/Kyuafile b/lib/dns/tests/Kyuafile
+index 937b548..f3c0e38 100644
+--- a/lib/dns/tests/Kyuafile
++++ b/lib/dns/tests/Kyuafile
+@@ -10,6 +10,7 @@ tap_test_program{name='dh_test'}
+ tap_test_program{name='dispatch_test'}
+ tap_test_program{name='dnstap_test'}
+ tap_test_program{name='dst_test'}
++tap_test_program{name='dstrandom_test'}
+ tap_test_program{name='geoip_test'}
+ tap_test_program{name='gost_test'}
+ tap_test_program{name='keytable_test'}
+diff --git a/lib/dns/tests/Makefile.in b/lib/dns/tests/Makefile.in
+index 90dc3a6..7671e1d 100644
+--- a/lib/dns/tests/Makefile.in
++++ b/lib/dns/tests/Makefile.in
+@@ -37,6 +37,7 @@ SRCS =		acl_test.c \
+ 		dnstap_test.c \
+ 		dst_test.c \
+ 		dnstest.c \
++		dstrandom_test.c \
+ 		geoip_test.c \
+ 		gost_test.c \
+ 		keytable_test.c \
+@@ -69,6 +70,7 @@ TARGETS =	acl_test@EXEEXT@ \
+ 		dh_test@EXEEXT@ \
+ 		dispatch_test@EXEEXT@ \
+ 		dnstap_test@EXEEXT@ \
++		dstrandom_test@EXEEXT@ \
+ 		dst_test@EXEEXT@ \
+ 		geoip_test@EXEEXT@ \
+ 		gost_test@EXEEXT@ \
+@@ -258,6 +260,11 @@ zt_test@EXEEXT@: zt_test.@O@ dnstest.@O@ ${ISCDEPLIBS} ${DNSDEPLIBS}
+ 		${LDFLAGS} -o $@ zt_test.@O@ dnstest.@O@ \
+ 		${DNSLIBS} ${ISCLIBS} ${LIBS}
+ 
++dstrandom_test@EXEEXT@: dstrandom_test.@O@ ${ISCDEPLIBS} ${DNSDEPLIBS}
++	${LIBTOOL_MODE_LINK} ${PURIFY} ${CC} ${CFLAGS} ${LDFLAGS} -o $@ \
++			dstrandom_test.@O@ ${DNSLIBS} \
++			${ISCLIBS} ${ISCPK11LIBS} ${LIBS}
++
+ unit::
+ 	sh ${top_builddir}/unit/unittest.sh
+ 
+diff --git a/lib/dns/tests/dstrandom_test.c b/lib/dns/tests/dstrandom_test.c
+new file mode 100644
+index 0000000..bd3d164
+--- /dev/null
++++ b/lib/dns/tests/dstrandom_test.c
+@@ -0,0 +1,115 @@
++/*
++ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
++ *
++ * This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
++ *
++ * See the COPYRIGHT file distributed with this work for additional
++ * information regarding copyright ownership.
++ */
++
++#include <config.h>
++
++#if HAVE_CMOCKA
++
++#include <stdarg.h>
++#include <stddef.h>
++#include <setjmp.h>
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <unistd.h>
++
++#define UNIT_TESTING
++#include <cmocka.h>
++
++#include <isc/entropy.h>
++#include <isc/mem.h>
++#include <isc/print.h>
++#include <isc/platform.h>
++#include <isc/util.h>
++
++#include <dst/dst.h>
++
++isc_mem_t *mctx = NULL;
++isc_entropy_t *ectx = NULL;
++unsigned char buffer[128];
++
++/* isc_entropy_getdata() examples */
++static void
++isc_entropy_getdata_test(void **state) {
++	isc_result_t result;
++	unsigned int returned, status;
++	const char *randomfile = "testdata/dstrandom/random.data";
++	int ret;
++
++	UNUSED(state);
++
++	isc_mem_debugging |= ISC_MEM_DEBUGRECORD;
++	result = isc_mem_create(0, 0, &mctx);
++	assert_int_equal(result, ISC_R_SUCCESS);
++	result = isc_entropy_create(mctx, &ectx);
++	assert_int_equal(result, ISC_R_SUCCESS);
++	result = dst_lib_init(mctx, ectx, 0);
++	assert_int_equal(result, ISC_R_SUCCESS);
++
++#ifdef ISC_PLATFORM_CRYPTORANDOM
++	isc_entropy_usehook(ectx, true);
++
++	returned = 0;
++	result = isc_entropy_getdata(ectx, buffer, sizeof(buffer),
++				     &returned, 0);
++	assert_int_equal(result, ISC_R_SUCCESS);
++	assert_int_equal(returned, sizeof(buffer));
++
++	status = isc_entropy_status(ectx);
++	assert_int_equal(status, 0);
++
++	isc_entropy_usehook(ectx, false);
++#endif
++
++	ret = chdir(TESTS);
++	assert_int_equal(ret, 0);
++
++	result = isc_entropy_createfilesource(ectx, randomfile);
++	assert_int_equal(result, ISC_R_SUCCESS);
++
++	returned = 0;
++	result = isc_entropy_getdata(ectx, buffer, sizeof(buffer),
++				     &returned, 0);
++	assert_int_equal(result, ISC_R_SUCCESS);
++	assert_int_equal(returned, sizeof(buffer));
++
++	status = isc_entropy_status(ectx);
++	assert_true(status > 0);
++
++	dst_lib_destroy();
++	isc_entropy_detach(&ectx);
++	assert_null(ectx);
++
++	isc_mem_destroy(&mctx);
++	assert_null(mctx);
++}
++
++int
++main(void) {
++	const struct CMUnitTest tests[] = {
++		cmocka_unit_test(isc_entropy_getdata_test),
++	};
++
++	return (cmocka_run_group_tests(tests, NULL, NULL));
++}
++
++#else /* HAVE_CMOCKA */
++
++#include <stdio.h>
++
++int
++main(void) {
++	printf("1..0 # Skipped: cmocka not available\n");
++	return (0);
++}
++
++#endif
+diff --git a/lib/dns/win32/libdns.def.in b/lib/dns/win32/libdns.def.in
+index 5c45d59..34b660c 100644
+--- a/lib/dns/win32/libdns.def.in
++++ b/lib/dns/win32/libdns.def.in
+@@ -1484,6 +1484,13 @@ dst_lib_destroy
+ dst_lib_init
+ dst_lib_init2
+ dst_lib_initmsgcat
++@IF PKCS11
++dst_random_getdata
++@ELSE PKCS11
++@IF OPENSSL
++dst_random_getdata
++@END OPENSSL
++@END PKCS11
+ dst_region_computeid
+ dst_region_computerid
+ dst_result_register
+diff --git a/lib/isc/entropy.c b/lib/isc/entropy.c
+index ab2f617..ed05ed6 100644
+--- a/lib/isc/entropy.c
++++ b/lib/isc/entropy.c
+@@ -104,11 +104,15 @@ struct isc_entropy {
+ 	uint32_t			initialized;
+ 	uint32_t			initcount;
+ 	isc_entropypool_t		pool;
++	bool				usehook;
+ 	unsigned int			nsources;
+ 	isc_entropysource_t	       *nextsource;
+ 	ISC_LIST(isc_entropysource_t)	sources;
+ };
+ 
++/*% Global Hook */
++static isc_entropy_getdata_t hook;
++
+ /*% Sample Queue */
+ typedef struct {
+ 	uint32_t	last_time;	/*%< last time recorded */
+@@ -557,6 +561,11 @@ isc_entropy_getdata(isc_entropy_t *ent, void *data, unsigned int length,
+ 
+ 	LOCK(&ent->lock);
+ 
++	if (ent->usehook && (hook != NULL)) {
++		UNLOCK(&ent->lock);
++		return (hook(data, length, returned, flags));
++	}
++
+ 	remain = length;
+ 	buf = data;
+ 	total = 0;
+@@ -708,6 +717,7 @@ isc_entropy_create(isc_mem_t *mctx, isc_entropy_t **entp) {
+ 	ent->refcnt = 1;
+ 	ent->initialized = 0;
+ 	ent->initcount = 0;
++	ent->usehook = false;
+ 	ent->magic = ENTROPY_MAGIC;
+ 
+ 	isc_entropypool_init(&ent->pool);
+@@ -1286,3 +1296,17 @@ isc_entropy_usebestsource(isc_entropy_t *ectx, isc_entropysource_t **source,
+ 	 */
+ 	return (final_result);
+ }
++
++void
++isc_entropy_usehook(isc_entropy_t *ectx, bool onoff) {
++	REQUIRE(VALID_ENTROPY(ectx));
++
++	LOCK(&ectx->lock);
++	ectx->usehook = onoff;
++	UNLOCK(&ectx->lock);
++}
++
++void
++isc_entropy_sethook(isc_entropy_getdata_t myhook) {
++	hook = myhook;
++}
+diff --git a/lib/isc/include/isc/entropy.h b/lib/isc/include/isc/entropy.h
+index 4bba8e1..632166a 100644
+--- a/lib/isc/include/isc/entropy.h
++++ b/lib/isc/include/isc/entropy.h
+@@ -304,6 +304,18 @@ isc_entropy_usebestsource(isc_entropy_t *ectx, isc_entropysource_t **source,
+  *	isc_entropy_createcallbacksource().
+  */
+ 
++void
++isc_entropy_usehook(isc_entropy_t *ectx, bool onoff);
++/*!<
++ * \brief Mark/unmark the given entropy structure as being hooked.
++ */
++
++void
++isc_entropy_sethook(isc_entropy_getdata_t myhook);
++/*!<
++ * \brief Set the getdata hook (e.g., for a crypto random generator).
++ */
++
+ ISC_LANG_ENDDECLS
+ 
+ #endif /* ISC_ENTROPY_H */
+diff --git a/lib/isc/include/isc/platform.h.in b/lib/isc/include/isc/platform.h.in
+index 9c7c342..ee8dc3e 100644
+--- a/lib/isc/include/isc/platform.h.in
++++ b/lib/isc/include/isc/platform.h.in
+@@ -341,6 +341,11 @@
+  */
+ @ISC_PLATFORM_HAVESTRINGSH@
+ 
++/*
++ * Define if the random functions are provided by crypto.
++ */
++@ISC_PLATFORM_CRYPTORANDOM@
++
+ /*
+  * Define if the hash functions must be provided by OpenSSL.
+  */
+diff --git a/lib/isc/include/isc/types.h b/lib/isc/include/isc/types.h
+index 42ff7e0..8d87c44 100644
+--- a/lib/isc/include/isc/types.h
++++ b/lib/isc/include/isc/types.h
+@@ -93,6 +93,8 @@ typedef struct isc_time			isc_time_t;		/*%< Time */
+ typedef struct isc_timer		isc_timer_t;		/*%< Timer */
+ typedef struct isc_timermgr		isc_timermgr_t;		/*%< Timer Manager */
+ 
++typedef isc_result_t (*isc_entropy_getdata_t)(void *, unsigned int,
++					      unsigned int *, unsigned int);
+ typedef void (*isc_taskaction_t)(isc_task_t *, isc_event_t *);
+ typedef int (*isc_sockfdwatch_t)(isc_task_t *, isc_socket_t *, void *, int);
+ 
+diff --git a/lib/isc/pk11.c b/lib/isc/pk11.c
+index 8e6ed93..ceb5a2c 100644
+--- a/lib/isc/pk11.c
++++ b/lib/isc/pk11.c
+@@ -321,14 +321,16 @@ pk11_rand_seed_fromfile(const char *randomfile) {
+ 	ret = isc_stdio_open(randomfile, "r", &stream);
+ 	if (ret != ISC_R_SUCCESS)
+ 		goto cleanup;
+-	ret = isc_stdio_read(seed, 1, SEEDSIZE, stream, &cc);
+-	if (ret!= ISC_R_SUCCESS)
+-		goto cleanup;
++	while (ret == ISC_R_SUCCESS) {
++		ret = isc_stdio_read(seed, 1, SEEDSIZE, stream, &cc);
++		if ((ret != ISC_R_SUCCESS) && (ret != ISC_R_EOF))
++			goto cleanup;
++		(void) pkcs_C_SeedRandom(ctx.session, seed, (CK_ULONG) cc);
++	} 
+ 	ret = isc_stdio_close(stream);
+ 	stream = NULL;
+-	if (ret!= ISC_R_SUCCESS)
++	if (ret != ISC_R_SUCCESS)
+ 		goto cleanup;
+-	(void) pkcs_C_SeedRandom(ctx.session, seed, (CK_ULONG) cc);
+ 
+     cleanup:
+ 	if (stream != NULL)
+diff --git a/lib/isc/win32/include/isc/platform.h.in b/lib/isc/win32/include/isc/platform.h.in
+index 5b8a2c9..913a2ce 100644
+--- a/lib/isc/win32/include/isc/platform.h.in
++++ b/lib/isc/win32/include/isc/platform.h.in
+@@ -69,6 +69,11 @@
+ #define ISC_PLATFORM_NORETURN_PRE __declspec(noreturn)
+ #define ISC_PLATFORM_NORETURN_POST
+ 
++/*
++ * Define if the random functions are provided by crypto.
++ */
++@ISC_PLATFORM_CRYPTORANDOM@
++
+ /*
+  * Define if the hash functions must be provided by OpenSSL.
+  */
+diff --git a/win32utils/Configure b/win32utils/Configure
+index ccaf067..240fb80 100644
+--- a/win32utils/Configure
++++ b/win32utils/Configure
+@@ -382,6 +382,7 @@ my @substdefh = ("ALLOW_FILTER_AAAA",
+ my %configdefp;
+ 
+ my @substdefp = ("ISC_PLATFORM_BUSYWAITNOP",
++                 "ISC_PLATFORM_CRYPTORANDOM",
+                  "ISC_PLATFORM_HAVEATOMICSTORE",
+                  "ISC_PLATFORM_HAVEATOMICSTOREQ",
+                  "ISC_PLATFORM_HAVECMPXCHG",
+@@ -517,7 +518,8 @@ my @allcond = (@substcond, "NOTYET", "NOLONGER");
+ 
+ # enable-xxx/disable-xxx
+ 
+-my @enablelist = ("developer",
++my @enablelist = ("crypto-rand",
++                  "developer",
+                   "fixed-rrset",
+                   "intrinsics",
+                   "isc-spnego",
+@@ -581,6 +583,7 @@ my @help = (
+ "\nOptional Features:\n",
+ "  enable-intrinsics     enable instrinsic/atomic functions [default=yes]\n",
+ "  enable-native-pkcs11  use native PKCS#11 for all crypto [default=no]\n",
++"  enable-crypto-rand    use crypto provider for random [default=yes]\n",
+ "  enable-openssl-hash   use OpenSSL for hash functions [default=yes]\n",
+ "  enable-isc-spnego     use SPNEGO from lib/dns [default=yes]\n",
+ "  enable-filter-aaaa    enable filtering of AAAA records [default=yes]\n",
+@@ -630,7 +633,9 @@ my $want_clean = "no";
+ my $want_unknown = "no";
+ my $unknown_value;
+ my $enable_intrinsics = "yes";
++my $cryptolib = "";
+ my $enable_native_pkcs11 = "no";
++my $enable_crypto_rand = "yes";
+ my $enable_openssl_hash = "auto";
+ my $enable_filter_aaaa = "yes";
+ my $enable_isc_spnego = "yes";
+@@ -850,6 +855,10 @@ sub myenable {
+         if ($val =~ /^yes$/i) {
+             $enable_native_pkcs11 = "yes";
+         }
++    } elsif ($key =~ /^crypto-rand$/i) {
++        if ($val =~ /^no$/i) {
++            $enable_crypto_rand = "no";
++        }
+     } elsif ($key =~ /^openssl-hash$/i) {
+         if ($val =~ /^yes$/i) {
+             $enable_openssl_hash = "yes";
+@@ -1158,6 +1167,11 @@ if ($verbose) {
+     } else {
+         print "native-pkcs11: disabled\n";
+     }
++    if ($enable_crypto_rand eq "yes") {
++        print "crypto-rand: enabled\n";
++    } else {
++        print "crypto-rand: disabled\n";
++    }
+     if ($enable_openssl_hash eq "yes") {
+         print "openssl-hash: enabled\n";
+     } else {
+@@ -1516,6 +1530,7 @@ if ($enable_intrinsics eq "yes") {
+ 
+ # enable-native-pkcs11
+ if ($enable_native_pkcs11 eq "yes") {
++    $cryptolib = "pkcs11";
+     if ($use_openssl eq "auto") {
+         $use_openssl = "no";
+     }
+@@ -1725,6 +1740,7 @@ if ($use_openssl eq "yes") {
+         $openssl_dll = File::Spec->catdir($openssl_path, "@dirlist[0]");
+     }   
+ 
++    $cryptolib = "openssl";
+     $configcond{"OPENSSL"} = 1;
+     $configdefd{"CRYPTO"} = "OPENSSL";
+     $configvar{"OPENSSL_PATH"} = "$openssl_path";
+@@ -2296,6 +2312,15 @@ if ($use_aes eq "yes") {
+ }
+ 
+ 
++# enable-crypto-rand
++if ($enable_crypto_rand eq "yes") {
++    if (($use_openssl eq "no") && ($enable_native_pkcs11 eq "no")) {
++        die "No crypto provider for random functions\n";
++    }
++    $configdefp{"ISC_PLATFORM_CRYPTORANDOM"} = "\"$cryptolib\"";
++}
++print "Cryptographic library for DNSSEC: $cryptolib";
++
+ # enable-openssl-hash
+ if ($enable_openssl_hash eq "yes") {
+     if ($use_openssl eq "no") {
+@@ -3671,6 +3696,7 @@ exit 0;
+ #  --enable-developer partially supported
+ #  --enable-newstats (9.9/9.9sub only)
+ #  --enable-native-pkcs11 supported
++#  --enable-crypto-rand supported
+ #  --enable-openssl-version-check included without a way to disable it
+ #  --enable-openssl-hash supported
+ #  --enable-threads included without a way to disable it
+-- 
+2.20.1
+

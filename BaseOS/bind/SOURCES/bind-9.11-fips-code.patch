@@ -1,0 +1,1459 @@
+From eff6dcb62f3cea6df0a848c2220a49bc02cb4a0e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20Men=C5=A1=C3=ADk?= <pemensik@redhat.com>
+Date: Thu, 2 Aug 2018 23:34:45 +0200
+Subject: [PATCH] FIPS code changes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Squashed commit of the following:
+
+commit b49f70ce0575b6b52a71b90fe0376dbf16f92c6b
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Mon Jan 22 14:12:37 2018 +0100
+
+    Update system tests to detect MD5 disabled at runtime
+
+commit 80ceffee4860c24baf70bc9a8653d92731eda2e4
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Thu Aug 2 14:53:54 2018 +0200
+
+    Avoid warning about undefined parameters
+
+commit e4ad4363e3d1acaac58456117579f02761f38fdc
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Wed Jun 20 19:31:19 2018 +0200
+
+    Fix rndc-confgen default algorithm, report true algorithm in usage.
+
+commit 7e629a351010cb75e0589ec361f720085675998c
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Fri Feb 23 21:21:30 2018 +0100
+
+    Cleanup only if initialization was successful
+
+commit 2101b948c77cbcbe07eb4a1e60f3e693b2245ec6
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Mon Feb 5 12:19:28 2018 +0100
+
+    Ensure dst backend is initialized first even before hmac algorithms.
+
+commit 7567c7edde7519115a9ae7e20818c835d3eb1ffe
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Mon Feb 5 12:17:54 2018 +0100
+
+    Skip initialization of MD5 based algorithms if not available.
+
+commit 5782137df6b45a6d900d5a1c250c1257227e917a
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Mon Feb 5 10:21:27 2018 +0100
+
+    Change secalgs skipping to be more safe
+
+commit f2d78729898182d2d19d5064de1bec9b66817159
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Wed Jan 31 18:26:11 2018 +0100
+
+    Skip MD5 algorithm also in case of NULL name
+
+commit 32a2ad4abc7aaca1c257730319ad3c27405d3407
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Wed Jan 31 11:38:12 2018 +0100
+
+    Make MD5 behave like unknown algorithm in TSIG.
+
+commit 13cd3f704dce568fdf24a567be5802b58ac6007b
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Tue Nov 28 20:14:37 2017 +0100
+
+    Select token with most supported functions, instead of demanding it must support all functions
+
+    Initialize PKCS#11 always until successfully initialized
+
+commit a71df74abdca4fe63bcdf542b81a109cf1f495b4
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Mon Jan 22 16:17:44 2018 +0100
+
+    Handle MD5 unavailability from DST
+
+commit dd82cb263efa2753d3ee772972726ea08bcc639b
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Mon Jan 22 14:11:16 2018 +0100
+
+    Check runtime flag from library and applications, fail gracefully.
+
+commit c7b2f87f07ecae75b821a908e29f08a42371e32e
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Mon Jan 22 08:39:08 2018 +0100
+
+    Modify libraries to use isc_md5_available() if PK11_MD5_DISABLE is not
+    defined.
+    TODO: pk11.c should accept slot without MD5 support.
+
+commit 0b8e470ec636b9e350b5ec3203eb2b4091415fde
+Author: Petr Menšík <pemensik@redhat.com>
+Date:   Mon Jan 22 07:21:04 2018 +0100
+
+    Add runtime detection whether MD5 is useable.
+---
+ bin/confgen/keygen.c              | 10 +++-
+ bin/confgen/rndc-confgen.c        | 32 ++++---------
+ bin/dig/dig.c                     |  7 +--
+ bin/dig/dighost.c                 | 14 ++++--
+ bin/dnssec/dnssec-keygen.c        | 14 ++++++
+ bin/named/config.c                | 25 +++++++++-
+ bin/nsupdate/nsupdate.c           | 24 ++++++----
+ bin/rndc/rndc.c                   |  3 +-
+ bin/tests/optional/hash_test.c    | 78 ++++++++++++++++---------------
+ bin/tests/system/tkey/keycreate.c |  3 ++
+ bin/tests/system/tkey/keydelete.c | 17 ++++---
+ lib/bind9/check.c                 | 10 ++++
+ lib/dns/dst_api.c                 | 23 ++++++---
+ lib/dns/dst_internal.h            |  3 +-
+ lib/dns/dst_parse.c               | 18 +++++--
+ lib/dns/hmac_link.c               | 18 ++-----
+ lib/dns/opensslrsa_link.c         |  6 +++
+ lib/dns/pkcs11rsa_link.c          | 33 +++++++++++--
+ lib/dns/rcode.c                   | 21 ++++++++-
+ lib/dns/tests/rsa_test.c          |  4 ++
+ lib/dns/tests/tsig_test.c         |  1 +
+ lib/dns/tkey.c                    |  9 ++++
+ lib/dns/tsec.c                    |  8 +++-
+ lib/dns/tsig.c                    | 17 ++++---
+ lib/isc/include/isc/md5.h         |  3 ++
+ lib/isc/md5.c                     | 59 +++++++++++++++++++++++
+ lib/isc/pk11.c                    | 44 +++++++++++------
+ lib/isc/tests/hash_test.c         |  9 ++++
+ lib/isccc/cc.c                    | 42 +++++++++++------
+ 29 files changed, 400 insertions(+), 155 deletions(-)
+
+diff --git a/bin/confgen/keygen.c b/bin/confgen/keygen.c
+index 8931ad5..5015abb 100644
+--- a/bin/confgen/keygen.c
++++ b/bin/confgen/keygen.c
+@@ -22,6 +22,7 @@
+ #include <isc/entropy.h>
+ #include <isc/file.h>
+ #include <isc/keyboard.h>
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/print.h>
+ #include <isc/result.h>
+@@ -73,7 +74,7 @@ alg_fromtext(const char *name) {
+ 		p = &name[5];
+ 
+ #ifndef PK11_MD5_DISABLE
+-	if (strcasecmp(p, "md5") == 0)
++	if (strcasecmp(p, "md5") == 0 && isc_md5_available())
+ 		return DST_ALG_HMACMD5;
+ #endif
+ 	if (strcasecmp(p, "sha1") == 0)
+@@ -132,6 +133,13 @@ generate_key(isc_mem_t *mctx, const char *randomfile, dns_secalg_t alg,
+ 	switch (alg) {
+ #ifndef PK11_MD5_DISABLE
+ 	    case DST_ALG_HMACMD5:
++		if (!isc_md5_available()) {
++			fatal("unsupported algorithm %d\n", alg);
++		} else if (keysize < 1 || keysize > 512) {
++			fatal("keysize %d out of range (must be 1-512)\n",
++			      keysize);
++		}
++		break;
+ #endif
+ 	    case DST_ALG_HMACSHA1:
+ 	    case DST_ALG_HMACSHA224:
+diff --git a/bin/confgen/rndc-confgen.c b/bin/confgen/rndc-confgen.c
+index 5ca3d76..6b7790a 100644
+--- a/bin/confgen/rndc-confgen.c
++++ b/bin/confgen/rndc-confgen.c
+@@ -36,6 +36,7 @@
+ #include <isc/file.h>
+ #include <isc/keyboard.h>
+ #include <isc/mem.h>
++#include <isc/md5.h>
+ #include <isc/net.h>
+ #include <isc/print.h>
+ #include <isc/result.h>
+@@ -63,7 +64,7 @@ const char *progname;
+ 
+ bool verbose = false;
+ 
+-const char *keyfile, *keydef;
++const char *keyfile, *keydef, *algdef;
+ 
+ ISC_PLATFORM_NORETURN_PRE static void
+ usage(int status) ISC_PLATFORM_NORETURN_POST;
+@@ -71,13 +72,12 @@ usage(int status) ISC_PLATFORM_NORETURN_POST;
+ static void
+ usage(int status) {
+ 
+-#ifndef PK11_MD5_DISABLE
+ 	fprintf(stderr, "\
+ Usage:\n\
+  %s [-a] [-b bits] [-c keyfile] [-k keyname] [-p port] [-r randomfile] \
+ [-s addr] [-t chrootdir] [-u user]\n\
+   -a:		 generate just the key clause and write it to keyfile (%s)\n\
+-  -A alg:	 algorithm (default hmac-md5)\n\
++  -A alg:	 algorithm (default %s)\n\
+   -b bits:	 from 1 through 512, default 256; total length of the secret\n\
+   -c keyfile:	 specify an alternate key file (requires -a)\n\
+   -k keyname:	 the name as it will be used  in named.conf and rndc.conf\n\
+@@ -86,24 +86,7 @@ Usage:\n\
+   -s addr:	 the address to which rndc should connect\n\
+   -t chrootdir:	 write a keyfile in chrootdir as well (requires -a)\n\
+   -u user:	 set the keyfile owner to \"user\" (requires -a)\n",
+-		 progname, keydef);
+-#else
+-	fprintf(stderr, "\
+-Usage:\n\
+- %s [-a] [-b bits] [-c keyfile] [-k keyname] [-p port] [-r randomfile] \
+-[-s addr] [-t chrootdir] [-u user]\n\
+-  -a:		 generate just the key clause and write it to keyfile (%s)\n\
+-  -A alg:	 algorithm (default hmac-sha256)\n\
+-  -b bits:	 from 1 through 512, default 256; total length of the secret\n\
+-  -c keyfile:	 specify an alternate key file (requires -a)\n\
+-  -k keyname:	 the name as it will be used  in named.conf and rndc.conf\n\
+-  -p port:	 the port named will listen on and rndc will connect to\n\
+-  -r randomfile: source of random data (use \"keyboard\" for key timing)\n\
+-  -s addr:	 the address to which rndc should connect\n\
+-  -t chrootdir:	 write a keyfile in chrootdir as well (requires -a)\n\
+-  -u user:	 set the keyfile owner to \"user\" (requires -a)\n",
+-		 progname, keydef);
+-#endif
++		 progname, keydef, algdef);
+ 
+ 	exit (status);
+ }
+@@ -139,11 +122,12 @@ main(int argc, char **argv) {
+ 	progname = program;
+ 
+ 	keyname = DEFAULT_KEYNAME;
+-#ifndef PK11_MD5_DISABLE
+-	alg = DST_ALG_HMACMD5;
+-#else
+ 	alg = DST_ALG_HMACSHA256;
++#ifndef PK11_MD5_DISABLE
++	if (isc_md5_available())
++		alg = DST_ALG_HMACMD5;
+ #endif
++	algdef = alg_totext(alg);
+ 	serveraddr = DEFAULT_SERVER;
+ 	port = DEFAULT_PORT;
+ 
+diff --git a/bin/dig/dig.c b/bin/dig/dig.c
+index 706299e..aaf22e7 100644
+--- a/bin/dig/dig.c
++++ b/bin/dig/dig.c
+@@ -20,6 +20,7 @@
+ #include <ctype.h>
+ 
+ #include <isc/app.h>
++#include <isc/md5.h>
+ #include <isc/netaddr.h>
+ #include <isc/parseint.h>
+ #include <isc/platform.h>
+@@ -1774,10 +1775,10 @@ dash_option(char *option, char *next, dig_lookup_t **lookup,
+ 			ptr = ptr2;
+ 			ptr2 = ptr3;
+ 		} else  {
+-#ifndef PK11_MD5_DISABLE
+-			hmacname = DNS_TSIG_HMACMD5_NAME;
+-#else
+ 			hmacname = DNS_TSIG_HMACSHA256_NAME;
++#ifndef PK11_MD5_DISABLE
++			if (isc_md5_available())
++				hmacname = DNS_TSIG_HMACMD5_NAME;
+ #endif
+ 			digestbits = 0;
+ 		}
+diff --git a/bin/dig/dighost.c b/bin/dig/dighost.c
+index 93e5b40..afd2700 100644
+--- a/bin/dig/dighost.c
++++ b/bin/dig/dighost.c
+@@ -80,6 +80,7 @@
+ #include <isc/hex.h>
+ #include <isc/lang.h>
+ #include <isc/log.h>
++#include <isc/md5.h>
+ #include <isc/netaddr.h>
+ #include <isc/netdb.h>
+ #include <isc/parseint.h>
+@@ -1246,9 +1247,10 @@ parse_hmac(const char *hmac) {
+ 	digestbits = 0;
+ 
+ #ifndef PK11_MD5_DISABLE
+-	if (strcasecmp(buf, "hmac-md5") == 0) {
++	if (strcasecmp(buf, "hmac-md5") == 0 && isc_md5_available()) {
+ 		hmacname = DNS_TSIG_HMACMD5_NAME;
+-	} else if (strncasecmp(buf, "hmac-md5-", 9) == 0) {
++	} else if (strncasecmp(buf, "hmac-md5-", 9) == 0 &&
++		   isc_md5_available()) {
+ 		hmacname = DNS_TSIG_HMACMD5_NAME;
+ 		digestbits = parse_bits(&buf[9], "digest-bits [0..128]", 128);
+ 	} else
+@@ -1368,7 +1370,13 @@ setup_file_key(void) {
+ 	switch (dst_key_alg(dstkey)) {
+ #ifndef PK11_MD5_DISABLE
+ 	case DST_ALG_HMACMD5:
+-		hmacname = DNS_TSIG_HMACMD5_NAME;
++		if (isc_md5_available()) {
++			hmacname = DNS_TSIG_HMACMD5_NAME;
++		} else {
++			printf(";; Couldn't create key %s: bad algorithm\n",
++			       keynametext);
++			goto failure;
++		}
+ 		break;
+ #endif
+ 	case DST_ALG_HMACSHA1:
+diff --git a/bin/dnssec/dnssec-keygen.c b/bin/dnssec/dnssec-keygen.c
+index 1476d0d..f5c9316 100644
+--- a/bin/dnssec/dnssec-keygen.c
++++ b/bin/dnssec/dnssec-keygen.c
+@@ -36,6 +36,7 @@
+ #include <isc/buffer.h>
+ #include <isc/commandline.h>
+ #include <isc/entropy.h>
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/print.h>
+ #include <isc/region.h>
+@@ -562,6 +563,19 @@ main(int argc, char **argv) {
+ 					"\"-a RSAMD5\"\n");
+ 			INSIST(freeit == NULL);
+ 			return (1);
++		} else if (strcasecmp(algname, "HMAC-MD5") == 0) {
++			if (isc_md5_available()) {
++				alg = DST_ALG_HMACMD5;
++			} else {
++				fprintf(stderr,
++					"The use of HMAC-MD5 was disabled\n");
++				return (1);
++			}
++		} else if (strcasecmp(algname, "RSAMD5") == 0 &&
++			   !isc_md5_available()) {
++			fprintf(stderr, "The use of RSAMD5 was disabled\n");
++			INSIST(freeit == NULL);
++			return (1);
+ 		} else if (strcasecmp(algname, "HMAC-MD5") == 0) {
+ 			alg = DST_ALG_HMACMD5;
+ #else
+diff --git a/bin/named/config.c b/bin/named/config.c
+index 32c454a..dff826b 100644
+--- a/bin/named/config.c
++++ b/bin/named/config.c
+@@ -18,6 +18,7 @@
+ 
+ #include <isc/buffer.h>
+ #include <isc/log.h>
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/parseint.h>
+ #include <isc/region.h>
+@@ -974,6 +975,21 @@ ns_config_getkeyalgorithm(const char *str, dns_name_t **name,
+ 	return (ns_config_getkeyalgorithm2(str, name, NULL, digestbits));
+ }
+ 
++static inline int
++algorithms_start() {
++#ifndef PK11_MD5_DISABLE
++	if (!isc_md5_available()) {
++		int i = 0;
++		while (algorithms[i].str != NULL &&
++			algorithms[i].hmac == hmacmd5) {
++			i++;
++		}
++		return i;
++	}
++#endif
++	return 0;
++}
++
+ isc_result_t
+ ns_config_getkeyalgorithm2(const char *str, dns_name_t **name,
+ 			   unsigned int *typep, uint16_t *digestbits)
+@@ -983,7 +999,7 @@ ns_config_getkeyalgorithm2(const char *str, dns_name_t **name,
+ 	uint16_t bits;
+ 	isc_result_t result;
+ 
+-	for (i = 0; algorithms[i].str != NULL; i++) {
++	for (i = algorithms_start(); algorithms[i].str != NULL; i++) {
+ 		len = strlen(algorithms[i].str);
+ 		if (strncasecmp(algorithms[i].str, str, len) == 0 &&
+ 		    (str[len] == '\0' ||
+@@ -1006,7 +1022,12 @@ ns_config_getkeyalgorithm2(const char *str, dns_name_t **name,
+ 	if (name != NULL) {
+ 		switch (algorithms[i].hmac) {
+ #ifndef PK11_MD5_DISABLE
+-		case hmacmd5: *name = dns_tsig_hmacmd5_name; break;
++		case hmacmd5:
++			if (isc_md5_available()) {
++				*name = dns_tsig_hmacmd5_name; break;
++			} else {
++				return (ISC_R_NOTFOUND);
++			}
+ #endif
+ 		case hmacsha1: *name = dns_tsig_hmacsha1_name; break;
+ 		case hmacsha224: *name = dns_tsig_hmacsha224_name; break;
+diff --git a/bin/nsupdate/nsupdate.c b/bin/nsupdate/nsupdate.c
+index de60313..bbb3936 100644
+--- a/bin/nsupdate/nsupdate.c
++++ b/bin/nsupdate/nsupdate.c
+@@ -31,6 +31,7 @@
+ #include <isc/hash.h>
+ #include <isc/lex.h>
+ #include <isc/log.h>
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/parseint.h>
+ #include <isc/portset.h>
+@@ -477,9 +478,10 @@ parse_hmac(dns_name_t **hmac, const char *hmacstr, size_t len,
+ 	strlcpy(buf, hmacstr, ISC_MIN(len + 1, sizeof(buf)));
+ 
+ #ifndef PK11_MD5_DISABLE
+-	if (strcasecmp(buf, "hmac-md5") == 0) {
++	if (strcasecmp(buf, "hmac-md5") == 0 && isc_md5_available()) {
+ 		*hmac = DNS_TSIG_HMACMD5_NAME;
+-	} else if (strncasecmp(buf, "hmac-md5-", 9) == 0) {
++	} else if (strncasecmp(buf, "hmac-md5-", 9) == 0 &&
++		   isc_md5_available()) {
+ 		*hmac = DNS_TSIG_HMACMD5_NAME;
+ 		result = isc_parse_uint16(&digestbits, &buf[9], 10);
+ 		if (result != ISC_R_SUCCESS || digestbits > 128) {
+@@ -592,10 +594,10 @@ setup_keystr(void) {
+ 			exit(1);
+ 		}
+ 	} else {
+-#ifndef PK11_MD5_DISABLE
+-		hmacname = DNS_TSIG_HMACMD5_NAME;
+-#else
+ 		hmacname = DNS_TSIG_HMACSHA256_NAME;
++#ifndef PK11_MD5_DISABLE
++		if (isc_md5_available())
++			hmacname = DNS_TSIG_HMACMD5_NAME;
+ #endif
+ 		name = keystr;
+ 		n = s;
+@@ -732,7 +734,8 @@ setup_keyfile(isc_mem_t *mctx, isc_log_t *lctx) {
+ 	switch (dst_key_alg(dstkey)) {
+ #ifndef PK11_MD5_DISABLE
+ 	case DST_ALG_HMACMD5:
+-		hmacname = DNS_TSIG_HMACMD5_NAME;
++		if (isc_md5_available())
++			hmacname = DNS_TSIG_HMACMD5_NAME;
+ 		break;
+ #endif
+ 	case DST_ALG_HMACSHA1:
+@@ -1637,12 +1640,13 @@ evaluate_key(char *cmdline) {
+ 			return (STATUS_SYNTAX);
+ 		}
+ 		namestr = n + 1;
+-	} else
+-#ifndef PK11_MD5_DISABLE
+-		hmacname = DNS_TSIG_HMACMD5_NAME;
+-#else
++	} else {
+ 		hmacname = DNS_TSIG_HMACSHA256_NAME;
++#ifndef PK11_MD5_DISABLE
++		if (isc_md5_available())
++			hmacname = DNS_TSIG_HMACMD5_NAME;
+ #endif
++	}
+ 
+ 	isc_buffer_init(&b, namestr, strlen(namestr));
+ 	isc_buffer_add(&b, strlen(namestr));
+diff --git a/bin/rndc/rndc.c b/bin/rndc/rndc.c
+index 9eb0ce0..8083654 100644
+--- a/bin/rndc/rndc.c
++++ b/bin/rndc/rndc.c
+@@ -23,6 +23,7 @@
+ #include <isc/file.h>
+ #include <isc/log.h>
+ #include <isc/net.h>
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/print.h>
+ #include <isc/random.h>
+@@ -636,7 +637,7 @@ parse_config(isc_mem_t *mctx, isc_log_t *log, const char *keyname,
+ 	algorithmstr = cfg_obj_asstring(algorithmobj);
+ 
+ #ifndef PK11_MD5_DISABLE
+-	if (strcasecmp(algorithmstr, "hmac-md5") == 0)
++	if (strcasecmp(algorithmstr, "hmac-md5") == 0 && isc_md5_available())
+ 		algorithm = ISCCC_ALG_HMACMD5;
+ 	else
+ #endif
+diff --git a/bin/tests/optional/hash_test.c b/bin/tests/optional/hash_test.c
+index bf2891a..b5f0a1c 100644
+--- a/bin/tests/optional/hash_test.c
++++ b/bin/tests/optional/hash_test.c
+@@ -90,43 +90,47 @@ main(int argc, char **argv) {
+ 	print_digest(s, "sha224", digest, ISC_SHA224_DIGESTLENGTH/4);
+ 
+ #ifndef PK11_MD5_DISABLE
+-	s = "abc";
+-	isc_md5_init(&md5);
+-	memmove(buffer, s, strlen(s));
+-	isc_md5_update(&md5, buffer, strlen(s));
+-	isc_md5_final(&md5, digest);
+-	print_digest(s, "md5", digest, 4);
+-
+-	/*
+-	 * The 3 HMAC-MD5 examples from RFC2104
+-	 */
+-	s = "Hi There";
+-	memset(key, 0x0b, 16);
+-	isc_hmacmd5_init(&hmacmd5, key, 16);
+-	memmove(buffer, s, strlen(s));
+-	isc_hmacmd5_update(&hmacmd5, buffer, strlen(s));
+-	isc_hmacmd5_sign(&hmacmd5, digest);
+-	print_digest(s, "hmacmd5", digest, 4);
+-
+-	s = "what do ya want for nothing?";
+-	strlcpy((char *)key, "Jefe", sizeof(key));
+-	isc_hmacmd5_init(&hmacmd5, key, 4);
+-	memmove(buffer, s, strlen(s));
+-	isc_hmacmd5_update(&hmacmd5, buffer, strlen(s));
+-	isc_hmacmd5_sign(&hmacmd5, digest);
+-	print_digest(s, "hmacmd5", digest, 4);
+-
+-	s = "\335\335\335\335\335\335\335\335\335\335"
+-	    "\335\335\335\335\335\335\335\335\335\335"
+-	    "\335\335\335\335\335\335\335\335\335\335"
+-	    "\335\335\335\335\335\335\335\335\335\335"
+-	    "\335\335\335\335\335\335\335\335\335\335";
+-	memset(key, 0xaa, 16);
+-	isc_hmacmd5_init(&hmacmd5, key, 16);
+-	memmove(buffer, s, strlen(s));
+-	isc_hmacmd5_update(&hmacmd5, buffer, strlen(s));
+-	isc_hmacmd5_sign(&hmacmd5, digest);
+-	print_digest(s, "hmacmd5", digest, 4);
++	if (isc_md5_available()) {
++		s = "abc";
++		isc_md5_init(&md5);
++		memmove(buffer, s, strlen(s));
++		isc_md5_update(&md5, buffer, strlen(s));
++		isc_md5_final(&md5, digest);
++		print_digest(s, "md5", digest, 4);
++
++		/*
++		 * The 3 HMAC-MD5 examples from RFC2104
++		 */
++		s = "Hi There";
++		memset(key, 0x0b, 16);
++		isc_hmacmd5_init(&hmacmd5, key, 16);
++		memmove(buffer, s, strlen(s));
++		isc_hmacmd5_update(&hmacmd5, buffer, strlen(s));
++		isc_hmacmd5_sign(&hmacmd5, digest);
++		print_digest(s, "hmacmd5", digest, 4);
++
++		s = "what do ya want for nothing?";
++		strlcpy((char *)key, "Jefe", sizeof(key));
++		isc_hmacmd5_init(&hmacmd5, key, 4);
++		memmove(buffer, s, strlen(s));
++		isc_hmacmd5_update(&hmacmd5, buffer, strlen(s));
++		isc_hmacmd5_sign(&hmacmd5, digest);
++		print_digest(s, "hmacmd5", digest, 4);
++
++		s = "\335\335\335\335\335\335\335\335\335\335"
++		    "\335\335\335\335\335\335\335\335\335\335"
++		    "\335\335\335\335\335\335\335\335\335\335"
++		    "\335\335\335\335\335\335\335\335\335\335"
++		    "\335\335\335\335\335\335\335\335\335\335";
++		memset(key, 0xaa, 16);
++		isc_hmacmd5_init(&hmacmd5, key, 16);
++		memmove(buffer, s, strlen(s));
++		isc_hmacmd5_update(&hmacmd5, buffer, strlen(s));
++		isc_hmacmd5_sign(&hmacmd5, digest);
++		print_digest(s, "hmacmd5", digest, 4);
++	} else {
++		fprintf(stderr, "Skipping disabled MD5 algorithm\n");
++	}
+ #endif
+ 
+ 	/*
+diff --git a/bin/tests/system/tkey/keycreate.c b/bin/tests/system/tkey/keycreate.c
+index 5a00f86..653c951 100644
+--- a/bin/tests/system/tkey/keycreate.c
++++ b/bin/tests/system/tkey/keycreate.c
+@@ -20,6 +20,7 @@
+ #include <isc/entropy.h>
+ #include <isc/hash.h>
+ #include <isc/log.h>
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/print.h>
+ #include <isc/sockaddr.h>
+@@ -142,6 +143,8 @@ sendquery(isc_task_t *task, isc_event_t *event) {
+ 	static char keystr[] = "0123456789ab";
+ 
+ 	isc_event_free(&event);
++	if (!isc_md5_available())
++		CHECK("MD5 was disabled", ISC_R_NOTIMPLEMENTED);
+ 
+ 	result = ISC_R_FAILURE;
+ 	if (inet_pton(AF_INET, "10.53.0.1", &inaddr) != 1)
+diff --git a/bin/tests/system/tkey/keydelete.c b/bin/tests/system/tkey/keydelete.c
+index bde66a4..70a40c3 100644
+--- a/bin/tests/system/tkey/keydelete.c
++++ b/bin/tests/system/tkey/keydelete.c
+@@ -225,12 +225,17 @@ main(int argc, char **argv) {
+ 	result = dst_key_fromnamedfile(keyname, NULL, type, mctx, &dstkey);
+ 	CHECK("dst_key_fromnamedfile", result);
+ #ifndef PK11_MD5_DISABLE
+-	result = dns_tsigkey_createfromkey(dst_key_name(dstkey),
+-					   DNS_TSIG_HMACMD5_NAME,
+-					   dstkey, true, NULL, 0, 0,
+-					   mctx, ring, &tsigkey);
+-	dst_key_free(&dstkey);
+-	CHECK("dns_tsigkey_createfromkey", result);
++	if (isc_md5_available()) {
++		result = dns_tsigkey_createfromkey(dst_key_name(dstkey),
++						   DNS_TSIG_HMACMD5_NAME,
++						   dstkey, true, NULL, 0, 0,
++						   mctx, ring, &tsigkey);
++		dst_key_free(&dstkey);
++		CHECK("dns_tsigkey_createfromkey", result);
++	} else {
++		dst_key_free(&dstkey);
++		CHECK("MD5 was disabled", ISC_R_NOTIMPLEMENTED);
++	}
+ #else
+ 	dst_key_free(&dstkey);
+ 	CHECK("MD5 was disabled", ISC_R_NOTIMPLEMENTED);
+diff --git a/lib/bind9/check.c b/lib/bind9/check.c
+index ec0ab6d..e0803d4 100644
+--- a/lib/bind9/check.c
++++ b/lib/bind9/check.c
+@@ -23,6 +23,7 @@
+ #include <isc/file.h>
+ #include <isc/hex.h>
+ #include <isc/log.h>
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/netaddr.h>
+ #include <isc/parseint.h>
+@@ -2618,6 +2619,15 @@ bind9_check_key(const cfg_obj_t *key, isc_log_t *logctx) {
+ 	}
+ 
+ 	algorithm = cfg_obj_asstring(algobj);
++#ifndef PK11_MD5_DISABLE
++	/* Skip hmac-md5* algorithms */
++	if (!isc_md5_available() &&
++	    strncasecmp(algorithm, "hmac-md5", 8) == 0) {
++		cfg_obj_log(algobj, logctx, ISC_LOG_ERROR,
++			    "disabled algorithm '%s'", algorithm);
++		return (ISC_R_DISABLED);
++	}
++#endif
+ 	for (i = 0; algorithms[i].name != NULL; i++) {
+ 		len = strlen(algorithms[i].name);
+ 		if (strncasecmp(algorithms[i].name, algorithm, len) == 0 &&
+diff --git a/lib/dns/dst_api.c b/lib/dns/dst_api.c
+index e3c47a9..320c0f8 100644
+--- a/lib/dns/dst_api.c
++++ b/lib/dns/dst_api.c
+@@ -192,6 +192,12 @@ dst_lib_init2(isc_mem_t *mctx, isc_entropy_t *ectx,
+ 	dst_result_register();
+ 
+ 	memset(dst_t_func, 0, sizeof(dst_t_func));
++
++#ifdef OPENSSL
++	RETERR(dst__openssl_init(engine));
++#elif PKCS11CRYPTO
++	RETERR(dst__pkcs11_init(mctx, engine));
++#endif
+ #ifndef PK11_MD5_DISABLE
+ 	RETERR(dst__hmacmd5_init(&dst_t_func[DST_ALG_HMACMD5]));
+ #endif
+@@ -201,7 +207,6 @@ dst_lib_init2(isc_mem_t *mctx, isc_entropy_t *ectx,
+ 	RETERR(dst__hmacsha384_init(&dst_t_func[DST_ALG_HMACSHA384]));
+ 	RETERR(dst__hmacsha512_init(&dst_t_func[DST_ALG_HMACSHA512]));
+ #ifdef OPENSSL
+-	RETERR(dst__openssl_init(engine));
+ #ifndef PK11_MD5_DISABLE
+ 	RETERR(dst__opensslrsa_init(&dst_t_func[DST_ALG_RSAMD5],
+ 				    DST_ALG_RSAMD5));
+@@ -235,14 +240,18 @@ dst_lib_init2(isc_mem_t *mctx, isc_entropy_t *ectx,
+ 	RETERR(dst__openssleddsa_init(&dst_t_func[DST_ALG_ED448]));
+ #endif
+ #elif PKCS11CRYPTO
+-	RETERR(dst__pkcs11_init(mctx, engine));
+ #ifndef PK11_MD5_DISABLE
+-	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_RSAMD5]));
++	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_RSAMD5],
++				   DST_ALG_RSAMD5));
+ #endif
+-	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_RSASHA1]));
+-	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_NSEC3RSASHA1]));
+-	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_RSASHA256]));
+-	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_RSASHA512]));
++	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_RSASHA1],
++				   DST_ALG_RSASHA1));
++	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_NSEC3RSASHA1],
++				   DST_ALG_NSEC3RSASHA1));
++	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_RSASHA256],
++				   DST_ALG_RSASHA256));
++	RETERR(dst__pkcs11rsa_init(&dst_t_func[DST_ALG_RSASHA512],
++				   DST_ALG_RSASHA512));
+ #ifndef PK11_DSA_DISABLE
+ 	RETERR(dst__pkcs11dsa_init(&dst_t_func[DST_ALG_DSA]));
+ 	RETERR(dst__pkcs11dsa_init(&dst_t_func[DST_ALG_NSEC3DSA]));
+diff --git a/lib/dns/dst_internal.h b/lib/dns/dst_internal.h
+index 6ee796c..3e55d44 100644
+--- a/lib/dns/dst_internal.h
++++ b/lib/dns/dst_internal.h
+@@ -250,7 +250,8 @@ isc_result_t dst__hmacsha384_init(struct dst_func **funcp);
+ isc_result_t dst__hmacsha512_init(struct dst_func **funcp);
+ isc_result_t dst__opensslrsa_init(struct dst_func **funcp,
+ 				  unsigned char algorithm);
+-isc_result_t dst__pkcs11rsa_init(struct dst_func **funcp);
++isc_result_t dst__pkcs11rsa_init(struct dst_func **funcp,
++				 unsigned char algorithm);
+ #ifndef PK11_DSA_DISABLE
+ isc_result_t dst__openssldsa_init(struct dst_func **funcp);
+ isc_result_t dst__pkcs11dsa_init(struct dst_func **funcp);
+diff --git a/lib/dns/dst_parse.c b/lib/dns/dst_parse.c
+index f31c33d..87023a6 100644
+--- a/lib/dns/dst_parse.c
++++ b/lib/dns/dst_parse.c
+@@ -33,6 +33,7 @@
+ #include <isc/file.h>
+ #include <isc/fsaccess.h>
+ #include <isc/lex.h>
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/print.h>
+ #include <isc/stdtime.h>
+@@ -396,6 +397,10 @@ check_data(const dst_private_t *priv, const unsigned int alg,
+ 	switch (alg) {
+ #ifndef PK11_MD5_DISABLE
+ 	case DST_ALG_RSAMD5:
++		if (isc_md5_available())
++			return (check_rsa(priv, external));
++		else
++			return (DST_R_UNSUPPORTEDALG);
+ #endif
+ 	case DST_ALG_RSASHA1:
+ 	case DST_ALG_NSEC3RSASHA1:
+@@ -421,7 +426,10 @@ check_data(const dst_private_t *priv, const unsigned int alg,
+ 		return (check_eddsa(priv, external));
+ #ifndef PK11_MD5_DISABLE
+ 	case DST_ALG_HMACMD5:
+-		return (check_hmac_md5(priv, old));
++		if (isc_md5_available())
++			return (check_hmac_md5(priv, old));
++		else
++			return (DST_R_UNSUPPORTEDALG);
+ #endif
+ 	case DST_ALG_HMACSHA1:
+ 		return (check_hmac_sha(priv, HMACSHA1_NTAGS, alg));
+@@ -640,11 +648,13 @@ dst__privstruct_parse(dst_key_t *key, unsigned int alg, isc_lex_t *lex,
+ 	}
+ 
+ #ifdef PK11_MD5_DISABLE
+-	check = check_data(priv, alg == DST_ALG_RSA ? DST_ALG_RSASHA1 : alg,
+-			   true, external);
++	if (alg == DST_ALG_RSA)
++		alg = DST_ALG_RSASHA1;
+ #else
+-	check = check_data(priv, alg, true, external);
++	if (!isc_md5_available() && alg == DST_ALG_RSA)
++		alg = DST_ALG_RSASHA1;
+ #endif
++	check = check_data(priv, alg, true, external);
+ 	if (check < 0) {
+ 		ret = DST_R_INVALIDPRIVATEKEY;
+ 		goto fail;
+diff --git a/lib/dns/hmac_link.c b/lib/dns/hmac_link.c
+index 3b6579b..4bdce2f 100644
+--- a/lib/dns/hmac_link.c
++++ b/lib/dns/hmac_link.c
+@@ -340,20 +340,10 @@ static dst_func_t hmacmd5_functions = {
+ 
+ isc_result_t
+ dst__hmacmd5_init(dst_func_t **funcp) {
+-#ifdef HAVE_FIPS_MODE
+-	/*
+-	 * Problems from OpenSSL are likely from FIPS mode
+-	 */
+-	int fips_mode = FIPS_mode();
+-
+-	if (fips_mode != 0) {
+-		UNEXPECTED_ERROR(__FILE__, __LINE__,
+-				 "FIPS mode is %d: MD5 is only supported "
+-				 "if the value is 0.\n"
+-				 "Please disable either FIPS mode or MD5.",
+-				 fips_mode);
+-	}
+-#endif
++
++	/* Intentionally skip initialization */
++	if (!isc_md5_available())
++		return (ISC_R_SUCCESS);
+ 
+ #if PK11_FLAVOR != PK11_UTIMACO_FLAVOR
+ 	/*
+diff --git a/lib/dns/opensslrsa_link.c b/lib/dns/opensslrsa_link.c
+index ec35f50..c80fabe 100644
+--- a/lib/dns/opensslrsa_link.c
++++ b/lib/dns/opensslrsa_link.c
+@@ -1812,6 +1812,12 @@ dst__opensslrsa_init(dst_func_t **funcp, unsigned char algorithm) {
+ 
+ 	if (*funcp == NULL) {
+ 		switch (algorithm) {
++#ifndef PK11_MD5_DISABLE
++		case DST_ALG_RSAMD5:
++			if (isc_md5_available())
++				*funcp = &opensslrsa_functions;
++			break;
++#endif
+ 		case DST_ALG_RSASHA256:
+ #if defined(HAVE_EVP_SHA256) || !USE_EVP
+ 			*funcp = &opensslrsa_functions;
+diff --git a/lib/dns/pkcs11rsa_link.c b/lib/dns/pkcs11rsa_link.c
+index 096c1a8..6c280bf 100644
+--- a/lib/dns/pkcs11rsa_link.c
++++ b/lib/dns/pkcs11rsa_link.c
+@@ -96,10 +96,15 @@ pkcs11rsa_createctx_sign(dst_key_t *key, dst_context_t *dctx) {
+ #endif
+ 
+ 	/*
+-	 * Reject incorrect RSA key lengths.
++	 * Reject incorrect RSA key lengths or disabled algorithms.
+ 	 */
+ 	switch (dctx->key->key_alg) {
+ 	case DST_ALG_RSAMD5:
++#ifndef PK11_MD5_DISABLE
++		if (!isc_md5_available())
++			return (ISC_R_FAILURE);
++#endif
++		/* FALLTHROUGH */
+ 	case DST_ALG_RSASHA1:
+ 	case DST_ALG_NSEC3RSASHA1:
+ 		/* From RFC 3110 */
+@@ -641,6 +646,9 @@ pkcs11rsa_createctx(dst_key_t *key, dst_context_t *dctx) {
+ 	switch (key->key_alg) {
+ #ifndef PK11_MD5_DISABLE
+ 	case DST_ALG_RSAMD5:
++		if (!isc_md5_available())
++			return (ISC_R_FAILURE);
++	
+ 		mech.mechanism = CKM_MD5;
+ 		break;
+ #endif
+@@ -799,6 +807,9 @@ pkcs11rsa_sign(dst_context_t *dctx, isc_buffer_t *sig) {
+ 	switch (key->key_alg) {
+ #ifndef PK11_MD5_DISABLE
+ 	case DST_ALG_RSAMD5:
++		if (!isc_md5_available())
++			return (ISC_R_FAILURE);
++
+ 		der = md5_der;
+ 		derlen = sizeof(md5_der);
+ 		hashlen = ISC_MD5_DIGESTLENGTH;
+@@ -1024,6 +1035,9 @@ pkcs11rsa_verify(dst_context_t *dctx, const isc_region_t *sig) {
+ 	switch (key->key_alg) {
+ #ifndef PK11_MD5_DISABLE
+ 	case DST_ALG_RSAMD5:
++		if (!isc_md5_available())
++			return (ISC_R_FAILURE);
++
+ 		der = md5_der;
+ 		derlen = sizeof(md5_der);
+ 		hashlen = ISC_MD5_DIGESTLENGTH;
+@@ -2231,11 +2245,22 @@ static dst_func_t pkcs11rsa_functions = {
+ };
+ 
+ isc_result_t
+-dst__pkcs11rsa_init(dst_func_t **funcp) {
++dst__pkcs11rsa_init(dst_func_t **funcp, unsigned char algorithm) {
+ 	REQUIRE(funcp != NULL);
+ 
+-	if (*funcp == NULL)
+-		*funcp = &pkcs11rsa_functions;
++	if (*funcp == NULL) {
++		switch (algorithm) {
++#ifndef PK11_MD5_DISABLE
++			case DST_ALG_RSAMD5:
++				if (isc_md5_available())
++					*funcp = &pkcs11rsa_functions;
++				break;
++#endif
++			default:
++				*funcp = &pkcs11rsa_functions;
++				break;
++		}
++	}
+ 	return (ISC_R_SUCCESS);
+ }
+ 
+diff --git a/lib/dns/rcode.c b/lib/dns/rcode.c
+index 9c42c50..f51d548 100644
+--- a/lib/dns/rcode.c
++++ b/lib/dns/rcode.c
+@@ -16,6 +16,7 @@
+ #include <stdbool.h>
+ 
+ #include <isc/buffer.h>
++#include <isc/md5.h>
+ #include <isc/parseint.h>
+ #include <isc/print.h>
+ #include <isc/region.h>
+@@ -357,17 +358,33 @@ dns_cert_totext(dns_cert_t cert, isc_buffer_t *target) {
+ 	return (dns_mnemonic_totext(cert, target, certs));
+ }
+ 
++static inline struct tbl *
++secalgs_tbl_start() {
++	struct tbl *algs = secalgs;
++
++#ifndef PK11_MD5_DISABLE
++	if (!isc_md5_available()) {
++		while (algs->name != NULL &&
++		       algs->value == DNS_KEYALG_RSAMD5)
++			++algs;
++	}
++#endif
++	return algs;
++}
++
+ isc_result_t
+ dns_secalg_fromtext(dns_secalg_t *secalgp, isc_textregion_t *source) {
+ 	unsigned int value;
+-	RETERR(dns_mnemonic_fromtext(&value, source, secalgs, 0xff));
++
++	RETERR(dns_mnemonic_fromtext(&value, source,
++	                             secalgs_tbl_start(), 0xff));
+ 	*secalgp = value;
+ 	return (ISC_R_SUCCESS);
+ }
+ 
+ isc_result_t
+ dns_secalg_totext(dns_secalg_t secalg, isc_buffer_t *target) {
+-	return (dns_mnemonic_totext(secalg, target, secalgs));
++	return (dns_mnemonic_totext(secalg, target, secalgs_tbl_start()));
+ }
+ 
+ void
+diff --git a/lib/dns/tests/rsa_test.c b/lib/dns/tests/rsa_test.c
+index f9ac6d0..241e17e 100644
+--- a/lib/dns/tests/rsa_test.c
++++ b/lib/dns/tests/rsa_test.c
+@@ -27,6 +27,7 @@
+ #define UNIT_TESTING
+ #include <cmocka.h>
+ 
++#include <isc/md5.h>
+ #include <isc/util.h>
+ #include <isc/print.h>
+ 
+@@ -248,6 +249,8 @@ isc_rsa_verify_test(void **state) {
+ 	/* RSAMD5 */
+ 
+ #ifndef PK11_MD5_DISABLE
++	if (isc_md5_available()) {
++		/* wrong indentation is kept for diff minimization */
+ 	key->key_alg = DST_ALG_RSAMD5;
+ 
+ 	ret = dst_context_create3(key, mctx, DNS_LOGCATEGORY_DNSSEC,
+@@ -265,6 +268,7 @@ isc_rsa_verify_test(void **state) {
+ 	assert_int_equal(ret, ISC_R_SUCCESS);
+ 
+ 	dst_context_destroy(&ctx);
++	}
+ #endif
+ 
+ 	/* RSASHA256 */
+diff --git a/lib/dns/tests/tsig_test.c b/lib/dns/tests/tsig_test.c
+index 11d011a..feb2068 100644
+--- a/lib/dns/tests/tsig_test.c
++++ b/lib/dns/tests/tsig_test.c
+@@ -25,6 +25,7 @@
+ #define UNIT_TESTING
+ #include <cmocka.h>
+ 
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/print.h>
+ #include <isc/util.h>
+diff --git a/lib/dns/tkey.c b/lib/dns/tkey.c
+index 89cfc79..d07364a 100644
+--- a/lib/dns/tkey.c
++++ b/lib/dns/tkey.c
+@@ -245,6 +245,9 @@ compute_secret(isc_buffer_t *shared, isc_region_t *queryrandomness,
+ 	unsigned char digests[32];
+ 	unsigned int i;
+ 
++	if (!isc_md5_available())
++		return (ISC_R_NOTIMPLEMENTED);
++
+ 	isc_buffer_usedregion(shared, &r);
+ 
+ 	/*
+@@ -321,6 +324,12 @@ process_dhtkey(dns_message_t *msg, dns_name_t *signer, dns_name_t *name,
+ 	}
+ 
+ #ifndef PK11_MD5_DISABLE
++	if (!isc_md5_available()) {
++		tkey_log("process_dhtkey: MD5 was disabled");
++		tkeyout->error = dns_tsigerror_badalg;
++		return (ISC_R_SUCCESS);
++	}
++
+ 	if (!dns_name_equal(&tkeyin->algorithm, DNS_TSIG_HMACMD5_NAME)) {
+ 		tkey_log("process_dhtkey: algorithms other than "
+ 			 "hmac-md5 are not supported");
+diff --git a/lib/dns/tsec.c b/lib/dns/tsec.c
+index 9d8ead4..0c82f65 100644
+--- a/lib/dns/tsec.c
++++ b/lib/dns/tsec.c
+@@ -11,6 +11,7 @@
+ 
+ #include <config.h>
+ 
++#include <isc/md5.h>
+ #include <isc/mem.h>
+ #include <isc/util.h>
+ 
+@@ -63,7 +64,12 @@ dns_tsec_create(isc_mem_t *mctx, dns_tsectype_t type, dst_key_t *key,
+ 		switch (dst_key_alg(key)) {
+ #ifndef PK11_MD5_DISABLE
+ 		case DST_ALG_HMACMD5:
+-			algname = dns_tsig_hmacmd5_name;
++			if (isc_md5_available()) {
++				algname = dns_tsig_hmacmd5_name;
++			} else {
++				isc_mem_put(mctx, tsec, sizeof(*tsec));
++				return (DNS_R_BADALG);
++			}
+ 			break;
+ #endif
+ 		case DST_ALG_HMACSHA1:
+diff --git a/lib/dns/tsig.c b/lib/dns/tsig.c
+index 58c1104..00ee1e1 100644
+--- a/lib/dns/tsig.c
++++ b/lib/dns/tsig.c
+@@ -273,7 +273,8 @@ dns_tsigkey_createfromkey(dns_name_t *name, dns_name_t *algorithm,
+ 	(void)dns_name_downcase(&tkey->name, &tkey->name, NULL);
+ 
+ #ifndef PK11_MD5_DISABLE
+-	if (dns_name_equal(algorithm, DNS_TSIG_HMACMD5_NAME)) {
++	if (dns_name_equal(algorithm, DNS_TSIG_HMACMD5_NAME) &&
++	    isc_md5_available()) {
+ 		tkey->algorithm = DNS_TSIG_HMACMD5_NAME;
+ 		if (dstkey != NULL && dst_key_alg(dstkey) != DST_ALG_HMACMD5) {
+ 			ret = DNS_R_BADALG;
+@@ -499,7 +500,8 @@ destroyring(dns_tsig_keyring_t *ring) {
+ static unsigned int
+ dst_alg_fromname(dns_name_t *algorithm) {
+ #ifndef PK11_MD5_DISABLE
+-	if (dns_name_equal(algorithm, DNS_TSIG_HMACMD5_NAME)) {
++	if (dns_name_equal(algorithm, DNS_TSIG_HMACMD5_NAME) &&
++	    isc_md5_available()) {
+ 		return (DST_ALG_HMACMD5);
+ 	} else
+ #endif
+@@ -683,7 +685,8 @@ dns_tsigkey_create(dns_name_t *name, dns_name_t *algorithm,
+ 		REQUIRE(secret != NULL);
+ 
+ #ifndef PK11_MD5_DISABLE
+-	if (dns_name_equal(algorithm, DNS_TSIG_HMACMD5_NAME)) {
++	if (dns_name_equal(algorithm, DNS_TSIG_HMACMD5_NAME) &&
++	    isc_md5_available()) {
+ 		if (secret != NULL) {
+ 			isc_buffer_t b;
+ 
+@@ -1291,7 +1294,7 @@ dns_tsig_verify(isc_buffer_t *source, dns_message_t *msg,
+ 		return (ret);
+ 	if (
+ #ifndef PK11_MD5_DISABLE
+-	    alg == DST_ALG_HMACMD5 ||
++	    (alg == DST_ALG_HMACMD5 && isc_md5_available()) ||
+ #endif
+ 	    alg == DST_ALG_HMACSHA1 ||
+ 	    alg == DST_ALG_HMACSHA224 || alg == DST_ALG_HMACSHA256 ||
+@@ -1460,7 +1463,7 @@ dns_tsig_verify(isc_buffer_t *source, dns_message_t *msg,
+ 
+ 	if (
+ #ifndef PK11_MD5_DISABLE
+-	    alg == DST_ALG_HMACMD5 ||
++	    (alg == DST_ALG_HMACMD5 && isc_md5_available()) ||
+ #endif
+ 	    alg == DST_ALG_HMACSHA1 ||
+ 	    alg == DST_ALG_HMACSHA224 || alg == DST_ALG_HMACSHA256 ||
+@@ -1601,7 +1604,7 @@ tsig_verify_tcp(isc_buffer_t *source, dns_message_t *msg) {
+ 			goto cleanup_querystruct;
+ 		if (
+ #ifndef PK11_MD5_DISABLE
+-			alg == DST_ALG_HMACMD5 ||
++			(alg == DST_ALG_HMACMD5 && isc_md5_available()) ||
+ #endif
+ 			alg == DST_ALG_HMACSHA1 ||
+ 			alg == DST_ALG_HMACSHA224 ||
+@@ -1780,7 +1783,7 @@ tsig_verify_tcp(isc_buffer_t *source, dns_message_t *msg) {
+ 			goto cleanup_context;
+ 		if (
+ #ifndef PK11_MD5_DISABLE
+-			alg == DST_ALG_HMACMD5 ||
++			(alg == DST_ALG_HMACMD5 && isc_md5_available()) ||
+ #endif
+ 			alg == DST_ALG_HMACSHA1 ||
+ 			alg == DST_ALG_HMACSHA224 ||
+diff --git a/lib/isc/include/isc/md5.h b/lib/isc/include/isc/md5.h
+index 4d29398..e3f5cec 100644
+--- a/lib/isc/include/isc/md5.h
++++ b/lib/isc/include/isc/md5.h
+@@ -91,6 +91,9 @@ isc_md5_final(isc_md5_t *ctx, unsigned char *digest);
+ bool
+ isc_md5_check(bool testing);
+ 
++bool
++isc_md5_available(void);
++
+ ISC_LANG_ENDDECLS
+ 
+ #endif /* !PK11_MD5_DISABLE */
+diff --git a/lib/isc/md5.c b/lib/isc/md5.c
+index 249f3da..628a414 100644
+--- a/lib/isc/md5.c
++++ b/lib/isc/md5.c
+@@ -37,6 +37,7 @@
+ 
+ #include <isc/assertions.h>
+ #include <isc/md5.h>
++#include <isc/once.h>
+ #include <isc/platform.h>
+ #include <isc/safe.h>
+ #include <isc/string.h>
+@@ -54,6 +55,9 @@
+ #define EVP_MD_CTX_free(ptr) EVP_MD_CTX_cleanup(ptr)
+ #endif
+ 
++static isc_once_t available_once = ISC_ONCE_INIT;
++static bool available = false;
++
+ void
+ isc_md5_init(isc_md5_t *ctx) {
+ 	ctx->ctx = EVP_MD_CTX_new();
+@@ -85,8 +89,33 @@ isc_md5_final(isc_md5_t *ctx, unsigned char *digest) {
+ 	ctx->ctx = NULL;
+ }
+ 
++static void
++do_detect_available() {
++	isc_md5_t local;
++	isc_md5_t *ctx = &local;
++	unsigned char digest[ISC_MD5_DIGESTLENGTH];
++
++	ctx->ctx = EVP_MD_CTX_new();
++	RUNTIME_CHECK(ctx->ctx != NULL);
++	available = (EVP_DigestInit(ctx->ctx, EVP_md5()) == 1);
++	if (available)
++		(void)EVP_DigestFinal(ctx->ctx, digest, NULL);
++	EVP_MD_CTX_free(ctx->ctx);
++	ctx->ctx = NULL;
++}
++
++bool
++isc_md5_available() {
++	RUNTIME_CHECK(isc_once_do(&available_once, do_detect_available)
++		      == ISC_R_SUCCESS);
++	return available;
++}
++
+ #elif PKCS11CRYPTO
+ 
++static isc_once_t available_once = ISC_ONCE_INIT;
++static bool available = false;
++
+ void
+ isc_md5_init(isc_md5_t *ctx) {
+ 	CK_RV rv;
+@@ -129,6 +158,31 @@ isc_md5_final(isc_md5_t *ctx, unsigned char *digest) {
+ 	pk11_return_session(ctx);
+ }
+ 
++static void
++do_detect_available() {
++	isc_md5_t local;
++	isc_md5_t *ctx = &local;
++	CK_RV rv;
++	CK_MECHANISM mech = { CKM_MD5, NULL, 0 };
++
++	if (pk11_get_session(ctx, OP_DIGEST, true, false,
++				       false, NULL, 0) == ISC_R_SUCCESS)
++	{
++		rv = pkcs_C_DigestInit(ctx->session, &mech);
++		isc_md5_invalidate(ctx);
++		available = (rv == CKR_OK);
++	} else {
++		available = false;
++	}
++}
++
++bool
++isc_md5_available() {
++	RUNTIME_CHECK(isc_once_do(&available_once, do_detect_available)
++		      == ISC_R_SUCCESS);
++	return available;
++}
++
+ #else
+ 
+ static void
+@@ -338,6 +392,11 @@ isc_md5_final(isc_md5_t *ctx, unsigned char *digest) {
+ 	memmove(digest, ctx->buf, 16);
+ 	isc_safe_memwipe(ctx, sizeof(*ctx));	/* In case it's sensitive */
+ }
++
++bool
++isc_md5_available() {
++	return true;
++}
+ #endif
+ 
+ /*
+diff --git a/lib/isc/pk11.c b/lib/isc/pk11.c
+index 0d5b009..7809e7b 100644
+--- a/lib/isc/pk11.c
++++ b/lib/isc/pk11.c
+@@ -197,8 +197,6 @@ pk11_initialize(isc_mem_t *mctx, const char *engine) {
+ 	UNLOCK(&alloclock);
+ 	if (initialized) {
+ 		goto unlock;
+-	} else {
+-		initialized = true;
+ 	}
+ 
+ 	ISC_LIST_INIT(tokens);
+@@ -238,6 +236,7 @@ pk11_initialize(isc_mem_t *mctx, const char *engine) {
+ 	}
+ #endif
+ #endif /* PKCS11CRYPTO */
++	initialized = true;
+  unlock:
+ 	UNLOCK(&sessionlock);
+ 	return (result);
+@@ -589,6 +588,8 @@ scan_slots(void) {
+ 	pk11_token_t *token;
+ 	unsigned int i;
+ 	bool bad;
++	unsigned int best_rsa_algorithms = 0;
++	unsigned int best_digest_algorithms = 0;
+ 
+ 	slotCount = 0;
+ 	PK11_FATALCHECK(pkcs_C_GetSlotList, (CK_FALSE, NULL_PTR, &slotCount));
+@@ -601,6 +602,8 @@ scan_slots(void) {
+ 	PK11_FATALCHECK(pkcs_C_GetSlotList, (CK_FALSE, slotList, &slotCount));
+ 
+ 	for (i = 0; i < slotCount; i++) {
++		unsigned int rsa_algorithms = 0;
++		unsigned int digest_algorithms = 0;
+ 		slot = slotList[i];
+ 		PK11_TRACE2("slot#%u=0x%lx\n", i, slot);
+ 
+@@ -640,11 +643,12 @@ scan_slots(void) {
+ 		if ((rv != CKR_OK) ||
+ 		    ((mechInfo.flags & CKF_SIGN) == 0) ||
+ 		    ((mechInfo.flags & CKF_VERIFY) == 0)) {
+-#if !defined(PK11_MD5_DISABLE) && !defined(PK11_RSA_PKCS_REPLACE)
+-			bad = true;
+-#endif
+ 			PK11_TRACEM(CKM_MD5_RSA_PKCS);
+ 		}
++#if !defined(PK11_MD5_DISABLE) && !defined(PK11_RSA_PKCS_REPLACE)
++		else
++			++rsa_algorithms;
++#endif
+ 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA1_RSA_PKCS,
+ 					     &mechInfo);
+ 		if ((rv != CKR_OK) ||
+@@ -687,8 +691,14 @@ scan_slots(void) {
+ 		if (bad)
+ 			goto try_dsa;
+ 		token->operations |= 1 << OP_RSA;
+-		if (best_rsa_token == NULL)
++		if (best_rsa_token == NULL) {
+ 			best_rsa_token = token;
++			best_rsa_algorithms = rsa_algorithms;
++		} else if (rsa_algorithms > best_rsa_algorithms) {
++			pk11_mem_put(best_rsa_token, sizeof(*best_rsa_token));
++			best_rsa_token = token;
++			best_rsa_algorithms = rsa_algorithms;
++		}
+ 
+ 	try_dsa:
+ 		bad = false;
+@@ -756,11 +766,12 @@ scan_slots(void) {
+ 		bad = false;
+ 		rv = pkcs_C_GetMechanismInfo(slot, CKM_MD5, &mechInfo);
+ 		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0)) {
+-#ifndef PK11_MD5_DISABLE
+-			bad = true;
+-#endif
+ 			PK11_TRACEM(CKM_MD5);
+ 		}
++#ifndef PK11_MD5_DISABLE
++		else
++			++digest_algorithms;
++#endif
+ 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA_1, &mechInfo);
+ 		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_DIGEST) == 0)) {
+ 			bad = true;
+@@ -788,11 +799,12 @@ scan_slots(void) {
+ 		}
+ 		rv = pkcs_C_GetMechanismInfo(slot, CKM_MD5_HMAC, &mechInfo);
+ 		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0)) {
+-#if !defined(PK11_MD5_DISABLE) && !defined(PK11_MD5_HMAC_REPLACE)
+-			bad = true;
+-#endif
+ 			PK11_TRACEM(CKM_MD5_HMAC);
+ 		}
++#if !defined(PK11_MD5_DISABLE) && !defined(PK11_MD5_HMAC_REPLACE)
++		else
++			++digest_algorithms;
++#endif
+ 		rv = pkcs_C_GetMechanismInfo(slot, CKM_SHA_1_HMAC, &mechInfo);
+ 		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0)) {
+ #ifndef PK11_SHA_1_HMAC_REPLACE
+@@ -830,8 +842,14 @@ scan_slots(void) {
+ 		}
+ 		if (!bad) {
+ 			token->operations |= 1 << OP_DIGEST;
+-			if (digest_token == NULL)
++			if (digest_token == NULL) {
+ 				digest_token = token;
++				best_digest_algorithms = digest_algorithms;
++			} else if (digest_algorithms > best_digest_algorithms) {
++				pk11_mem_put(digest_token, sizeof(*digest_token));
++				digest_token = token;
++				best_digest_algorithms = digest_algorithms;
++			}
+ 		}
+ 
+ 		/* ECDSA requires digest */
+diff --git a/lib/isc/tests/hash_test.c b/lib/isc/tests/hash_test.c
+index 31ced94..421131e 100644
+--- a/lib/isc/tests/hash_test.c
++++ b/lib/isc/tests/hash_test.c
+@@ -775,6 +775,9 @@ isc_md5_test(void **state) {
+ 
+ 	UNUSED(state);
+ 
++	if (!isc_md5_available())
++		return;
++
+ 	/*
+ 	 * These are the various test vectors.  All of these are passed
+ 	 * through the hash function and the results are compared to the
+@@ -1630,6 +1633,9 @@ isc_hmacmd5_test(void **state) {
+ 
+ 	UNUSED(state);
+ 
++	if (!isc_md5_available())
++		return;
++
+ 	/*
+ 	 * These are the various test vectors.  All of these are passed
+ 	 * through the hash function and the results are compared to the
+@@ -1940,6 +1946,9 @@ static void
+ md5_check_test(void **state) {
+ 	UNUSED(state);
+ 
++	if (!isc_md5_available())
++		return;
++
+ 	assert_true(isc_md5_check(false));
+ 	assert_false(isc_md5_check(true));
+ 
+diff --git a/lib/isccc/cc.c b/lib/isccc/cc.c
+index c2740cb..c314d76 100644
+--- a/lib/isccc/cc.c
++++ b/lib/isccc/cc.c
+@@ -272,11 +272,15 @@ sign(unsigned char *data, unsigned int length, unsigned char *hmac,
+ 	switch (algorithm) {
+ #ifndef PK11_MD5_DISABLE
+ 	case ISCCC_ALG_HMACMD5:
+-		isc_hmacmd5_init(&ctx.hmd5, secret->rstart,
+-				 REGION_SIZE(*secret));
+-		isc_hmacmd5_update(&ctx.hmd5, data, length);
+-		isc_hmacmd5_sign(&ctx.hmd5, digest);
+-		source.rend = digest + ISC_MD5_DIGESTLENGTH;
++		if (isc_md5_available()) {
++			isc_hmacmd5_init(&ctx.hmd5, secret->rstart,
++					 REGION_SIZE(*secret));
++			isc_hmacmd5_update(&ctx.hmd5, data, length);
++			isc_hmacmd5_sign(&ctx.hmd5, digest);
++			source.rend = digest + ISC_MD5_DIGESTLENGTH;
++		} else {
++			return (ISC_R_FAILURE);
++		}
+ 		break;
+ #endif
+ 
+@@ -350,14 +354,18 @@ isccc_cc_towire(isccc_sexpr_t *alist, isc_buffer_t **buffer,
+ {
+ 	unsigned int hmac_base, signed_base;
+ 	isc_result_t result;
++	const bool md5 = (algorithm == ISCCC_ALG_HMACMD5);
+ 
+ #ifndef PK11_MD5_DISABLE
++	if (md5 && !isc_md5_available())
++		return (ISC_R_NOTIMPLEMENTED);
++
+ 	result = isc_buffer_reserve(buffer,
+-				    4 + ((algorithm == ISCCC_ALG_HMACMD5) ?
++				    4 + ((md5) ?
+ 					 sizeof(auth_hmd5) :
+ 					 sizeof(auth_hsha)));
+ #else
+-	if (algorithm == ISCCC_ALG_HMACMD5)
++	if (md5)
+ 		return (ISC_R_NOTIMPLEMENTED);
+ 	result = isc_buffer_reserve(buffer, 4 + sizeof(auth_hsha));
+ #endif
+@@ -376,7 +384,7 @@ isccc_cc_towire(isccc_sexpr_t *alist, isc_buffer_t **buffer,
+ 		 * we know what it is.
+ 		 */
+ #ifndef PK11_MD5_DISABLE
+-		if (algorithm == ISCCC_ALG_HMACMD5) {
++		if (md5) {
+ 			hmac_base = (*buffer)->used + HMD5_OFFSET;
+ 			isc_buffer_putmem(*buffer,
+ 					  auth_hmd5, sizeof(auth_hmd5));
+@@ -442,7 +450,7 @@ verify(isccc_sexpr_t *alist, unsigned char *data, unsigned int length,
+ 	if (!isccc_alist_alistp(_auth))
+ 		return (ISC_R_FAILURE);
+ #ifndef PK11_MD5_DISABLE
+-	if (algorithm == ISCCC_ALG_HMACMD5)
++	if (algorithm == ISCCC_ALG_HMACMD5 && isc_md5_available())
+ 		hmac = isccc_alist_lookup(_auth, "hmd5");
+ 	else
+ #endif
+@@ -457,12 +465,16 @@ verify(isccc_sexpr_t *alist, unsigned char *data, unsigned int length,
+ 	switch (algorithm) {
+ #ifndef PK11_MD5_DISABLE
+ 	case ISCCC_ALG_HMACMD5:
+-		isc_hmacmd5_init(&ctx.hmd5, secret->rstart,
+-				 REGION_SIZE(*secret));
+-		isc_hmacmd5_update(&ctx.hmd5, data, length);
+-		isc_hmacmd5_sign(&ctx.hmd5, digest);
+-		source.rend = digest + ISC_MD5_DIGESTLENGTH;
+-		break;
++		if (isc_md5_available()) {
++			isc_hmacmd5_init(&ctx.hmd5, secret->rstart,
++					 REGION_SIZE(*secret));
++			isc_hmacmd5_update(&ctx.hmd5, data, length);
++			isc_hmacmd5_sign(&ctx.hmd5, digest);
++			source.rend = digest + ISC_MD5_DIGESTLENGTH;
++			break;
++		} else {
++			return (ISC_R_FAILURE);
++		}
+ #endif
+ 
+ 	case ISCCC_ALG_HMACSHA1:
+-- 
+2.20.1
+
