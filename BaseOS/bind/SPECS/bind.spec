@@ -63,7 +63,7 @@ Summary:  The Berkeley Internet Name Domain (BIND) DNS (Domain Name System) serv
 Name:     bind
 License:  MPLv2.0
 Version:  9.11.13
-Release:  3%{?PATCHVER:.%{PATCHVER}}%{?PREVER:.%{PREVER}}%{?dist}
+Release:  3%{?PATCHVER:.%{PATCHVER}}%{?PREVER:.%{PREVER}}%{?dist}.redsleeve
 Epoch:    32
 Url:      http://www.isc.org/products/BIND/
 #
@@ -166,6 +166,9 @@ Patch135:bind-9.11-export-isc-config.patch
 # needs inpection
 Patch17: bind-9.3.2b1-fix_sdb_ldap.patch
 Patch18: bind-9.11-zone2ldap.patch
+
+# redsleeve
+Patch1000: bind-9.11-atomic-test.patch
 
 Requires(post):   systemd
 Requires(preun):  systemd
@@ -554,6 +557,8 @@ cp -fp contrib/sdb/sqlite/zone2sqlite.c bin/sdb_tools
 
 %patch133 -p1 -b .rh640538
 %patch134 -p1 -b .rh669163
+
+%patch1000 -p1 -b .atomic_config
 
 # Sparc and s390 arches need to use -fPIE
 %ifarch sparcv9 sparc64 s390 s390x
@@ -1486,6 +1491,9 @@ rm -rf ${RPM_BUILD_ROOT}
 
 
 %changelog
+* Sat Jun 20 2020 Jacco Ligthart <jacco@redsleeve.org> - 32:9.11.13-3.redsleeve
+- changed configure to get the desired atomic status
+
 * Thu Feb 27 2020 Miroslav Lichvar <mlichvar@redhat.com> - 32:9.11.13-3
 - Fix rwlock to be thread-safe (#1740511)
 
