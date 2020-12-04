@@ -6,7 +6,7 @@ x509_extensions = myexts
 
 [ req_distinguished_name ]
 O = CentOS
-CN = CentOS Linux kernel signing key
+CN = CentOS kernel signing key
 emailAddress = security@centos.org
 
 [ myexts ]

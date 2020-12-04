@@ -1,12 +1,12 @@
---- a/kernel/rh_taint.c	2019-05-25 14:06:27.474558423 -0700
-+++ b/kernel/rh_taint.c	2019-05-25 14:25:53.471345832 -0700
+--- a/kernel/rh_taint.c	2020-10-16 10:41:51.000000000 -0500
++++ b/kernel/rh_taint.c	2020-11-19 10:50:24.853039167 -0600
 @@ -2,12 +2,12 @@
  #include <linux/module.h>
  
  /*
 - * The following functions are used by Red Hat to indicate to users that
 - * hardware and drivers are unsupported, or have limited support in RHEL major
-+ * The following functions are used by CentOS to indicate to users that
++ * The following functions are used by CentOS Linux to indicate to users that
 + * hardware and drivers are unsupported, or have limited support in CentOS Linux major
   * and minor releases.  These functions output loud warning messages to the end
   * user and should be USED WITH CAUTION.
@@ -22,16 +22,16 @@
   * Called to mark a device, class of devices, or types of devices as not having
 - * support in any RHEL minor release.  This does not TAINT the kernel.  Red Hat
 - * will not fix bugs against this hardware in this minor release.  Red Hat may
-+ * support in any CentOS Linux minor release.  This does not TAINT the kernel. CentOS 
-+ * will not fix bugs against this hardware in this minor release.  CentOS may
++ * support in any CentOS Linux minor release.  This does not TAINT the kernel.  CentOS Linux
++ * will not fix bugs against this hardware in this minor release.  CentOS Linux may
   * declare support in a future major or minor update release.  This cannot be
   * used to mark drivers unsupported.
   */
  void mark_hardware_unsupported(const char *msg)
  {
  	/* Print one single message */
--	pr_crit("Warning: %s - this hardware has not undergone testing by Red Hat and might not be certified. Please consult https://hardware.redhat.com for certified hardware.\n", msg);
-+	pr_crit("Warning: %s - this hardware has not undergone upstream testing. Please consult http://wiki.centos.org/FAQ for more information\n", msg);
+-	pr_crit("Warning: %s - this hardware has not undergone testing by Red Hat and might not be certified. Please consult https://catalog.redhat.com for certified hardware.\n", msg);
++	pr_crit("Warning: %s - this hardware has not undergone testing by CentOS Linux and might not be certified. Please consult https://catalog.redhat.com for certified hardware.\n", msg);
  }
  EXPORT_SYMBOL(mark_hardware_unsupported);
  
@@ -46,7 +46,7 @@
  void mark_hardware_deprecated(const char *msg)
  {
 -	pr_crit("Warning: %s - this hardware is not recommended for new deployments. It continues to be supported in this RHEL release, but it is likely to be removed in the next major release. Driver updates and fixes for this device will be limited to critical issues. Please contact Red Hat Support or your device's hardware vendor for additional information.\n", msg);
-+	pr_crit("Warning: %s - this hardware is not recommended for new deployments. It continues to be supported in this CentOS Linux release, but it is likely to be removed in the next major release. Driver updates and fixes for this device will be limited to critical issues. Please contact CentOS Support or your device's hardware vendor for additional information.\n", msg);
++	pr_crit("Warning: %s - this hardware is not recommended for new deployments. It continues to be supported in this CentOS Linux release, but it is likely to be removed in the next major release. Driver updates and fixes for this device will be limited to critical issues. Please contact CentOS Linux Support or your device's hardware vendor for additional information.\n", msg);
  }
  EXPORT_SYMBOL(mark_hardware_deprecated);
  
@@ -59,7 +59,7 @@
 - * this driver.  Red Hat does not guarantee that bugs reported against this
 + * had limited testing and is not marked for full support within this CentOS Linux
 + * minor release.  The next CentOS Linux minor release may contain full support for
-+ * this driver.  CentOS does not guarantee that bugs reported against this
++ * this driver.  CentOS Linux does not guarantee that bugs reported against this
   * driver or subsystem will be resolved.
   */
  void mark_tech_preview(const char *msg, struct module *mod)
@@ -68,14 +68,14 @@
   * @name: the name of the driver
   *
 - * In some cases Red Hat has chosen to build a driver for internal QE
-+ * In some cases CentOS has chosen to build a driver for internal QE
++ * In some cases CentOS Linux has chosen to build a driver for internal QE
   * use. Use this function to mark those drivers as unsupported for
   * customers.
   */
  void mark_driver_unsupported(const char *name)
  {
 -	pr_crit("Warning: %s - This driver has not undergone sufficient testing by Red Hat for this release and therefore cannot be used in production systems.\n",
-+	pr_crit("Warning: %s - This driver has not undergone sufficient testing by CentOS for this release and therefore cannot be used in production systems.\n",
++	pr_crit("Warning: %s - This driver has not undergone sufficient testing by CentOS Linux for this release and therefore cannot be used in production systems.\n",
  	        name ? name : "kernel");
  }
  EXPORT_SYMBOL(mark_driver_unsupported);
