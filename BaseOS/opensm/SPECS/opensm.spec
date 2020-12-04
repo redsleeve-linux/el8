@@ -1,8 +1,8 @@
 %global __remake_config 1
 
 Name:    opensm
-Version: 3.3.22
-Release: 2%{?dist}
+Version: 3.3.23
+Release: 1%{?dist}
 Summary: OpenIB InfiniBand Subnet Manager and management utilities
 Group:   System Environment/Daemons
 License: GPLv2 or BSD
@@ -15,11 +15,6 @@ Source5: opensm.service
 Source6: opensm.launch
 Source7: opensm.rwtab
 Source8: opensm.partitions
-
-Patch1:  0001-osm_opensm.c-Fix-use-of-enum-as-NULL-pointer-in-osm_.patch
-Patch2:  0003-osm_-port-ucast_ftree-.c-Remove-unused-static-functi.patch
-Patch3:  0002-osm_ucast_ftree.c-Fix-clang-warning-about-empty-loop.patch
-Patch4:  0008-ib_types-Drop-packed-attribute-where-unnecessary.patch
 
 BuildRequires: libibumad-devel, systemd, systemd-units
 BuildRequires: bison, flex, byacc, gcc
@@ -65,10 +60,6 @@ Static version of opensm libraries
 
 %prep
 %setup -q
-%patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
 
 %build
 %if %{__remake_config}
@@ -134,6 +125,10 @@ fi
 %{_libdir}/lib*.a
 
 %changelog
+* Wed Apr 15 2020 Honggang Li <honli@redhat.com> - 3.3.23-1
+- Rebase to latest upstream release 3.3.23
+- Resolves: bz1815960
+
 * Thu May 30 2019 Honggang Li <honli@redhat.com> - 3.3.22-2
 - Onboard gating configuration
 - Resolves: bz1682401
