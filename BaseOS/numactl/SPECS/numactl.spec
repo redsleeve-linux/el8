@@ -1,7 +1,7 @@
 Name:		numactl
 Summary:	Library for tuning for Non Uniform Memory Access machines
 Version:	2.0.12
-Release:	9%{?dist}
+Release:	11%{?dist}
 # libnuma is LGPLv2 and GPLv2
 # numactl binaries are GPLv2 only
 License:	GPLv2
@@ -47,6 +47,8 @@ Patch607 :0007-Fix-Add-ShmemHugePages-and-ShmemPmdMapped-to-system_.patch
 Patch608 :0008-memhog-add-man-page.patch
 Patch609: 0009-numastat.8-clarify-that-information-relates-to-resid.patch
 Patch610: 0010-Fix-crashes-when-using-the-touch-option.patch
+Patch611: 0011-Added-memhog.8-to-Makefile.am.patch 
+Patch612: 0012-Update-manpage-description-of-localalloc-option.patch
 
 
 
@@ -87,6 +89,8 @@ Provides development headers for numa library calls
 %patch608 -p1
 %patch609 -p1
 %patch610 -p1
+%patch611 -p1
+%patch612 -p1
 
 
 %build
@@ -132,6 +136,12 @@ make DESTDIR=$RPM_BUILD_ROOT install
 %{_mandir}/man3/*.3*
 
 %changelog
+* Sat May  9 2020 Pingfan Liu <piliu@redhat.com> - 2.0.12-11
+- Update manpage description of --localalloc option
+
+* Fri Mar 13 2020 Pingfan Liu <piliu@redhat.com> - 2.0.12-10
+- memhog : add man page
+
 * Mon Apr  1 2019 Pingfan Liu <piliu@redhat.com> - 2.0.12-3
 - add gating test cases
 
