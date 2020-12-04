@@ -28,6 +28,12 @@
 # relocations against absolute symbols.
 %define default_generate_notes 0
 
+# Enable thread support in the GOLD linker (if it is being built).  This is
+# particularly important if plugins to the linker intend to use threads
+# themselves.  See BZ 1636479 for more details.  This option is made
+# configurable in case there is ever a need to disable thread support.
+%define enable_threading 1
+
 #----End of Configure Options------------------------------------------------
 
 # Default: Not bootstrapping.
@@ -63,7 +69,7 @@
 Summary: A GNU collection of binary utilities
 Name: %{?cross}binutils%{?_with_debug:-debug}
 Version: 2.30
-Release: 58%{?dist}.0.1
+Release: 79%{?dist}
 License: GPLv3+
 URL: https://sourceware.org/binutils
 
@@ -380,9 +386,97 @@ Patch56: binutils-AArch64-gold.patch
 # Lifetime: Fixed in 2.33
 Patch57: binutils-multiple-relocs-for-same-section.patch
 
-# Purpose:  Allow OS specific sections in section groups.
-# Lifetime: Might be fixed in 2.33
-Patch9999: binutils-special-sections-in-groups.patch
+# Purpose:  Stop the linker from merging groups which have different settings
+#           of the SHF_EXCLUDE flag.
+# Lifetime: Fixed in 2.33
+Patch58: binutils-do-not-merge-differing-SHF_EXCLUDE-groups.patch
+
+# Purpose:  Add support for the SVE variant PCS in AArch64.
+# Lifetime: Fixed in 2.33
+Patch59: binutils-aarch64-STO_AARCH64_VARIANT_PCS.patch
+
+# Purpose:  Add fixes and markers for Coverity test failures.
+# Lifetime: Permanent.
+Patch60: binutils-coverity-fixes.patch
+
+# Purpose:  Improve objcopy's merging of GNU build attribute notes.
+# Lifetime: Fixed in 2.33
+Patch61: binutils-improved-note-merging.patch
+
+# Purpose: Add check to readelf in order to prevent an integer overflow.
+# Lifetime: Fixed in 2.33
+Patch62: binutils-CVE-2019-14444.patch
+
+# Purpose: Fix a seg-fault in gold when linking corrupt input files.
+# Lifetime: Fixed in 2.34 (maybe)
+Patch63: binutils-CVE-2019-1010204.patch
+
+# Purpose: Add a feature to the x86/64 assembler to create
+#           workarounds for the Intel Jcc Erratum.
+# Lifetime: Fixed in 2.34
+Patch64: binutils-x86_JCC_Erratum.patch
+
+# Purpose:  Fix a potential seg-fault in the BFD library when parsing
+#            pathalogical debug_info sections.
+# Lifetime: Fixed in 2.34 
+Patch65: binutils-CVE-2019-17451.patch
+
+# Purpose:  Fix a memory exhaustion bug in the BFD library when parsing
+#            corrupt DWARF debug information.
+# Lifetime: Fixed in 2.34 
+Patch66: binutils-CVE-2019-17450.patch
+
+# Purpose:  Allow the BFD library to handle the copying of files which
+#            contain secondary reloc sections.
+# Lifetime: Fixed in 2.35 
+Patch67: binutils-copy-multiple-relocs.patch
+
+# Purpose:  Stop the BFD library from issueing warning messages about allocated
+#            sections being found outside of loadable segments, if they are
+#            found inside debuginfo files.
+# Lifetime: Fixed in 2.33
+Patch68: binutils-do-not-warn-about-debuginfo-files.patch
+
+# Purpose:  Fix failures in the linker testsuite for the s390-linux target.
+# Lifetime: Fixed in 2.33
+Patch69: binutils-s390-ld-test-fixes.patch
+
+# Purpose:  Fix failures in the linker testsuite for the s390-linux target.
+# Lifetime: Fixed in 2.33
+Patch70: binutils-aarch64-ld-test-fixes.patch
+
+# Purpose:  Fix building the binutils with address sanitization enabled.
+# Lifetime: Fixed in 2.33
+Patch71: binutils-sanitize-uses-dlsym.patch
+
+# Purpose:  Fix building the binutils with address sanitization enabled.
+# Lifetime: Fixed in 2.33
+Patch72: binutils-PT_GNU_PROPERTY-segment.patch
+
+# Purpose:  Stop gold from aborting when input sections with the same name
+#            have different flags.
+# Lifetime: 2.33 (probably)
+Patch73: binutils-gold-mismatched-section-flags.patch
+
+# Purpose:  Stop objcopy's --set-section-flag option from accepting the
+#            'shared' flag on non-COFF binaries.
+# Lifetime: Fixed in 2.34
+Patch74: binutils-objcopy-set-section-flags-shared.patch
+
+# Purpose:  Prevent the s/390 linker from rewriting the GOT access
+#            for certain symbols.
+# Lifetime: Fixed in 2.32
+Patch75: binutils-s390x-prevent-GOT-rewrite.patch
+
+# Purpose:  Have the s/390 assembler include alignment hints in vector
+#           instructions.
+# Lifetime: Fixed in 2.35
+Patch76: binutils-s390-alignment-hints.patch
+
+# Purpose:  Fix the x86 assembler so that it does not scale non-8-bit
+#            displacements.
+# Lifetime: Fixed in 2.32
+Patch77: binutils-x86-gas-scaled-8-bit-displacements.patch
 
 #----------------------------------------------------------------------------
 
@@ -565,10 +659,26 @@ using libelf instead of BFD.
 %patch55 -p1
 %patch56 -p1
 %patch57 -p1
-
-%ifarch %{arm}
-%patch9999 -p1
-%endif
+%patch58 -p1
+%patch59 -p1
+%patch60 -p1
+%patch61 -p1
+%patch62 -p1
+%patch63 -p1
+%patch64 -p1
+%patch65 -p1
+%patch66 -p1
+%patch67 -p1
+%patch68 -p1
+%patch69 -p1
+%patch70 -p1
+%patch71 -p1
+%patch72 -p1
+%patch73 -p1
+%patch74 -p1
+%patch75 -p1
+%patch76 -p1
+%patch77 -p1
 
 # We cannot run autotools as there is an exact requirement of autoconf-2.59.
 # FIXME - this is no longer true.  Maybe try reinstating autotool use ?
@@ -710,6 +820,11 @@ export LDFLAGS=$RPM_LD_FLAGS
   --enable-generate-build-notes=yes \
 %else
   --enable-generate-build-notes=no \
+%endif
+%if %{enable_threading}
+  --enable-threads=yes \
+%else
+  --enable-threads=no \
 %endif
   $CARGS \
   --enable-plugins \
@@ -1001,11 +1116,76 @@ exit 0
 
 #----------------------------------------------------------------------------
 %changelog
-* Fri Jan 10 2020 bstinson@centosproject.org - 2.30-58.0.1
-- Rebuild to allow us to obsolete erroneously released i686 packages
+* Fri Aug 21 2020 Nick Clifton  <nickc@redhat.com> - 2.30-79
+- Fix x86 assembler's handling of non-8-bit displacements.  (#1869401)
 
-* Wed Nov  6 2019 Pablo Greco <pgreco@centosproject.org> - 2.30-58
-- Fix bad linking in armhfp
+* Thu Aug 20 2020 Nick Clifton  <nickc@redhat.com> - 2.30-77
+- Add tests missing from PT_GNU_SEGMENT patch.  (#1870039)
+
+* Wed Jun 24 2020 Nick Clifton  <nickc@redhat.com> - 2.30-76
+- Have the s.390 assembler include alignment hints with vector instructions.  (#1850490)
+
+* Mon Jun 15 2020 Nick Clifton  <nickc@redhat.com> - 2.30-75
+- Prevent the s/390 linker from rewriting the GOT access for certain symbol types.  (#1846972)
+
+* Tue Apr 07 2020 Nick Clifton  <nickc@redhat.com> - 2.30-74
+- Stop the BFD library from issueing warning messages about allocated sections being found outside of loadable segments.  (#1630115)
+- Fix linker testsuite failures for the aarch64 and s390x targets.  (#1632775, #1809101)
+- Fix building the binutils with address sanitization enabled.  (#1678323)
+- Add support for the PT_GNU_PROPERTY segment.  (#1721606)
+- Fix an internal error in the GOLD linker.  (#1722715)
+- Fix the generation of corrupt .note.gnu.property notes.  (#1723533)
+- Stop objcopy's --set-section-flags option from setting the 'shared' flag on non-COFF binaries.  (#1807308)
+- Fix a bug in the secondary reloc processing code.  (#1809186)
+
+* Wed Feb 12 2020 Nick Clifton  <nickc@redhat.com> - 2.30-73
+- Remove bogus assertion.  (#1801879)
+
+* Wed Feb 12 2020 Nick Clifton  <nickc@redhat.com> - 2.30-72
+- Allow the BFD library to handle the copying of files containing secondary reloc sections.  (#1801879)
+
+* Tue Dec 03 2019 Nick Clifton  <nickc@redhat.com> - 2.30-71
+- Fix a potential seg-fault in the BFD library when parsing pathalogical debug_info sections.  (#1779245)
+- Fix a potential memory exhaustion in the BFD library when parsing corrupt DWARF debug information.
+
+* Mon Dec 02 2019 Nick Clifton  <nickc@redhat.com> - 2.30-70
+- Re-enable strip merging build notes.  (#1777760)
+
+* Mon Dec 02 2019 Nick Clifton  <nickc@redhat.com> - 2.30-69
+- Fix linker testsuite failures triggered by annobin update.
+
+* Thu Nov 28 2019 Nick Clifton  <nickc@redhat.com> - 2.30-68
+- Backport H.J.Lu's patch to add a workaround for the JCC Errata to the assembler.  (#1777002)
+
+* Thu Nov 21 2019 Nick Clifton  <nickc@redhat.com> - 2.30-67
+- Fix a buffer overrun in the note merging code.  (#1774507)
+
+* Fri Nov 08 2019 Nick Clifton  <nickc@redhat.com> 2.30-66
+- Fix a seg-fault in gold when linking corrupt input files.  (#1739254)
+
+* Thu Nov 07 2019 Nick Clifton  <nickc@redhat.com> 2.30-65
+- NVR bump to allow rebuild with reverted version of glibc in the buildroot.
+
+* Wed Nov 06 2019 Nick Clifton  <nickc@redhat.com> 2.30-64
+- Stop note merging with no effect from creating null filled note sections.
+
+* Wed Nov 06 2019 Nick Clifton  <nickc@redhat.com> 2.30-63
+- Stop objcopy from generating a exit failure status when merging corrupt notes.
+
+* Fri Nov 01 2019 Nick Clifton  <nickc@redhat.com> 2.30-62
+- Fix binutils testsuite failure introduced by -60 patch.  (#1767711)
+
+* Tue Oct 29 2019 Nick Clifton  <nickc@redhat.com> 2.30-61
+- Enable threading in the GOLD linker.  (#1729225)
+- Add check to readelf in order to prevent an integer overflow.
+
+* Mon Oct 28 2019 Nick Clifton  <nickc@redhat.com> 2.30-60
+- Add support for SVE Vector PCS on AArch64.  (#1726637)
+- Add fixes for coverity test failures.
+- Improve objcopy's ability to merge GNU build attribute notes.
+
+* Mon Oct 28 2019 Nick Clifton  <nickc@redhat.com> 2.30-59
+- Stop the linker from merging groups with different settings of the SHF_EXCLUDE flag.  (#1730906)
 
 * Fri Sep 13 2019 Nick Clifton  <nickc@redhat.com> 2.30-58
 - Stop the BFD library from complaining about sections with multiple sets of relocations.  (#1749084)
