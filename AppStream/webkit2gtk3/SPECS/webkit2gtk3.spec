@@ -6,21 +6,18 @@
         cp -p %1 _license_files/$(echo '%1' | sed -e 's!/!.!g')
 
 Name:           webkit2gtk3
-Version:        2.24.4
-Release:        2%{?dist}
+Version:        2.28.4
+Release:        1%{?dist}
 Summary:        GTK Web content engine library
 
 License:        LGPLv2
 URL:            http://www.webkitgtk.org/
 Source0:        http://webkitgtk.org/releases/webkitgtk-%{version}.tar.xz
 
-Patch1:         webkit-aarch64_page_size.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=1591638
-Patch2:         webkit-atk_crash.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=1503624
-Patch3:         webkit-atk_continuation_crash.patch
-# Don't use the shebang, but point straight to python 3
-Patch4:         no-env-shebang.patch
+# https://bugs.webkit.org/show_bug.cgi?id=209360
+Patch0:         webkit-aarch64_page_size.patch
+# https://bugs.webkit.org/show_bug.cgi?id=193749
+Patch1:         evolution-shared-secondary-process.patch
 
 BuildRequires:  bison
 BuildRequires:  bubblewrap
@@ -39,6 +36,7 @@ BuildRequires:  perl-JSON-PP
 BuildRequires:  perl-Switch
 BuildRequires:  python3
 BuildRequires:  ruby
+BuildRequires:  rubygem-json
 BuildRequires:  rubygems
 #BuildRequires:  xdg-dbus-proxy
 
@@ -96,15 +94,19 @@ Provides:       libwebkit2gtk = %{version}-%{release}
 Obsoletes:      webkitgtk4 < %{version}-%{release}
 Provides:       webkitgtk4 = %{version}-%{release}
 
-# We're supposed to specify versions here, but these crap Google libs don't do
+# GTK+ 2 plugins support was removed in 2.25.3
+Obsoletes:      webkit2gtk3-plugin-process-gtk2 < %{version}-%{release}
+Provides:       webkit2gtk3-plugin-process-gtk2 = %{version}-%{release}
+Obsoletes:      webkitgtk4-plugin-process-gtk2 < %{version}-%{release}
+Provides:       webkitgtk4-plugin-process-gtk2 = %{version}-%{release}
+
+# We're supposed to specify versions here, but these libraries don't do
 # normal releases. Accordingly, they're not suitable to be system libs.
 Provides:       bundled(angle)
+Provides:       bundled(xdgmime)
 
 # Require the jsc subpackage
 Requires:       %{name}-jsc%{?_isa} = %{version}-%{release}
-
-# Recommend the support for the GTK 2 based NPAPI plugins
-Recommends:     %{name}-plugin-process-gtk2%{?_isa} = %{version}-%{release}
 
 # Filter out provides for private libraries
 %global __provides_exclude_from ^%{_libdir}/webkit2gtk-4\\.0/.*\\.so$
@@ -155,16 +157,6 @@ Provides:       webkitgtk4-jsc-devel = %{version}-%{release}
 The %{name}-jsc-devel package contains libraries, build data, and header
 files for developing applications that use JavaScript engine from %{name}.
 
-%package        plugin-process-gtk2
-Summary:        GTK 2 based NPAPI plugins support for %{name}
-Requires:       %{name}-jsc%{?_isa} = %{version}-%{release}
-Obsoletes:      %{name} < 2.12.0-3
-Obsoletes:      webkitgtk4-plugin-process-gtk2 < %{version}-%{release}
-Provides:       webkitgtk4-plugin-process-gtk2 = %{version}-%{release}
-
-%description    plugin-process-gtk2
-Support for the GTK 2 based NPAPI plugins (such as Adobe Flash) for %{name}.
-
 %prep
 %autosetup -p1 -n webkitgtk-%{version} -S git
 
@@ -190,15 +182,20 @@ rm -rf Source/ThirdParty/qunit/
 %endif
 
 # BMalloc and JIT are disabled on aarch64, because of the non-standard page size
-# that's causing problems there (it's enabled on Fedora)
+# that's causing problems there (it's enabled on Fedora).
+#
+# TODO: Package xdg-dbus-proxy for RHEL so we can enable bubblewrap sandbox.
+# TODO: Package libwpe and wpebackend-fdo for RHEL so we can enable WPE renderer.
 mkdir -p %{_target_platform}
 pushd %{_target_platform}
 %cmake \
   -GNinja \
   -DPORT=GTK \
   -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_BUBBLEWRAP_SANDBOX=OFF \
   -DENABLE_GTKDOC=ON \
   -DENABLE_MINIBROWSER=ON \
+  -DUSE_WPE_RENDERER=OFF \
   -DPYTHON_EXECUTABLE=%{_bindir}/python3 \
 %ifarch s390x %{power64} aarch64
   -DENABLE_JIT=OFF \
@@ -209,7 +206,9 @@ popd
 
 # Show the build time in the status
 export NINJA_STATUS="[%f/%t][%e] "
-%ninja_build -C %{_target_platform}
+# brew has run out of memory building WebKitGTK 2.28.4 with -j6, so
+# use -j3 to reduce maximum memory usage.
+%ninja_build -C %{_target_platform} -j3
 
 %install
 %ninja_install -C %{_target_platform}
@@ -246,7 +245,6 @@ export NINJA_STATUS="[%f/%t][%e] "
 %{_libdir}/webkit2gtk-4.0/
 %{_libexecdir}/webkit2gtk-4.0/
 %exclude %{_libexecdir}/webkit2gtk-4.0/MiniBrowser
-%exclude %{_libexecdir}/webkit2gtk-4.0/WebKitPluginProcess2
 %{_bindir}/WebKitWebDriver
 
 %files devel
@@ -275,9 +273,6 @@ export NINJA_STATUS="[%f/%t][%e] "
 %dir %{_datadir}/gir-1.0
 %{_datadir}/gir-1.0/JavaScriptCore-4.0.gir
 
-%files plugin-process-gtk2
-%{_libexecdir}/webkit2gtk-4.0/WebKitPluginProcess2
-
 %files doc
 %dir %{_datadir}/gtk-doc
 %dir %{_datadir}/gtk-doc/html
@@ -286,11 +281,21 @@ export NINJA_STATUS="[%f/%t][%e] "
 %{_datadir}/gtk-doc/html/webkitdomgtk-4.0/
 
 %changelog
-* Mon Oct 14 2019 Eike Rathke <erack@redhat.com> - 2.24.4-2
-- Related: rhbz#1755824 Bump NVR
+* Mon Aug 03 2020 Michael Catanzaro <mcatanzaro@redhat.com> - 2.28.4-1
+- Update to 2.28.4
+- Related: #1817143
+
+* Thu May 21 2020 Michael Catanzaro <mcatanzaro@redhat.com> - 2.28.2-2
+- Related: rhbz#1817143 Properly remove webkit2gtk3-plugin-process-gtk2 package
+
+* Thu May 14 2020 Michael Catanzaro <mcatanzaro@redhat.com> - 2.28.2-1
+- Resolves: rhbz#1817143 Update to 2.28.2
+
+* Mon Oct 14 2019 Eike Rathke <erack@redhat.com> - 2.24.4-3
+- Related: rhbz#1748890 Bump NVR
 
 * Fri Sep 27 2019 Eike Rathke <erack@redhat.com> - 2.24.4-1
-- Resolves: rhbz#1755824 Update to 2.24.4
+- Resolves: rhbz#1748890 Update to 2.24.4
 
 * Tue Jul 09 2019 Eike Rathke <erack@redhat.com> - 2.24.3-1
 - Resolves: rhbz#1728277 Update to 2.24.3
