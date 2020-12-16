@@ -1,0 +1,20 @@
+--- openjdk/jdk/src/share/classes/sun/security/pkcs11/P11Cipher.java      Mon Aug 31 06:57:19 2020 +0100
++++ openjdk/jdk/src/share/classes/sun/security/pkcs11/P11Cipher.java      Mon Aug 31 15:56:48 2020 -0300
+@@ -627,7 +627,7 @@
+                 throw (ShortBufferException)
+                         (new ShortBufferException().initCause(e));
+             }
+-            reset(false);
++            reset(true);
+             throw new ProviderException("update() failed", e);
+         }
+     }
+@@ -745,7 +745,7 @@
+                 throw (ShortBufferException)
+                         (new ShortBufferException().initCause(e));
+             }
+-            reset(false);
++            reset(true);
+             throw new ProviderException("update() failed", e);
+         }
+     }

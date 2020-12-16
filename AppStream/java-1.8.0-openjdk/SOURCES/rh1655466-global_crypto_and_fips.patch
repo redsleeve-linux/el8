@@ -176,7 +176,7 @@ new file mode 100644
 +     * and the com.redhat.fips property is true.
 +     */
 +    private static boolean enableFips() throws Exception {
-+	boolean fipsEnabled = Boolean.valueOf(System.getProperty("com.redhat.fips", "false"));
++	boolean fipsEnabled = Boolean.valueOf(System.getProperty("com.redhat.fips", "true"));
 +	if (fipsEnabled) {
 +	    Path configPath = FileSystems.getDefault().getPath(CRYPTO_POLICIES_CONFIG);
 +	    String cryptoPoliciesConfig = new String(Files.readAllBytes(configPath));
