@@ -1,0 +1,34 @@
+From d3ec950f0d8492b980a91844ffd744d7e7824277 Mon Sep 17 00:00:00 2001
+From: Ben Skeggs <bskeggs@redhat.com>
+Date: Sat, 6 Jun 2020 16:58:00 +1000
+Subject: [PATCH] nir: use bitfield_insert instead of bfi in
+ nir_lower_double_ops
+
+NVIDIA hardware doesn't have an equivilant to bfi, but we do already have
+a lowering for bitfield_insert->bfi.
+
+Signed-off-by: Ben Skeggs <bskeggs@redhat.com>
+Reviewed-by: Jason Ekstrand <jason@jlekstrand.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/5373>
+---
+ src/compiler/nir/nir_lower_double_ops.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/compiler/nir/nir_lower_double_ops.c b/src/compiler/nir/nir_lower_double_ops.c
+index f9c93a910a5..73226fd62ef 100644
+--- a/src/compiler/nir/nir_lower_double_ops.c
++++ b/src/compiler/nir/nir_lower_double_ops.c
+@@ -49,7 +49,9 @@ set_exponent(nir_builder *b, nir_ssa_def *src, nir_ssa_def *exp)
+    /* The exponent is bits 52-62, or 20-30 of the high word, so set the exponent
+     * to 1023
+     */
+-   nir_ssa_def *new_hi = nir_bfi(b, nir_imm_int(b, 0x7ff00000), exp, hi);
++   nir_ssa_def *new_hi = nir_bitfield_insert(b, hi, exp,
++                                             nir_imm_int(b, 20),
++                                             nir_imm_int(b, 11));
+    /* recombine */
+    return nir_pack_64_2x32_split(b, lo, new_hi);
+ }
+-- 
+2.26.2
+

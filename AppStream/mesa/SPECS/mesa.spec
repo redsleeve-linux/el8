@@ -12,6 +12,7 @@
 %define platform_drivers ,i965
 %define with_vmware 1
 %define with_xa     1
+%define with_iris   1
 %endif
 
 %ifarch %{ix86} x86_64
@@ -40,8 +41,8 @@
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-Version:        19.3.4
-Release:        2%{?rctag:.%{rctag}}%{?dist}
+Version:        20.1.4
+Release:        1%{?rctag:.%{rctag}}%{?dist}
 
 License:        MIT
 URL:            http://www.mesa3d.org
@@ -55,11 +56,9 @@ Source3:        Makefile
 # Fedora opts to ignore the optional part of clause 2 and treat that code as 2 clause BSD.
 Source4:        Mesa-MLAA-License-Clarification-Email.txt
 
-# fix for shm black images with Xephyr (#1798702)
-# upstream in 19.3.5 most likely
-Patch0: 0001-dri-add-another-get-shm-variant.patch
-Patch1: 0002-glx-add-getImageShm2-path.patch
-Patch2: dri-shm-fix-put-image.patch
+# Add support for TU11x nvidia
+Patch10: 0001-nir-use-bitfield_insert-instead-of-bfi-in-nir_lower_.patch
+Patch11: nouveau-tu1xx-support.patch
 
 BuildRequires:  gcc
 BuildRequires:  gcc-c++
@@ -328,7 +327,7 @@ export ASFLAGS="--generate-missing-build-notes=yes"
   -Ddri3=true \
   -Ddri-drivers=%{?dri_drivers} \
 %if 0%{?with_hardware}
-  -Dgallium-drivers=swrast,virgl,nouveau%{?with_vmware:,svga},radeonsi,r600%{?with_freedreno:,freedreno}%{?with_etnaviv:,etnaviv}%{?with_tegra:,tegra}%{?with_vc4:,vc4}%{?with_kmsro:,kmsro} \
+  -Dgallium-drivers=swrast%{?with_iris:,iris},virgl,nouveau%{?with_vmware:,svga},radeonsi,r600%{?with_freedreno:,freedreno}%{?with_etnaviv:,etnaviv}%{?with_tegra:,tegra}%{?with_vc4:,vc4}%{?with_kmsro:,kmsro} \
 %else
   -Dgallium-drivers=swrast,virgl \
 %endif
@@ -355,6 +354,7 @@ export ASFLAGS="--generate-missing-build-notes=yes"
   -Dbuild-tests=false \
   -Dselinux=true \
   -Dosmesa=gallium \
+  -Dvulkan-device-select-layer=true \
   %{nil}
 %meson_build
 
@@ -489,6 +489,7 @@ done
 %{_libdir}/dri/radeonsi_dri.so
 %ifarch %{ix86} x86_64
 %{_libdir}/dri/i965_dri.so
+%{_libdir}/dri/iris_dri.so
 %endif
 %if 0%{?with_vc4}
 %{_libdir}/dri/vc4_dri.so
@@ -537,12 +538,38 @@ done
 %{_datadir}/vulkan/icd.d/intel_icd.i686.json
 %{_datadir}/vulkan/icd.d/radeon_icd.i686.json
 %endif
+%{_libdir}/libVkLayer_MESA_device_select.so
+%{_datadir}/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json
 
 %files vulkan-devel
 %{_includedir}/vulkan/
 %endif
 
 %changelog
+* Wed Aug 05 2020 Dave Airlie <airlied@redhat.com> - 20.1.4-1
+- Update to 20.1.4
+- Update nouveau tu1xx support patch (Karol)
+
+* Mon Jun 29 2020 Dave Airlie <airlied@redhat.com> - 20.1.2-3
+- a fix on top of the big-endian fix (#1847064)
+
+* Mon Jun 29 2020 Dave Airlie <airlied@redhat.com> - 20.1.2-2
+- add another fix for big-endian llvmpipe (#1847064)
+
+* Mon Jun 29 2020 Dave Airlie <airlied@redhat.com> - 20.1.2-1
+- Update to 20.1.2
+- add fix for big-endian llvmpipe (#1847064)
+
+* Thu Jun 11 2020 Dave Airlie <airlied@redhat.com> - 20.1.1-1
+- Update to 20.1.1
+- Add support for turing
+
+* Thu May 28 2020 Dave Airlie <airlied@redhat.com> - 20.1.0-1
+- Update to 20.1.0 final
+
+* Mon May 25 2020 Dave Airlie <airlied@redhat.com> - 20.1.0-0.1.rc4
+- Update to 20.1.0-rc4
+
 * Thu Feb 20 2020 Dave Airlie <airlied@redhat.com> - 19.3.4-2
 - Fix put image shm fallback path.
 

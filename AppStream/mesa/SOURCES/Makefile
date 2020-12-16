@@ -1,4 +1,4 @@
-VERSION ?= 19.3.4
+VERSION ?= 20.1.4
 SANITIZE ?= 1
 
 DIRNAME = mesa-${VERSION}
@@ -10,7 +10,7 @@ clean:
 	rm -f mesa-${VERSION}.tar.xz
 
 clone: clean
-	curl -O https://mesa.freedesktop.org/archive/mesa-${VERSION}.tar.xz
+	curl -O https://archive.mesa3d.org/mesa-${VERSION}.tar.xz
 	tar xf mesa-${VERSION}.tar.xz
 
 sanitize: clone vl_mpeg12_decoder.c vl_decoder.c
