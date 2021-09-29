@@ -1,0 +1,44 @@
+From 2b73de7e9b2c2c3587cff37100076b3aed9c6611 Mon Sep 17 00:00:00 2001
+From: Jacco Ligthart <jacco@redsleeve.org>
+Date: Fri, 19 Jun 2020 22:25:33 +0200
+Subject: [PATCH] enabled gcc go
+
+---
+ SPECS/gcc.spec | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/SPECS/gcc.spec b/SPECS/gcc.spec
+index 0f385fc..9f26844 100644
+--- a/SPECS/gcc.spec
++++ b/SPECS/gcc.spec
+@@ -17,7 +17,7 @@
+ %if 0%{?rhel} > 7
+ %global build_ada 0
+ %global build_objc 0
+-%global build_go 0
++%global build_go 1
+ %global build_libgccjit 0
+ %else
+ %ifarch %{ix86} x86_64 ia64 ppc %{power64} alpha s390x %{arm} aarch64
+@@ -104,7 +104,7 @@
+ Summary: Various compilers (C, C++, Objective-C, ...)
+ Name: gcc
+ Version: %{gcc_version}
+-Release: %{gcc_release}%{?dist}
++Release: %{gcc_release}%{?dist}.redsleeve
+ # libgcc, libgfortran, libgomp, libstdc++ and crtstuff have
+ # GCC Runtime Exception.
+ License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
+@@ -3165,6 +3165,9 @@ fi
+ %endif
+ 
+ %changelog
++* Fri Jun 19 2020 Bjarne Saltbaek <bjarne@redsleeve.org> 8.3.1-5.redsleeve
++- Enabled gcc-go build on EL8
++
+ * Thu Nov 21 2019 Marek Polacek <polacek@redhat.com> 8.3.1-5
+ - update from Fedora gcc-8.3.1-5 (#1747157)
+ - use unspec_volatile for darn (PR target/91481, #1760205, CVE-2019-15847)
+-- 
+2.18.1
+
