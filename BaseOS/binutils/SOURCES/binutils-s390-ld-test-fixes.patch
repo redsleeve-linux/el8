@@ -29,23 +29,6 @@ diff -rup binutils.orig/ld/testsuite/ld-plugin/lto.exp binutils-2.30/ld/testsuit
         {pr12942b.cc} {} "" "c++"] \
      ]]
  }
-@@ -547,13 +547,16 @@ if { [at_least_gcc_version 4 7] } {
- }
- 
- # Run "ld -r" to generate inputs for complex LTO tests.
-+setup_xfail "*-*-*"
- run_dump_test "lto-3r"
- remote_exec host "mv" "tmpdir/dump tmpdir/lto-3.o"
-+setup_xfail "*-*-*"
- run_dump_test "lto-5r"
- remote_exec host "mv" "tmpdir/dump tmpdir/lto-5.o"
- 
- run_cc_link_tests $lto_link_symbol_tests
- 
-+setup_xfail "*-*-*"
- run_ld_link_tests [list \
-   [list "PR ld/19317 (2)" \
-    "-r tmpdir/pr19317.o" "" "" \
 diff -rup binutils.orig/ld/testsuite/ld-plugin/plugin-10.d binutils-2.30/ld/testsuite/ld-plugin/plugin-10.d
 --- binutils.orig/ld/testsuite/ld-plugin/plugin-10.d	2020-04-06 13:46:34.060525235 +0100
 +++ binutils-2.30/ld/testsuite/ld-plugin/plugin-10.d	2020-04-06 14:22:06.280196979 +0100

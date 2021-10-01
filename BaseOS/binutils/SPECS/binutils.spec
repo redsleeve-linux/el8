@@ -1,31 +1,93 @@
-# Binutils SPEC file.  Can be invoked with the following parameters:
+
+# Determine if this is a native build or a cross build.
+#
+# For a cross build add  --define "binutils_target <target>" to the command
+# line when building the rpms.
+#
+# For example:
+#  --define "binutils_target aarch64-linux-gnu"
+#
+# Cross builds will create a set of binutils executables that will run on the
+# host machine but which will create binaries suitable for running on the
+# target machine.  The cross tools will have the target name as a prefix,
+# but for compatibility with the kernel the rpms will use the target name
+# as an infix.  So for example building with the above define will create a
+# set of rpms like this:
+#
+#   binutils-aarch64-linux-gnu-2.35.1-14.fc34.x86_64.rpm
+#   binutils-aarch64-linux-gnu-debuginfo-2.35.1-14.fc34.x86_64.rpm
+#   [etc]
+#
+# and the rpms will contain files like:
+#
+#   /usr/bin/aarch64-linux-gnu-addr2line
+#   /usr/bin/aarch64-linux-gnu-ar
+#   /usr/bin/aarch64-linux-gnu-as
+#   [etc]
+
+%if 0%{!?binutils_target:1}
+
+%define binutils_target %{_target_platform}
+%define isnative      1
+%define enable_shared 1
+
+%else
+
+%define cross       %{binutils_target}-
+%define name_cross -%{binutils_target}
+%define isnative      0
+%define enable_shared 0
+
+%endif
+
+Summary: A GNU collection of binary utilities
+Name: binutils%{?name_cross}%{?_with_debug:-debug}
+Version: 2.30
+Release: 93%{?dist}
+License: GPLv3+
+URL: https://sourceware.org/binutils
+
+#----------------------------------------------------------------------------
+
+# Binutils SPEC file.  Can be invoked with the following parameters to change
+#  the default behaviour:
 
 # --define "binutils_target arm-linux-gnu" to create arm-linux-gnu-binutils.
-# --with=bootstrap: Build with minimal dependencies.
-# --with=debug: Build without optimizations and without splitting the debuginfo.
-# --without=docs: Skip building documentation.
-# --without=testsuite: Do not run the testsuite.  Default is to run it.
-# --with=testsuite: Run the testsuite.  Default when --with=debug is not to run it.
+#
+# --with bootstrap       Build with minimal dependencies.
+# --with debug           Build without optimizations and without splitting
+#                         the debuginfo into a separate file.
+# --without docs         Skip building documentation.
+#                         Default is with docs, except when building a cross binutils.
+# --without testsuite    Do not run the testsuite.  Default is to run it.
+# --without gold         Disable building of the GOLD linker.
+# --with clang           To force building with the CLANG.
+# --without debuginfod   Disable support for debuginfod.
 
 #---Start of Configure Options-----------------------------------------------
 
-# Do not create deterministic archives by default  (cf: BZ 1195883)
+# Create deterministic archives (ie ones without timestamps).
+# Default is off because of BZ 1195883.
 %define enable_deterministic_archives 0
 
 # Enable support for GCC LTO compilation.
+# Disable if it is necessary to work around bugs in LTO.
 %define enable_lto 1
 
-# Disable the default generation of compressed debug sections.
+# Enable the compression of debug sections as default behaviour of the
+# assembler and linker.  This option is disabled for now.  The assembler and
+# linker have command line options to override the default behaviour.
 %define default_compress_debug 0
 
 # Default to read-only-relocations (relro) in shared binaries.
+# This is enabled as a security feature.
 %define default_relro 1
 
-# Disable the default generation of GNU Build notes by the assembler.
-# This has turned out to be problematic for the i686 architecture.
-# although the exact reason has not been determined.  (See BZ 1572485)
-# It also breaks building EFI binaries on AArch64, as these cannot have
-# relocations against absolute symbols.
+# Enable the default generation of GNU Build notes by the assembler.
+# This option is disabled as it has turned out to be problematic for the i686
+# architecture, although the exact reason has not been determined.  (See
+# BZ 1572485).  It also breaks building EFI binaries on AArch64, as these
+# cannot have relocations against absolute symbols.
 %define default_generate_notes 0
 
 # Enable thread support in the GOLD linker (if it is being built).  This is
@@ -44,6 +106,8 @@
 %bcond_without docs
 # Default: Always run the testsuite.
 %bcond_without testsuite
+# Default: Build the gold linker.
+%bcond_without gold
 
 %if %{with bootstrap}
 %undefine with_docs
@@ -54,31 +118,13 @@
 %undefine with_testsuite
 %endif
 
-%if 0%{!?binutils_target:1}
-%define binutils_target %{_target_platform}
-%define isnative 1
-%define enable_shared 1
-%else
-%define cross %{binutils_target}-
-%define isnative 0
-%define enable_shared 0
-%endif
-
 #----------------------------------------------------------------------------
-
-Summary: A GNU collection of binary utilities
-Name: %{?cross}binutils%{?_with_debug:-debug}
-Version: 2.30
-Release: 79%{?dist}
-License: GPLv3+
-URL: https://sourceware.org/binutils
 
 # Note - the Linux Kernel binutils releases are too unstable and contain
 # too many controversial patches so we stick with the official FSF version
 # instead.
 
 Source: https://ftp.gnu.org/gnu/binutils/binutils-%{version}.tar.xz
-
 Source2: binutils-2.19.50.0.1-output-format.sed
 
 %if %{with docs}
@@ -126,7 +172,6 @@ Patch03: binutils-2.22.52.0.1-export-demangle.h.patch
 #           order.
 Patch04: binutils-2.22.52.0.4-no-config-h-check.patch
 
-# Purpose:  Import H.J.Lu's Kernel LTO patch.
 # Lifetime: Permanent, but needs continual updating.
 # FIXME:    Try removing....
 Patch05: binutils-2.26-lto.patch
@@ -478,11 +523,46 @@ Patch76: binutils-s390-alignment-hints.patch
 # Lifetime: Fixed in 2.32
 Patch77: binutils-x86-gas-scaled-8-bit-displacements.patch
 
+# Purpose:  Allow plugin syms to mark as-needed shared libs needed.
+# Lifetime: Fixed in 2.36
+Patch78: binutils-plugin-as-needed.patch
+
+# Purpose:  Fix merging attributes in the presence of multiple
+#            same-named sections.
+# Lifetime: Fixed in 2.36
+Patch79: binutils-strip-merge.patch
+
+# Purpose:  Properly override IR definitions
+# Lifetime: Fixed in 2.35
+Patch80: binutils-ld-IR-override.patch
+
+# Purpose:  Add support for Intel's TPAUSE and UNWAIT instructions.
+# Lifetime: Fixed in 2.31
+Patch81: binutils-x86-tpause.patch
+
+# Purpose:  Add support for AArch64 GNU Property notes
+# Lifetime: Fixed in 2.34
+Patch82: binutils-aarch64-properties.patch
+
+# Purpose:  Fix the version selected when merging common symbols
+#            and normal symbols.
+# Lifetime: Fixed in 2.36
+Patch83: binutils-common-sym-versioning.patch
+
+# Purpose:  Fix merging empty ppc64le notes.
+# Lifetime: Fixed in 2.37
+Patch84: binutils-ppc64le-note-merge.patch
+
 #----------------------------------------------------------------------------
 
 Provides: bundled(libiberty)
+BuildRequires: autoconf automake
 
+%if %{with gold}
 %define gold_arches %{ix86} x86_64 %{arm} aarch64 %{power64} s390x
+%else
+%define gold_arches none
+%endif
 
 %if %{with bootstrap}
 %define build_gold      no
@@ -679,6 +759,13 @@ using libelf instead of BFD.
 %patch75 -p1
 %patch76 -p1
 %patch77 -p1
+%patch78 -p1
+%patch79 -p1
+%patch80 -p1
+%patch81 -p1
+%patch82 -p1
+%patch83 -p1
+%patch84 -p1
 
 # We cannot run autotools as there is an exact requirement of autoconf-2.59.
 # FIXME - this is no longer true.  Maybe try reinstating autotool use ?
@@ -759,9 +846,20 @@ case %{binutils_target} in ppc64le*)
     ;;
 esac
 
-case %{binutils_target} in x86_64*|i?86*|arm*|aarch64*)
-  CARGS="$CARGS --enable-targets=x86_64-pep"
-  ;;
+# BZ 1920373: Enable PEP support for all targets as the PERF package's
+# testsuite expects to be able to read PE format files ragrdless of
+# the host's architecture.
+case %{binutils_target} in
+    s390*)
+	# FIXME: For some unknown reason settting --enable-targets=x86_64-pep
+	# here breaks the building of GOLD.  I have no idea why, and not enough
+	# knowledge of how gold is configured to fix quickly.  So instead I have
+	# found that supporting "all" targets works.
+	CARGS="$CARGS --enable-targets=all"
+	;;
+    *)
+	CARGS="$CARGS --enable-targets=x86_64-pep"
+	;;
 esac
 
 %if %{default_relro}
@@ -966,14 +1064,16 @@ $OUTPUT_FORMAT
 INPUT ( %{_libdir}/libopcodes.a -lbfd )
 EOH
 
-%else # !isnative
+%else
 # For cross-binutils we drop the documentation.
 rm -rf %{buildroot}%{_infodir}
 # We keep these as one can have native + cross binutils of different versions.
 #rm -rf {buildroot}{_prefix}/share/locale
 #rm -rf {buildroot}{_mandir}
 rm -rf %{buildroot}%{_libdir}/libiberty.a
-%endif # !isnative
+# Remove libtool files, which reference the .so libs
+rm -f %{buildroot}%{_libdir}/lib{bfd,opcodes}.la
+%endif
 
 # This one comes from gcc
 rm -f %{buildroot}%{_infodir}/dir
@@ -1010,7 +1110,7 @@ fi
 if [ $1 = 0 ]; then
   %{_sbindir}/alternatives --auto %{?cross}ld
 fi
-%endif # both ld.gold and ld.bfd
+%endif
 
 %if %{isnative}
 /sbin/ldconfig
@@ -1021,8 +1121,8 @@ fi
   /sbin/install-info --info-dir=%{_infodir} %{_infodir}/gprof.info.gz
   /sbin/install-info --info-dir=%{_infodir} %{_infodir}/ld.info.gz
   /sbin/install-info --info-dir=%{_infodir} %{_infodir}/standards.info.gz
-%endif # with docs
-%endif # isnative
+%endif
+%endif
 
 exit 0
 
@@ -1034,7 +1134,7 @@ if [ $1 = 0 ]; then
   %{_sbindir}/alternatives --remove %{?cross}ld %{_bindir}/%{?cross}ld.bfd
   %{_sbindir}/alternatives --remove %{?cross}ld %{_bindir}/%{?cross}ld.gold
 fi
-%endif # both ld.gold and ld.bfd
+%endif
 
 %if %{isnative}
 if [ $1 = 0 ]; then
@@ -1047,7 +1147,7 @@ if [ $1 = 0 ]; then
     /sbin/install-info --quiet --delete --info-dir=%{_infodir} %{_infodir}/standards.info.gz
   fi
 fi
-%endif # isnative
+%endif
 
 exit 0
 
@@ -1064,7 +1164,7 @@ exit 0
     /sbin/install-info --delete --info-dir=%{_infodir} %{_infodir}/ld.info.gz
     /sbin/install-info --quiet --delete --info-dir=%{_infodir} %{_infodir}/standards.info.gz
   fi
-%endif # isnative
+%endif
 
 #----------------------------------------------------------------------------
 
@@ -1078,29 +1178,32 @@ exit 0
 %ghost %{_bindir}/%{?cross}ld
 %else
 %{_bindir}/%{?cross}ld*
-%endif # both ld.gold and ld.bfd
+%endif
 
 %if %{with docs}
 %{_mandir}/man1/*
+%if %{isnative}
 %{_infodir}/as.info.gz
 %{_infodir}/binutils.info.gz
 %{_infodir}/gprof.info.gz
 %{_infodir}/ld.info.gz
 %{_infodir}/standards.info.gz
-%endif # with docs
+%endif
+%endif
 
 %if %{enable_shared}
 %{_libdir}/lib*.so
 %exclude %{_libdir}/libbfd.so
 %exclude %{_libdir}/libopcodes.so
-%endif # enable_shared
+%endif
 
 %if %{isnative}
 
 %if %{with docs}
 %{_infodir}/[^b]*info*
 %{_infodir}/binutils*info*
-%endif # with docs
+%{_infodir}/bfd*info*
+%endif
 
 %files devel
 %{_prefix}/include/*
@@ -1108,14 +1211,53 @@ exit 0
 %{_libdir}/libbfd.so
 %{_libdir}/libopcodes.so
 
-%if %{with docs}
-%{_infodir}/bfd*info*
-%endif # with docs
-
-%endif # isnative
+%endif
 
 #----------------------------------------------------------------------------
 %changelog
+* Thu Feb 18 2021 Nick Clifton  <nickc@redhat.com> - 2.30-93
+- Fix merging ppc64le notes.  (#1928936)
+
+* Thu Feb 18 2021 Nick Clifton  <nickc@redhat.com> - 2.30-92
+- Fix merging ppc64le notes.  (#1928936)
+
+* Tue Feb 02 2021 Nick Clifton  <nickc@redhat.com> - 2.30-91
+- Enable PEP support for all targets.  (#1920373)
+
+* Mon Jan 11 2021 Nick Clifton  <nickc@redhat.com> - 2.30-90
+- NVR bump in order to regain access to gating test results.
+
+* Wed Dec 09 2020 Nick Clifton  <nickc@redhat.com> - 2.30-89
+- Fix snafu preventing the building of the GOLD linekr.
+
+* Wed Dec 09 2020 Nick Clifton  <nickc@redhat.com> - 2.30-88
+- Fix versioning when merging common and normal symbols.  (#1904942)
+- Add cross binutils support.
+    
+* Wed Nov 25 2020 Nick Clifton  <nickc@redhat.com> - 2.30-87
+- Fix bug in patch for AArch64 GNU Property notes support.  (#1889643)
+
+* Wed Nov 04 2020 Nick Clifton  <nickc@redhat.com> - 2.30-86
+- Add support for AArch64 GNU Property notes.  (#1889643)
+
+* Tue Nov 03 2020 Nick Clifton  <nickc@redhat.com> - 2.30-85
+- Add support for the TPAUSE and UNWAIT instructions in the x86 assembler.  (#1893292)
+
+* Mon Nov 02 2020 Nick Clifton  <nickc@redhat.com> - 2.30-84
+- Fix problem in linker testsuite triggered by the as-needed update.  (#1886071)
+
+* Fri Oct 30 2020 Nick Clifton  <nickc@redhat.com> - 2.30-83
+- Fix merging attributes in the presence of multiple same-named sections.  (#1893197)
+
+* Wed Oct 28 2020 Nick Clifton  <nickc@redhat.com> - 2.30-82
+- Fix problem in linker testsuite triggered by the as-needed update.  (#1886071)
+
+* Fri Oct 23 2020 Nick Clifton  <nickc@redhat.com> - 2.30-81
+- Allow plugin syms to mark as-needed shared libs needed.  (#1886071)
+
+* Wed Sep 16 2020 Nick Clifton  <nickc@redhat.com> - 2.30-80
+- NVR Bump to allow rebuild.
+
 * Fri Aug 21 2020 Nick Clifton  <nickc@redhat.com> - 2.30-79
 - Fix x86 assembler's handling of non-8-bit displacements.  (#1869401)
 
