@@ -103,8 +103,8 @@
 Summary: An interpreted, interactive, object-oriented programming language
 Name: %{python}
 # Remember to also rebase python2-docs when changing this:
-Version: 2.7.17
-Release: 1%{?dist}
+Version: 2.7.18
+Release: 4%{?dist}
 License: Python
 Group: Development/Languages
 Requires: %{python}-libs%{?_isa} = %{version}-%{release}
@@ -121,6 +121,7 @@ BuildRequires: autoconf
 BuildRequires: bluez-libs-devel
 BuildRequires: bzip2
 BuildRequires: bzip2-devel
+BuildRequires: git-core
 BuildRequires: glibc-devel
 BuildRequires: gmp-devel
 BuildRequires: libdb-devel
@@ -172,9 +173,9 @@ BuildRequires: python2-pip-wheel
 %endif
 
 # Runtime require alternatives
-Requires:         %{_sbindir}/alternatives
-Requires(post):   %{_sbindir}/alternatives
-Requires(postun): %{_sbindir}/alternatives
+Requires:         /usr/sbin/alternatives
+Requires(post):   /usr/sbin/alternatives
+Requires(postun): /usr/sbin/alternatives
 
 # Previously, this was required for our rewheel patch to work.
 # This is technically no longer needed, but we keep it recommended
@@ -695,6 +696,26 @@ Patch288: 00288-ambiguous-python-version-rpmbuild-warn.patch
 # (we handle it it in Setup.dist, see Patch0)
 Patch289: 00289-disable-nis-detection.patch
 
+# 00351 #
+# Avoid infinite loop when reading specially crafted TAR files using the tarfile module
+# (CVE-2019-20907).
+# See: https://bugs.python.org/issue39017
+Patch351: 00351-cve-2019-20907-fix-infinite-loop-in-tarfile.patch
+
+# 00354 #
+# Reject control chars in HTTP method in httplib.putrequest to prevent
+# HTTP header injection
+#
+# Backported from Python 3.5-3.10 (and adjusted for py2's single-module httplib):
+# - https://bugs.python.org/issue39603
+Patch354: 00354-cve-2020-26116-http-request-method-crlf-injection-in-httplib.patch
+
+# 00357 #
+# Security fix for CVE-2021-3177
+# Stack-based buffer overflow in PyCArg_repr in _ctypes/callproc.c
+# Backported from the upstream python3 branches: https://bugs.python.org/issue42938
+Patch357: 00357-CVE-2021-3177.patch
+
 # (New patches go here ^^^)
 #
 # When adding new patches to "python2" and "python3" in Fedora, EL, etc.,
@@ -793,7 +814,16 @@ Requires: python3-rpm-generators
 # installed when -devel is required.
 # See https://bugzilla.redhat.com/show_bug.cgi?id=1623922
 # See https://fedoraproject.org/wiki/Packaging:Directory_Replacement
+#
+# This is not necessary when rebuilding when we're bundling the python2 stack
+# into a Flatpak containe with prefix=/app, because we never upgrade packages
+# in the Flatpak context. We want to avoid
+# python2-setuptools => BuildRequires => python2-devel => Requires python2-setuptools
+# since the old python2-setuptools will be the /usr version not the /app version.
+
+%if !0%{?flatpak}
 Requires: python2-setuptools
+%endif
 
 # https://bugzilla.redhat.com/show_bug.cgi?id=1217376
 # https://bugzilla.redhat.com/show_bug.cgi?id=1496757
@@ -1006,6 +1036,12 @@ rm Lib/ensurepip/_bundled/*.whl
 %patch288 -p1
 %patch289 -p1
 
+# Patch 351 adds binary file for testing. We need to apply it using Git.
+git apply %{PATCH351}
+
+%patch354 -p1
+%patch357 -p1
+
 # This shouldn't be necesarry, but is right now (2.2a3)
 find -name "*~" |xargs rm -f
 
@@ -1199,7 +1235,7 @@ make install DESTDIR=%{buildroot}
 # but doing so generated noise when ldconfig was rerun (rhbz:562980)
 #
 %if 0%{?with_gdb_hooks}
-DirHoldingGdbPy=%{_prefix}/lib/debug/%{_libdir}
+DirHoldingGdbPy=%{_usr}/lib/debug/%{_libdir}
 PathOfGdbPy=$DirHoldingGdbPy/$PyInstSoName-%{version}-%{release}.%{_arch}.debug-gdb.py
 
 mkdir -p %{buildroot}$DirHoldingGdbPy
@@ -1571,10 +1607,10 @@ fi
 %{_bindir}/pydoc2*
 %{_bindir}/%{python}
 %{_bindir}/python%{pybasever}
-%{_mandir}/man1/python2.1.gz
-%{_mandir}/man1/python2.7.1.gz
+%{_mandir}/man1/python2.1*
+%{_mandir}/man1/python2.7.1*
 %ghost %{_bindir}/unversioned-python
-%ghost %{_mandir}/man1/python.1.gz
+%ghost %{_mandir}/man1/python.1*
 
 
 %files libs
@@ -1943,6 +1979,26 @@ fi
 # ======================================================
 
 %changelog
+* Fri Jan 22 2021 Charalampos Stratakis <cstratak@redhat.com> - 2.7.18-4
+- Security fix for CVE-2021-3177
+Resolves: rhbz#1919163
+
+* Wed Jan 13 2021 Charalampos Stratakis <cstratak@redhat.com> - 2.7.18-3
+- Fixes for bundling prefix=/app build in gimp/inkscape containers
+Resolves: rhbz#1907592
+
+* Fri Oct 09 2020 Charalampos Stratakis <cstratak@redhat.com> - 2.7.18-2
+- Security fix for CVE-2020-26116: Reject control chars in HTTP method in httplib.putrequest
+Resolves: rhbz#1883258
+
+* Fri Oct 09 2020 Charalampos Stratakis <cstratak@redhat.com> - 2.7.18-1
+- Update to 2.7.18
+Resolves: rhbz#1886754
+
+* Mon Aug 17 2020 Tomas Orsava <torsava@redhat.com> - 2.7.17-2
+- Avoid infinite loop when reading specially crafted TAR files (CVE-2019-20907)
+Resolves: rhbz#1856481
+
 * Wed Oct 23 2019 Charalampos Stratakis <cstratak@redhat.com> - 2.7.17-1
 - Update to 2.7.17
 Resolves: rhbz#1759944
