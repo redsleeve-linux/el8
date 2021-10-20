@@ -1,6 +1,6 @@
 %bcond_with system_lapack
 # Version of bundled lapack
-%global lapackver 3.7.0
+%global lapackver 3.9.0
 
 # DO NOT "CLEAN UP" OR MODIFY THIS SPEC FILE WITHOUT ASKING THE
 # MAINTAINER FIRST!
@@ -14,31 +14,25 @@
 # "obsoleted" features are still kept in the spec.
 
 Name:           openblas
-Version:        0.3.3
-Release:        5%{?dist}
+Version:        0.3.12
+Release:        1%{?dist}
 Summary:        An optimized BLAS library based on GotoBLAS2
 Group:          Development/Libraries
 License:        BSD
 URL:            https://github.com/xianyi/OpenBLAS/
 Source0:        https://github.com/xianyi/OpenBLAS/archive/v%{version}.tar.gz
 # Use system lapack
-Patch0:         openblas-0.2.15-system_lapack.patch
+Patch0:         openblas-0.3.12-system-lapack.patch
 # Drop extra p from threaded library name
-Patch1:         openblas-0.2.5-libname.patch
-# Don't use constructor priorities on too old architectures
-Patch2:         openblas-0.2.15-constructor.patch
+Patch1:         openblas-0.3.12-libname.patch
 # Supply the proper flags to the test makefile
-Patch3:         openblas-0.3.3-tests.patch
+Patch2:         openblas-0.3.12-tests.patch
 # Enable optimizations for all LAPACK sources
-Patch4:         openblas-0.3.3-noopt.patch
+Patch3:         openblas-0.3.12-noopt.patch
 # Pass ASMFLAGS to assembler compiler
-Patch5:         openblas-0.2.20-asmflags.patch
+Patch4:         openblas-0.3.12-asmflags.patch
 # Remove optimization pragmas on ppc64le
-Patch6:         openblas-0.2.20-power-optimize.patch
-# Fix izamax on s390x
-Patch7:         openblas-0.3.3-izamax-s390x.patch
-# Detect POWER9 as POWER8
-Patch8:         openblas-0.3.3-power9.patch
+Patch5:         openblas-0.3.12-power-optimize.patch
 
 BuildRequires:  gcc
 BuildRequires:  gcc-gfortran
@@ -232,18 +226,13 @@ This package contains the static libraries.
 tar zxf %{SOURCE0}
 cd OpenBLAS-%{version}
 %if %{with system_lapack}
-%patch0 -p1 -b .system_lapack
+%patch0 -p1 -b .system-lapack
 %endif
 %patch1 -p1 -b .libname
-%if 0%{?rhel} == 5
-%patch2 -p1 -b .constructor
-%endif
-%patch3 -p1 -b .tests
-%patch4 -p1 -b .noopt
-%patch5 -p1 -b .asmflags
-%patch6 -p1 -b .power-optimize
-%patch7 -p1 -b .izamax-s390x
-%patch8 -p1 -b .power9
+%patch2 -p1 -b .tests
+%patch3 -p1 -b .noopt
+%patch4 -p1 -b .asmflags
+%patch5 -p1 -b .power-optimize
 
 # Fix source permissions
 find -name \*.f -exec chmod 644 {} \;
@@ -382,7 +371,7 @@ TARGET="TARGET=POWER8 DYNAMIC_ARCH=0"
 TARGET="TARGET=ARMV8 DYNAMIC_ARCH=0"
 %endif
 %ifarch s390x
-TARGET="TARGET=Z13 DYNAMIC_ARCH=0"
+TARGET="TARGET=ZARCH_GENERIC DYNAMIC_ARCH=1"
 %endif
 
 %if 0%{?rhel} == 5
@@ -460,9 +449,6 @@ suffix="_power8"
 %endif
 %ifarch aarch64
 suffix="_armv8"
-%endif
-%ifarch s390x
-suffix="_z13"
 %endif
 slibname=`basename %{buildroot}%{_libdir}/libopenblas${suffix}-*.so .so`
 mv %{buildroot}%{_libdir}/${slibname}.a %{buildroot}%{_libdir}/lib%{name}.a
@@ -689,6 +675,18 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig
 %endif
 
 %changelog
+* Wed Oct 28 2020 Nikola Forró <nforro@redhat.com> - 0.3.12-1
+- Rebase to version 0.3.12
+  related: #1847435
+
+* Wed Oct 21 2020 Nikola Forró <nforro@redhat.com> - 0.3.10-2
+- Fix macro used in LAPACKE_zgesvdq
+  related: #1847435
+
+* Tue Oct 20 2020 Nikola Forró <nforro@redhat.com> - 0.3.10-1
+- Rebase to version 0.3.10
+  resolves: #1847435
+
 * Fri Nov 22 2019 Nikola Forró <nforro@redhat.com> - 0.3.3-5
 - Detect POWER9 as POWER8
   related: #1752241

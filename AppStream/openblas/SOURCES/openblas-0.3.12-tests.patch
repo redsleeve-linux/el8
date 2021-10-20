@@ -1,19 +1,22 @@
 diff --git a/Makefile b/Makefile
-index d99521b..01bba2f 100644
+index a9af62a2..2f0f11c0 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -122,11 +122,11 @@ tests :
+@@ -138,13 +138,13 @@ tests :
  ifeq ($(NOFORTRAN), $(filter 0,$(NOFORTRAN)))
  	touch $(LIBNAME)
  ifndef NO_FBLAS
 -	$(MAKE) -C test all
--	$(MAKE) -C utest all
 +	$(MAKE) -C test FC="$(FC)" CC="$(CC)" COMMON_OPT="$(COMMON_OPT)" FCOMMON_OPT="$(FCOMMON_OPT)" all
-+	$(MAKE) -C utest FC="$(FC)" CC="$(CC)" COMMON_OPT="$(COMMON_OPT)" FCOMMON_OPT="$(FCOMMON_OPT)" all
  endif
- ifndef NO_CBLAS
+-	$(MAKE) -C utest all
++	$(MAKE) -C utest FC="$(FC)" CC="$(CC)" COMMON_OPT="$(COMMON_OPT)" FCOMMON_OPT="$(FCOMMON_OPT)" all
+ ifneq ($(NO_CBLAS), 1)
 -	$(MAKE) -C ctest all
 +	$(MAKE) -C ctest FC="$(FC)" CC="$(CC)" COMMON_OPT="$(COMMON_OPT)" FCOMMON_OPT="$(FCOMMON_OPT)" all
+ ifeq ($(CPP_THREAD_SAFETY_TEST), 1)
+-	$(MAKE) -C cpp_thread_test all
++	$(MAKE) -C cpp_thread_test FC="$(FC)" CC="$(CC)" COMMON_OPT="$(COMMON_OPT)" FCOMMON_OPT="$(FCOMMON_OPT)" all
  endif
  endif
- 
+ endif

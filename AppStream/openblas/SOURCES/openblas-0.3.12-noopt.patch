@@ -1,0 +1,47 @@
+diff --git a/lapack-netlib/INSTALL/Makefile b/lapack-netlib/INSTALL/Makefile
+index 1007c1bc..348b8d60 100644
+--- a/lapack-netlib/INSTALL/Makefile
++++ b/lapack-netlib/INSTALL/Makefile
+@@ -46,5 +46,5 @@ cleanexe:
+ cleantest:
+ 	rm -f core
+ 
+-slamch.o: slamch.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
+-dlamch.o: dlamch.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
++slamch.o: slamch.f ; $(FC) $(FFLAGS) -c -o $@ $<
++dlamch.o: dlamch.f ; $(FC) $(FFLAGS) -c -o $@ $<
+diff --git a/lapack-netlib/SRC/Makefile b/lapack-netlib/SRC/Makefile
+index 83baac87..bc42e82d 100644
+--- a/lapack-netlib/SRC/Makefile
++++ b/lapack-netlib/SRC/Makefile
+@@ -643,9 +643,9 @@ cleanobj:
+ cleanlib:
+ 	rm -f $(LAPACKLIB)
+ 
+-slaruv.o: slaruv.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
+-dlaruv.o: dlaruv.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
+-sla_wwaddw.o: sla_wwaddw.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
+-dla_wwaddw.o: dla_wwaddw.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
+-cla_wwaddw.o: cla_wwaddw.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
+-zla_wwaddw.o: zla_wwaddw.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
++slaruv.o: slaruv.f ; $(FC) $(FFLAGS) -c -o $@ $<
++dlaruv.o: dlaruv.f ; $(FC) $(FFLAGS) -c -o $@ $<
++sla_wwaddw.o: sla_wwaddw.f ; $(FC) $(FFLAGS) -c -o $@ $<
++dla_wwaddw.o: dla_wwaddw.f ; $(FC) $(FFLAGS) -c -o $@ $<
++cla_wwaddw.o: cla_wwaddw.f ; $(FC) $(FFLAGS) -c -o $@ $<
++zla_wwaddw.o: zla_wwaddw.f ; $(FC) $(FFLAGS) -c -o $@ $<
+diff --git a/lapack-netlib/TESTING/MATGEN/Makefile b/lapack-netlib/TESTING/MATGEN/Makefile
+index e21ebd6c..8582e944 100644
+--- a/lapack-netlib/TESTING/MATGEN/Makefile
++++ b/lapack-netlib/TESTING/MATGEN/Makefile
+@@ -110,8 +110,8 @@ cleanlib:
+ 	rm -f $(TMGLIB)
+ 
+ ifeq ($(filter $(BUILD_SINGLE) $(BUILD_COMPLEX),1),)
+-slaran.o: slaran.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
++slaran.o: slaran.f ; $(FC) $(FFLAGS) -c -o $@ $<
+ endif
+ ifeq ($(filter $(BUILD_DOUBLE) $(BUILD_COMPLEX16),1),)
+-dlaran.o: dlaran.f ; $(FC) $(FFLAGS_NOOPT) -c -o $@ $<
++dlaran.o: dlaran.f ; $(FC) $(FFLAGS) -c -o $@ $<
+ endif

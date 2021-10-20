@@ -1,5 +1,5 @@
 diff --git a/kernel/power/drot.c b/kernel/power/drot.c
-index 3e10748..9d2b8c0 100644
+index 951c2f9c..98788c0f 100644
 --- a/kernel/power/drot.c
 +++ b/kernel/power/drot.c
 @@ -37,8 +37,6 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -8,11 +8,11 @@ index 3e10748..9d2b8c0 100644
  
 -#pragma GCC optimize "O1"
 -
- #if defined(POWER8)
+ #if defined(POWER8) || defined(POWER9) || defined(POWER10)
+ #if defined(__VEC__) || defined(__ALTIVEC__)
  #include "drot_microk_power8.c"
- #endif
 diff --git a/kernel/power/srot.c b/kernel/power/srot.c
-index d2910ff..18f5362 100644
+index a53342f6..73b477d9 100644
 --- a/kernel/power/srot.c
 +++ b/kernel/power/srot.c
 @@ -37,8 +37,6 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -21,11 +21,11 @@ index d2910ff..18f5362 100644
  
 -#pragma GCC optimize "O1"
 -
- #if defined(POWER8)
+ #if defined(POWER8) || defined(POWER9) || defined(POWER10)
+ #if defined(__VEC__) || defined(__ALTIVEC__)
  #include "srot_microk_power8.c"
- #endif
 diff --git a/kernel/power/zscal.c b/kernel/power/zscal.c
-index 14d677f..79f7271 100644
+index 5526f4d6..3c2efbfa 100644
 --- a/kernel/power/zscal.c
 +++ b/kernel/power/zscal.c
 @@ -36,8 +36,6 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -34,6 +34,6 @@ index 14d677f..79f7271 100644
  
 -#pragma GCC optimize "O1"
 -
- #if defined(POWER8)
+ #if defined(POWER8) || defined(POWER9) || defined(POWER10)
+ #if defined(__VEC__) || defined(__ALTIVEC__)
  #if defined(DOUBLE)
- #include "zscal_microk_power8.c"

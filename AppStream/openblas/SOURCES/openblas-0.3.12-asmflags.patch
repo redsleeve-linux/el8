@@ -1,8 +1,8 @@
 diff --git a/kernel/Makefile b/kernel/Makefile
-index a0a8fcd..df0669b 100644
+index e52781c6..c925837a 100644
 --- a/kernel/Makefile
 +++ b/kernel/Makefile
-@@ -73,22 +73,28 @@ endif
+@@ -151,25 +151,32 @@ endif
  all : libs
  
  scabs1.$(SUFFIX): $(KERNELDIR)/$(SCABS_KERNEL)
@@ -31,13 +31,18 @@ index a0a8fcd..df0669b 100644
 +	$(CC) -c $$CFLAGS -DF_INTERFACE $< -o $(@F)
  
  setparam$(TSUFFIX).$(SUFFIX): setparam$(TSUFFIX).c kernel$(TSUFFIX).h
+ ifeq ($(USE_GEMM3M), 1)
+-	$(CC) -c $(CFLAGS) -DUSE_GEMM3M $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) -c $$CFLAGS -DUSE_GEMM3M $< -o $@
+ else
 -	$(CC) -c $(CFLAGS) $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS $< -o $@
+ endif
  
  setparam$(TSUFFIX).c : setparam-ref.c
- 	sed 's/TS/$(TSUFFIX)/g' $< > $(@F)
-@@ -98,25 +104,32 @@ kernel$(TSUFFIX).h : $(KERNEL_INTERFACE)
+@@ -180,25 +187,32 @@ kernel$(TSUFFIX).h : $(KERNEL_INTERFACE)
  
  
  cpuid.$(SUFFIX): $(KERNELDIR)/cpuid.S
@@ -78,10 +83,10 @@ index a0a8fcd..df0669b 100644
  #ifdef DYNAMIC_ARCH
  clean ::
 diff --git a/kernel/Makefile.L1 b/kernel/Makefile.L1
-index a8f9cf0..5ebfc9c 100644
+index 7ad94118..3487a9e3 100644
 --- a/kernel/Makefile.L1
 +++ b/kernel/Makefile.L1
-@@ -495,319 +495,417 @@ XBLASOBJS	+= \
+@@ -545,217 +545,282 @@ endif
  
  
  $(KDIR)samax_k$(TSUFFIX).$(SUFFIX)  $(KDIR)samax_k$(TPSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(SAMAXKERNEL)
@@ -279,7 +284,7 @@ index a8f9cf0..5ebfc9c 100644
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -UCOMPLEX -DXDOUBLE -UUSE_ABS -DUSE_MIN $< -o $@
  
- 
+ ### ASUM ###
  $(KDIR)sasum_k$(TSUFFIX).$(SUFFIX)   $(KDIR)sasum_k$(TPSUFFIX).$(PSUFFIX)   : $(KERNELDIR)/$(SASUMKERNEL)
 -	$(CC) -c $(CFLAGS) -UCOMPLEX -UDOUBLE $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
@@ -310,6 +315,38 @@ index a8f9cf0..5ebfc9c 100644
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DCOMPLEX -DXDOUBLE $< -o $@
  
+ ### SUM ###
+ $(KDIR)ssum_k$(TSUFFIX).$(SUFFIX)   $(KDIR)ssum_k$(TPSUFFIX).$(PSUFFIX)   : $(KERNELDIR)/$(SSUMKERNEL)
+-	$(CC) -c $(CFLAGS) -UCOMPLEX -UDOUBLE $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) -c $$CFLAGS -UCOMPLEX -UDOUBLE $< -o $@
+ 
+ $(KDIR)dsum_k$(TSUFFIX).$(SUFFIX)   $(KDIR)dsum_k$(TPSUFFIX).$(PSUFFIX)   : $(KERNELDIR)/$(DSUMKERNEL)
+-	$(CC) -c $(CFLAGS) -UCOMPLEX -DDOUBLE $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) -c $$CFLAGS -UCOMPLEX -DDOUBLE $< -o $@
+ 
+ $(KDIR)qsum_k$(TSUFFIX).$(SUFFIX)   $(KDIR)qsum_k$(TPSUFFIX).$(PSUFFIX)   : $(KERNELDIR)/$(QSUMKERNEL)
+-	$(CC) -c $(CFLAGS) -UCOMPLEX -DXDOUBLE $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) -c $$CFLAGS -UCOMPLEX -DXDOUBLE $< -o $@
+ 
+ $(KDIR)csum_k$(TSUFFIX).$(SUFFIX)  $(KDIR)csum_k$(TPSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(CSUMKERNEL)
+-	$(CC) -c $(CFLAGS) -DCOMPLEX -UDOUBLE $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) -c $$CFLAGS -DCOMPLEX -UDOUBLE $< -o $@
+ 
+ $(KDIR)zsum_k$(TSUFFIX).$(SUFFIX)  $(KDIR)zsum_k$(TPSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(ZSUMKERNEL)
+-	$(CC) -c $(CFLAGS) -DCOMPLEX -DDOUBLE $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) -c $$CFLAGS -DCOMPLEX -DDOUBLE $< -o $@
+ 
+ $(KDIR)xsum_k$(TSUFFIX).$(SUFFIX)  $(KDIR)xsum_k$(TPSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(XSUMKERNEL)
+-	$(CC) -c $(CFLAGS) -DCOMPLEX -DXDOUBLE $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) -c $$CFLAGS -DCOMPLEX -DXDOUBLE $< -o $@
+ 
+ ### AXPY ###
  $(KDIR)saxpy_k$(TSUFFIX).$(SUFFIX)  $(KDIR)saxpy_k$(TPSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(SAXPYKERNEL)
 -	$(CC) -c $(CFLAGS) -UCOMPLEX -UDOUBLE $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
@@ -394,6 +431,11 @@ index a8f9cf0..5ebfc9c 100644
 -	$(CC) -c $(CFLAGS) -UCOMPLEX -DXDOUBLE $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -UCOMPLEX -DXDOUBLE $< -o $@
+ 
+ ifeq ($(BUILD_BFLOAT16),1)
+ $(KDIR)sbdot_k$(TSUFFIX).$(SUFFIX) $(KDIR)sbdot_k$(TPSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(SBDOTKERNEL)
+@@ -771,126 +836,165 @@ $(KDIR)dbf16tod_k$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(BF16TOKERNEL)
+ endif
  
  $(KDIR)sdot_k$(TSUFFIX).$(SUFFIX) $(KDIR)sdot_k$(TPSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(SDOTKERNEL)
 -	$(CC) -c $(CFLAGS) -UCOMPLEX -UDOUBLE $< -o $@
@@ -598,12 +640,12 @@ index a8f9cf0..5ebfc9c 100644
  
  
 diff --git a/kernel/Makefile.L2 b/kernel/Makefile.L2
-index 2aeb8f0..e7c49d2 100644
+index 79399c34..6d605f82 100644
 --- a/kernel/Makefile.L2
 +++ b/kernel/Makefile.L2
-@@ -220,209 +220,278 @@ XBLASOBJS	+= \
- 	xgeru_k$(TSUFFIX).$(SUFFIX) xgerc_k$(TSUFFIX).$(SUFFIX) xgerv_k$(TSUFFIX).$(SUFFIX) xgerd_k$(TSUFFIX).$(SUFFIX)
+@@ -236,251 +236,320 @@ XBLASOBJS	+= \
  
+ ifneq "$(or $(BUILD_SINGLE), $(BUILD_DOUBLE), $(BUILD_COMPLEX))" ""
  $(KDIR)sgemv_n$(TSUFFIX).$(SUFFIX)  $(KDIR)sgemv_n$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(SGEMVNKERNEL) $(TOPDIR)/common.h $(GEMVDEP)
 -	$(CC) -c $(CFLAGS) -UDOUBLE -UCOMPLEX  -UTRANS $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
@@ -613,7 +655,9 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -UDOUBLE -UCOMPLEX  -DTRANS  $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -UDOUBLE -UCOMPLEX  -DTRANS  $< -o $@
+ endif
  
+ ifneq "$(or $(BUILD_DOUBLE),$(BUILD_COMPLEX16))" ""
  $(KDIR)dgemv_n$(TSUFFIX).$(SUFFIX)  $(KDIR)dgemv_n$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(DGEMVNKERNEL) $(TOPDIR)/common.h $(GEMVDEP)
 -	$(CC) -c $(CFLAGS) -DDOUBLE -UCOMPLEX  -UTRANS $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
@@ -623,6 +667,7 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -DDOUBLE -UCOMPLEX  -DTRANS $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DDOUBLE -UCOMPLEX  -DTRANS $< -o $@
+ endif
  
  $(KDIR)qgemv_n$(TSUFFIX).$(SUFFIX)  $(KDIR)qgemv_n$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(QGEMVNKERNEL)
 -	$(CC) -c $(CFLAGS) -DXDOUBLE -UCOMPLEX -UTRANS $< -o $@
@@ -634,6 +679,8 @@ index 2aeb8f0..e7c49d2 100644
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DXDOUBLE -UCOMPLEX -DTRANS $< -o $@
  
+ 
+ ifneq "$(or $(BUILD_COMPLEX),$(BUILD_COMPLEX16))" ""
  $(KDIR)cgemv_n$(TSUFFIX).$(SUFFIX) $(KDIR)cgemv_n$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(CGEMVNKERNEL) $(TOPDIR)/common.h $(GEMVDEP)
 -	$(CC) -c $(CFLAGS) -UDOUBLE -DCOMPLEX -UTRANS -UCONJ -UXCONJ $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
@@ -673,6 +720,10 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -UDOUBLE -DCOMPLEX -DTRANS -DCONJ -DXCONJ $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -UDOUBLE -DCOMPLEX -DTRANS -DCONJ -DXCONJ $< -o $@
+ endif
+ 
+ 
+ ifeq ($(BUILD_COMPLEX16),1)
  
  $(KDIR)zgemv_n$(TSUFFIX).$(SUFFIX) $(KDIR)zgemv_n$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(ZGEMVNKERNEL) $(TOPDIR)/common.h $(GEMVDEP)
 -	$(CC) -c $(CFLAGS) -DDOUBLE -DCOMPLEX -UTRANS -UCONJ -UXCONJ $< -o $@
@@ -713,6 +764,7 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -DDOUBLE -DCOMPLEX -DTRANS -DCONJ -DXCONJ $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DDOUBLE -DCOMPLEX -DTRANS -DCONJ -DXCONJ $< -o $@
+ endif
  
  $(KDIR)xgemv_n$(TSUFFIX).$(SUFFIX) $(KDIR)xgemv_n$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(XGEMVNKERNEL)
 -	$(CC) -c $(CFLAGS) -DXDOUBLE -DCOMPLEX -UTRANS -UCONJ -UXCONJ $< -o $@
@@ -754,6 +806,9 @@ index 2aeb8f0..e7c49d2 100644
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DXDOUBLE -DCOMPLEX -DTRANS -DCONJ -DXCONJ $< -o $@
  
+ 
+ ifeq ($(BUILD_SINGLE),1)
+ 
  $(KDIR)ssymv_U$(TSUFFIX).$(SUFFIX)  $(KDIR)ssymv_U$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(SSYMV_U_KERNEL) $(SSYMV_U_PARAM)
 -	$(CC) -c $(CFLAGS) -UCOMPLEX -UDOUBLE -ULOWER $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
@@ -763,6 +818,10 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -UCOMPLEX -UDOUBLE -DLOWER $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -UCOMPLEX -UDOUBLE -DLOWER $< -o $@
+ endif
+ 
+ 
+ ifeq ($(BUILD_DOUBLE),1)
  
  $(KDIR)dsymv_U$(TSUFFIX).$(SUFFIX)  $(KDIR)dsymv_U$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(DSYMV_U_KERNEL)  $(DSYMV_U_PARAM)
 -	$(CC) -c $(CFLAGS) -UCOMPLEX -DDOUBLE -ULOWER $< -o $@
@@ -773,6 +832,7 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -UCOMPLEX -DDOUBLE -DLOWER $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -UCOMPLEX -DDOUBLE -DLOWER $< -o $@
+ endif
  
  $(KDIR)qsymv_U$(TSUFFIX).$(SUFFIX)  $(KDIR)qsymv_U$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(QSYMV_U_KERNEL)
 -	$(CC) -c $(CFLAGS) -UCOMPLEX -DXDOUBLE -ULOWER $< -o $@
@@ -784,6 +844,8 @@ index 2aeb8f0..e7c49d2 100644
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -UCOMPLEX -DXDOUBLE -DLOWER $< -o $@
  
+ ifeq ($(BUILD_COMPLEX),1)
+ 
  $(KDIR)csymv_U$(TSUFFIX).$(SUFFIX)  $(KDIR)csymv_U$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(CSYMV_U_KERNEL)   $(CSYMV_U_PARAM)
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -UDOUBLE -ULOWER $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
@@ -793,6 +855,9 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -UDOUBLE -DLOWER $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DCOMPLEX -UDOUBLE -DLOWER $< -o $@
+ endif
+ 
+ ifeq ($(BUILD_COMPLEX16),1)
  
  $(KDIR)zsymv_U$(TSUFFIX).$(SUFFIX)  $(KDIR)zsymv_U$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(ZSYMV_U_KERNEL)   $(ZSYMV_U_PARAM)
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -DDOUBLE -ULOWER $< -o $@
@@ -803,6 +868,7 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -DDOUBLE -DLOWER $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DCOMPLEX -DDOUBLE -DLOWER $< -o $@
+ endif
  
  $(KDIR)xsymv_U$(TSUFFIX).$(SUFFIX)  $(KDIR)xsymv_U$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(XSYMV_U_KERNEL)
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -DXDOUBLE -ULOWER $< -o $@
@@ -814,20 +880,28 @@ index 2aeb8f0..e7c49d2 100644
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DCOMPLEX -DXDOUBLE -DLOWER $< -o $@
  
+ ifeq ($(BUILD_SINGLE),1)
+ 
  $(KDIR)sger_k$(TSUFFIX).$(SUFFIX)  $(KDIR)sger_k$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(SGERKERNEL) $(SGERPARAM)
 -	$(CC) -c $(CFLAGS) -UDOUBLE $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -UDOUBLE $< -o $@
+ endif
+ 
+ ifeq ($(BUILD_DOUBLE),1)
  
  $(KDIR)dger_k$(TSUFFIX).$(SUFFIX)  $(KDIR)dger_k$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(DGERKERNEL) $(DGERPARAM)
 -	$(CC) -c $(CFLAGS) -DDOUBLE $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DDOUBLE $< -o $@
+ endif
  
  $(KDIR)qger_k$(TSUFFIX).$(SUFFIX)  $(KDIR)qger_k$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(QGERKERNEL) $(QGERPARAM)
 -	$(CC) -c $(CFLAGS) -DXDOUBLE $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DXDOUBLE $< -o $@
+ 
+ ifeq ($(BUILD_COMPLEX),1)
  
  $(KDIR)cgeru_k$(TSUFFIX).$(SUFFIX)  $(KDIR)cgeru_k$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(CGERUKERNEL) $(CGERPARAM)
 -	$(CC) -c $(CFLAGS) -UDOUBLE -UCONJ $< -o $@
@@ -848,6 +922,9 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -UDOUBLE -DCONJ -DXCONJ $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -UDOUBLE -DCONJ -DXCONJ $< -o $@
+ endif
+ 
+ ifeq ($(BUILD_COMPLEX16),1)
  
  $(KDIR)zgeru_k$(TSUFFIX).$(SUFFIX)  $(KDIR)zgeru_k$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(ZGERUKERNEL) $(ZGERPARAM)
 -	$(CC) -c $(CFLAGS) -DDOUBLE -UCONJ $< -o $@
@@ -868,6 +945,7 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -DDOUBLE -DCONJ -DXCONJ $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DDOUBLE -DCONJ -DXCONJ $< -o $@
+ endif
  
  $(KDIR)xgeru_k$(TSUFFIX).$(SUFFIX)  $(KDIR)xgeru_k$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(XGERUKERNEL) $(XGERPARAM)
 -	$(CC) -c $(CFLAGS) -DXDOUBLE -UCONJ $< -o $@
@@ -889,6 +967,8 @@ index 2aeb8f0..e7c49d2 100644
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DXDOUBLE -DCONJ -DXCONJ $< -o $@
  
+ ifeq ($(BUILD_COMPLEX),1)
+ 
  $(KDIR)chemv_U$(TSUFFIX).$(SUFFIX)  $(KDIR)chemv_U$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(CHEMV_U_KERNEL) $(CHEMV_U_PARAM)
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -UDOUBLE -ULOWER -DHEMV $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
@@ -908,6 +988,9 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -UDOUBLE -DLOWER -DHEMV -DHEMVREV $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DCOMPLEX -UDOUBLE -DLOWER -DHEMV -DHEMVREV $< -o $@
+ endif
+ 
+ ifeq ($(BUILD_COMPLEX16),1)
  
  $(KDIR)zhemv_U$(TSUFFIX).$(SUFFIX)  $(KDIR)zhemv_U$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(ZHEMV_U_KERNEL) $(ZHEMV_U_PARAM)
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -DDOUBLE -ULOWER -DHEMV $< -o $@
@@ -928,7 +1011,7 @@ index 2aeb8f0..e7c49d2 100644
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -DDOUBLE -DLOWER -DHEMV -DHEMVREV $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DCOMPLEX -DDOUBLE -DLOWER -DHEMV -DHEMVREV $< -o $@
- 
+ endif
  $(KDIR)xhemv_U$(TSUFFIX).$(SUFFIX)  $(KDIR)xhemv_U$(TSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(XHEMV_U_KERNEL)
 -	$(CC) -c $(CFLAGS) -DCOMPLEX -DXDOUBLE -ULOWER -DHEMV $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
@@ -949,12 +1032,19 @@ index 2aeb8f0..e7c49d2 100644
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DCOMPLEX -DXDOUBLE -DLOWER -DHEMV -DHEMVREV $< -o $@
  
+ 
 diff --git a/kernel/Makefile.L3 b/kernel/Makefile.L3
-index 0664263..de28ab3 100644
+index 2ba593c2..110674b2 100644
 --- a/kernel/Makefile.L3
 +++ b/kernel/Makefile.L3
-@@ -403,2897 +403,3837 @@ XGEMMONCOPYOBJ_P = $(XGEMMONCOPYOBJ:.$(SUFFIX)=.$(PSUFFIX))
- XGEMMOTCOPYOBJ_P = $(XGEMMOTCOPYOBJ:.$(SUFFIX)=.$(PSUFFIX))
+@@ -526,119 +526,150 @@ XGEMMOTCOPYOBJ_P = $(XGEMMOTCOPYOBJ:.$(SUFFIX)=.$(PSUFFIX))
+ 
+ ifeq ($(BUILD_BFLOAT16),1)
+ $(KDIR)sbgemm_beta$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(SBGEMM_BETA)
+-	$(CC) $(CFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ endif
  
  $(KDIR)sgemm_beta$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(SGEMM_BETA)
 -	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@
@@ -986,15 +1076,82 @@ index 0664263..de28ab3 100644
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DXDOUBLE -DCOMPLEX $< -o $@
  
+ 
+ ifeq ($(BUILD_BFLOAT16), 1)
+ 
+ $(KDIR)$(SBGEMMONCOPYOBJ) : $(KERNELDIR)/$(SBGEMMONCOPY)
+-	$(CC) $(CFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ 
+ $(KDIR)$(SBGEMMOTCOPYOBJ) : $(KERNELDIR)/$(SBGEMMOTCOPY)
+ 
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o - > sbgemmotcopy.s
+-	m4 sbgemmotcopy.s > sbgemmotcopy_nomacros.s
+-	$(CC) $(CFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX sbgemmotcopy_nomacros.s -o $@
+-	rm sbgemmotcopy.s sbgemmotcopy_nomacros.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o shgemmotcopy.s
++	m4 shgemmotcopy.s > shgemmotcopy_nomacros.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX shgemmotcopy_nomacros.s -o $@
++	rm shgemmotcopy.s shgemmotcopy_nomacros.s
+ else
+-	$(CC) $(CFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ endif
+ 
+ ifneq ($(SBGEMM_UNROLL_M), $(SBGEMM_UNROLL_N))
+ 
+ $(KDIR)$(SBGEMMINCOPYOBJ) : $(KERNELDIR)/$(SBGEMMINCOPY)
+-	$(CC) $(CFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ 
+ $(KDIR)$(SBGEMMITCOPYOBJ) : $(KERNELDIR)/$(SBGEMMITCOPY)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o - > sbgemmitcopy.s
+-	m4 sbgemmitcopy.s > sbgemmitcopy_nomacros.s
+-	$(CC) $(CFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX sbgemmitcopy_nomacros.s -o $@
+-	rm sbgemmitcopy.s sbgemmitcopy_nomacros.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o shgemmitcopy.s
++	m4 shgemmitcopy.s > shgemmitcopy_nomacros.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX shgemmitcopy_nomacros.s -o $@
++	rm shgemmitcopy.s shgemmitcopy_nomacros.s
+ else
+-	$(CC) $(CFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ endif
+ 
+ endif
+ endif
+ 
  $(KDIR)$(SGEMMONCOPYOBJ) : $(KERNELDIR)/$(SGEMMONCOPY)
 -	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX $< -o $@
  
  $(KDIR)$(SGEMMOTCOPYOBJ) : $(KERNELDIR)/$(SGEMMOTCOPY)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -UDOUBLE -UCOMPLEX $< -o - > sgemmotcopy.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -UDOUBLE -UCOMPLEX $< -o - > sgemmotcopy.s
+ 	m4 sgemmotcopy.s > sgemmotcopy_nomacros.s
+-	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX sgemmotcopy_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX sgemmotcopy_nomacros.s -o $@
+ 	rm sgemmotcopy.s sgemmotcopy_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX $< -o $@
+ endif	
+ 
  
  ifneq ($(SGEMM_UNROLL_M), $(SGEMM_UNROLL_N))
  
@@ -1004,16 +1161,38 @@ index 0664263..de28ab3 100644
 +	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX $< -o $@
  
  $(KDIR)$(SGEMMITCOPYOBJ) : $(KERNELDIR)/$(SGEMMITCOPY)
--	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -UDOUBLE -UCOMPLEX $< -o - > sgemmitcopy.s
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
-+	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX $< -o $@
- 
++	$(CC) $$CFLAGS -E -UDOUBLE -UCOMPLEX $< -o - > sgemmitcopy.s
+ 	m4 sgemmitcopy.s > sgemmitcopy_nomacros.s
+-	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX sgemmitcopy_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX sgemmitcopy_nomacros.s -o $@
+ 	rm sgemmitcopy.s sgemmitcopy_nomacros.s
+ else
+-	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@ 
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX $< -o $@ 
+ endif
+ 	
  endif
  
  $(KDIR)$(DGEMMONCOPYOBJ) : $(KERNELDIR)/$(DGEMMONCOPY)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DDOUBLE -UCOMPLEX $< -o - > dgemm_ncopy.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DDOUBLE -UCOMPLEX $< -o - > dgemm_ncopy.s
+ 	m4 dgemm_ncopy.s > dgemm_ncopy_nomacros.s
+-	$(CC) $(CFLAGS) -c -DDOUBLE -UCOMPLEX dgemm_ncopy_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX dgemm_ncopy_nomacros.s -o $@
+ 	rm dgemm_ncopy.s dgemm_ncopy_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DDOUBLE -UCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX $< -o $@
+ endif
  
  $(KDIR)$(DGEMMOTCOPYOBJ) : $(KERNELDIR)/$(DGEMMOTCOPY)
 -	$(CC) $(CFLAGS) -c -DDOUBLE -UCOMPLEX $< -o $@
@@ -1028,12 +1207,23 @@ index 0664263..de28ab3 100644
 +	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX $< -o $@
  
  $(KDIR)$(DGEMMITCOPYOBJ) : $(KERNELDIR)/$(DGEMMITCOPY)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DDOUBLE -UCOMPLEX $< -o - > dgemm_itcopy.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DDOUBLE -UCOMPLEX $< -o - > dgemm_itcopy.s
+ 	m4 dgemm_itcopy.s > dgemm_itcopy_nomacros.s
+-	$(CC) $(CFLAGS) -c -DDOUBLE -UCOMPLEX dgemm_itcopy_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX dgemm_itcopy_nomacros.s -o $@
+ 	rm dgemm_itcopy.s dgemm_itcopy_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DDOUBLE -UCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX $< -o $@
- 
  endif
  
+ endif
+@@ -646,65 +677,81 @@ endif
  ifdef EXPRECISION
  
  $(KDIR)$(QGEMMONCOPYOBJ) : $(KERNELDIR)/$(QGEMMONCOPY)
@@ -1080,9 +1270,20 @@ index 0664263..de28ab3 100644
 +	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX $< -o $@
  
  $(KDIR)$(CGEMMITCOPYOBJ) : $(KERNELDIR)/$(CGEMMITCOPY)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -UDOUBLE -UCOMPLEX -S $< -o - > cgemm_itcopy.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -UDOUBLE -UCOMPLEX -E $< -o - > cgemm_itcopy.s
+ 	m4 cgemm_itcopy.s > cgemm_itcopy_nomacros.s
+-	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX cgemm_itcopy_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX cgemm_itcopy_nomacros.s -o $@
+ 	rm cgemm_itcopy.s cgemm_itcopy_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX $< -o $@
+ endif
  
  endif
  
@@ -1104,12 +1305,23 @@ index 0664263..de28ab3 100644
 +	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX $< -o $@
  
  $(KDIR)$(ZGEMMITCOPYOBJ) : $(KERNELDIR)/$(ZGEMMITCOPY)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DDOUBLE -UCOMPLEX $< -o - > zgemm_itcopy.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DDOUBLE -UCOMPLEX $< -o - > zgemm_itcopy.s
+ 	m4 zgemm_itcopy.s > zgemm_itcopy_nomacros.s
+-	$(CC) $(CFLAGS) -c -DDOUBLE -UCOMPLEX zgemm_itcopy_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX zgemm_itcopy_nomacros.s -o $@
+ 	rm zgemm_itcopy.s zgemm_itcopy_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DDOUBLE -UCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX $< -o $@
- 
  endif
  
+ endif
+@@ -712,18 +759,22 @@ endif
  ifdef EXPRECISION
  
  $(KDIR)$(XGEMMONCOPYOBJ) : $(KERNELDIR)/$(XGEMMONCOPY)
@@ -1136,17 +1348,61 @@ index 0664263..de28ab3 100644
  
  endif
  
- endif
+@@ -731,12 +782,15 @@ endif
  
  $(KDIR)sgemm_kernel$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(SGEMMKERNEL) $(SGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -UDOUBLE -UCOMPLEX  $< -o - > sgemm_kernel$(TSUFFIX).s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -UDOUBLE -UCOMPLEX  $< -o - > sgemm_kernel$(TSUFFIX).s
+ 	m4 sgemm_kernel$(TSUFFIX).s > sgemm_kernel$(TSUFFIX)_nomacros.s
+-	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX sgemm_kernel$(TSUFFIX)_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX sgemm_kernel$(TSUFFIX)_nomacros.s -o $@
+ 	rm sgemm_kernel$(TSUFFIX).s sgemm_kernel$(TSUFFIX)_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -UDOUBLE -UCOMPLEX $< -o $@
+ endif
+ 
+ ifdef USE_DIRECT_SGEMM
+@@ -750,1768 +804,2329 @@ ifeq ($(BUILD_BFLOAT16), 1)
+ 
+ $(KDIR)sbgemm_kernel$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(SBGEMMKERNEL) $(SBGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DBFLOAT16 -UDOUBLE -UCOMPLEX  $< -o - > sbgemm_kernel$(TSUFFIX).s
+-	m4 sbgemm_kernel$(TSUFFIX).s > sbgemm_kernel$(TSUFFIX)_nomacros.s
+-	$(CC) $(CFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX sbgemm_kernel$(TSUFFIX)_nomacros.s -o $@
+-	rm sbgemm_kernel$(TSUFFIX).s sbgemm_kernel$(TSUFFIX)_nomacros.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DHALF -UDOUBLE -UCOMPLEX  $< -o - > shgemm_kernel$(TSUFFIX).s
++	m4 shgemm_kernel$(TSUFFIX).s > shgemm_kernel$(TSUFFIX)_nomacros.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DHALF -UDOUBLE -UCOMPLEX shgemm_kernel$(TSUFFIX)_nomacros.s -o $@
++	rm shgemm_kernel$(TSUFFIX).s shgemm_kernel$(TSUFFIX)_nomacros.s
+ else
+-	$(CC) $(CFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ endif
+ endif
  
  $(KDIR)dgemm_kernel$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(DGEMMKERNEL) $(DGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DDOUBLE -UCOMPLEX $< -o - > dgemm_kernel$(TSUFFIX).s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DDOUBLE -UCOMPLEX $< -o - > dgemm_kernel$(TSUFFIX).s
+ 	m4 dgemm_kernel$(TSUFFIX).s > dgemm_kernel$(TSUFFIX)_nomacros.s
+-	$(CC) $(CFLAGS) -c -DDOUBLE -UCOMPLEX dgemm_kernel$(TSUFFIX)_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX dgemm_kernel$(TSUFFIX)_nomacros.s -o $@
+ 	rm dgemm_kernel$(TSUFFIX).s dgemm_kernel$(TSUFFIX)_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DDOUBLE -UCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DDOUBLE -UCOMPLEX $< -o $@
+ endif
  
  $(KDIR)qgemm_kernel$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(QGEMMKERNEL) $(QGEMMDEPEND)
 -	$(CC) $(CFLAGS) -c -DXDOUBLE -UCOMPLEX $< -o $@
@@ -1154,44 +1410,132 @@ index 0664263..de28ab3 100644
 +	$(CC) $$CFLAGS -c -DXDOUBLE -UCOMPLEX $< -o $@
  
  $(KDIR)cgemm_kernel_n$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CGEMMKERNEL) $(CGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -UDOUBLE -DCOMPLEX -DNN $< -o - > cgemm_kernel_n.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -UDOUBLE -DCOMPLEX -DNN $< -o - > cgemm_kernel_n.s
+ 	m4 cgemm_kernel_n.s > cgemm_kernel_n_nomacros.s
+-	$(CC) $(CFLAGS) -c -UDOUBLE -DCOMPLEX -DNN cgemm_kernel_n_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -DCOMPLEX -DNN cgemm_kernel_n_nomacros.s -o $@
+ 	rm cgemm_kernel_n.s cgemm_kernel_n_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -UDOUBLE -DCOMPLEX -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -UDOUBLE -DCOMPLEX -DNN $< -o $@
+ endif
  
  $(KDIR)cgemm_kernel_l$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CGEMMKERNEL) $(CGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -UDOUBLE -DCOMPLEX -DCN $< -o - > cgemm_kernel_l.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -UDOUBLE -DCOMPLEX -DCN $< -o - > cgemm_kernel_l.s
+ 	m4 cgemm_kernel_l.s > cgemm_kernel_l_nomacros.s
+-	$(CC) $(CFLAGS) -c -UDOUBLE -DCOMPLEX -DCN cgemm_kernel_l_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -DCOMPLEX -DCN cgemm_kernel_l_nomacros.s -o $@
+ 	rm cgemm_kernel_l.s cgemm_kernel_l_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -UDOUBLE -DCOMPLEX -DCN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -UDOUBLE -DCOMPLEX -DCN $< -o $@
+ endif
  
  $(KDIR)cgemm_kernel_r$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CGEMMKERNEL) $(CGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -UDOUBLE -DCOMPLEX -DNC  $< -o - > cgemm_kernel_r.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -UDOUBLE -DCOMPLEX -DNC  $< -o - > cgemm_kernel_r.s
+ 	m4 cgemm_kernel_r.s > cgemm_kernel_r_nomacros.s
+-	$(CC) $(CFLAGS) -c -UDOUBLE -DCOMPLEX -DNC cgemm_kernel_r_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -DCOMPLEX -DNC cgemm_kernel_r_nomacros.s -o $@
+ 	rm cgemm_kernel_r.s cgemm_kernel_r_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -UDOUBLE -DCOMPLEX -DNC $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -UDOUBLE -DCOMPLEX -DNC $< -o $@
+ endif
  
  $(KDIR)cgemm_kernel_b$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CGEMMKERNEL) $(CGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -UDOUBLE -DCOMPLEX -DCC $< -o - > cgemm_kernel_b.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -UDOUBLE -DCOMPLEX -DCC $< -o - > cgemm_kernel_b.s
+ 	m4 cgemm_kernel_b.s > cgemm_kernel_b_nomacros.s
+-	$(CC) $(CFLAGS) -c -UDOUBLE -DCOMPLEX -DCC cgemm_kernel_b_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -DCOMPLEX -DCC cgemm_kernel_b_nomacros.s -o $@
+ 	rm cgemm_kernel_b.s cgemm_kernel_b_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -UDOUBLE -DCOMPLEX -DCC $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -UDOUBLE -DCOMPLEX -DCC $< -o $@
+ endif
  
  $(KDIR)zgemm_kernel_n$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZGEMMKERNEL) $(ZGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DDOUBLE -DCOMPLEX -DNN $< -o - > zgemm_kernel_n.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DDOUBLE -DCOMPLEX -DNN $< -o - > zgemm_kernel_n.s
+ 	m4 zgemm_kernel_n.s > zgemm_kernel_n_nomacros.s
+-	$(CC) $(CFLAGS) -c -DDOUBLE -DCOMPLEX -DNN zgemm_kernel_n_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DDOUBLE -DCOMPLEX -DNN zgemm_kernel_n_nomacros.s -o $@
+ 	rm zgemm_kernel_n.s zgemm_kernel_n_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DDOUBLE -DCOMPLEX -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DDOUBLE -DCOMPLEX -DNN $< -o $@
+ endif
  
  $(KDIR)zgemm_kernel_l$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZGEMMKERNEL) $(ZGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DDOUBLE -DCOMPLEX -DCN $< -o - > zgemm_kernel_l.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DDOUBLE -DCOMPLEX -DCN $< -o - > zgemm_kernel_l.s
+ 	m4 zgemm_kernel_l.s > zgemm_kernel_l_nomacros.s
+-	$(CC) $(CFLAGS) -c -DDOUBLE -DCOMPLEX -DCN zgemm_kernel_l_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DDOUBLE -DCOMPLEX -DCN zgemm_kernel_l_nomacros.s -o $@
+ 	rm zgemm_kernel_l.s zgemm_kernel_l_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DDOUBLE -DCOMPLEX -DCN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DDOUBLE -DCOMPLEX -DCN $< -o $@
+ endif
  
  $(KDIR)zgemm_kernel_r$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZGEMMKERNEL) $(ZGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DDOUBLE -DCOMPLEX -DNC $< -o - > zgemm_kernel_r.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DDOUBLE -DCOMPLEX -DNC $< -o - > zgemm_kernel_r.s
+ 	m4 zgemm_kernel_r.s > zgemm_kernel_r_nomacros.s
+-	$(CC) $(CFLAGS) -c -DDOUBLE -DCOMPLEX -DNC zgemm_kernel_r_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DDOUBLE -DCOMPLEX -DNC zgemm_kernel_r_nomacros.s -o $@
+ 	rm zgemm_kernel_r.s zgemm_kernel_r_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DDOUBLE -DCOMPLEX -DNC $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DDOUBLE -DCOMPLEX -DNC $< -o $@
+ endif
  
  $(KDIR)zgemm_kernel_b$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZGEMMKERNEL) $(ZGEMMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DDOUBLE -DCOMPLEX -DCC $< -o - > zgemm_kernel_b.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DDOUBLE -DCOMPLEX -DCC $< -o - > zgemm_kernel_b.s
+ 	m4 zgemm_kernel_b.s > zgemm_kernel_b_nomacros.s
+-	$(CC) $(CFLAGS) -c -DDOUBLE -DCOMPLEX -DCC zgemm_kernel_b_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DDOUBLE -DCOMPLEX -DCC zgemm_kernel_b_nomacros.s -o $@
+ 	rm zgemm_kernel_b.s zgemm_kernel_b_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DDOUBLE -DCOMPLEX -DCC $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DDOUBLE -DCOMPLEX -DCC $< -o $@
+ endif
  
  $(KDIR)xgemm_kernel_n$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(XGEMMKERNEL) $(XGEMMDEPEND)
 -	$(CC) $(CFLAGS) -c -DXDOUBLE -DCOMPLEX -DNN $< -o $@
@@ -1216,44 +1560,132 @@ index 0664263..de28ab3 100644
  
  ifdef USE_TRMM
  $(KDIR)strmm_kernel_LN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(STRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o - > strmmkernel_ln.s	
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o - > strmmkernel_ln.s	
+ 	m4 strmmkernel_ln.s > strmmkernel_ln_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -UTRANSA strmmkernel_ln_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -UTRANSA strmmkernel_ln_nomacros.s -o $@
+ 	rm strmmkernel_ln.s strmmkernel_ln_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o $@
+ endif
  
  $(KDIR)strmm_kernel_LT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(STRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -DTRANSA $< -o - > strmmkernel_lt.s	
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -DTRANSA $< -o - > strmmkernel_lt.s	
+ 	m4 strmmkernel_lt.s > strmmkernel_lt_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -DTRANSA strmmkernel_lt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -DTRANSA strmmkernel_lt_nomacros.s -o $@
+ 	rm strmmkernel_lt.s strmmkernel_lt_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -DTRANSA $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -DTRANSA $< -o $@
+ endif
  
  $(KDIR)strmm_kernel_RN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(STRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o - > strmmkernel_rn.s	
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o - > strmmkernel_rn.s	
+ 	m4 strmmkernel_rn.s > strmmkernel_rn_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -UTRANSA strmmkernel_rn_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -UTRANSA strmmkernel_rn_nomacros.s -o $@
+ 	rm strmmkernel_rn.s strmmkernel_rn_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o $@
+ endif
  
  $(KDIR)strmm_kernel_RT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(STRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o - > strmm_kernel_rt.s	
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o - > strmm_kernel_rt.s	
+ 	m4 strmm_kernel_rt.s > strmm_kernel_rt_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA strmm_kernel_rt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA strmm_kernel_rt_nomacros.s -o $@
+ 	rm strmm_kernel_rt.s strmm_kernel_rt_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
+ endif
  
  $(KDIR)dtrmm_kernel_LN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(DTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o - > dtrmm_kernel_ln.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o - > dtrmm_kernel_ln.s
+ 	m4 dtrmm_kernel_ln.s > dtrmm_kernel_ln_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -UTRANSA dtrmm_kernel_ln_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -UTRANSA dtrmm_kernel_ln_nomacros.s -o $@
+ 	rm dtrmm_kernel_ln.s dtrmm_kernel_ln_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o $@
+ endif
  
  $(KDIR)dtrmm_kernel_LT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(DTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -DTRANSA $< -o - > dtrmm_kernel_lt.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -DTRANSA $< -o - > dtrmm_kernel_lt.s
+ 	m4 dtrmm_kernel_lt.s > dtrmm_kernel_lt_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -DTRANSA dtrmm_kernel_lt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -DTRANSA dtrmm_kernel_lt_nomacros.s -o $@
+ 	rm dtrmm_kernel_lt.s dtrmm_kernel_lt_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -DTRANSA $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -DTRANSA $< -o $@
+ endif
  
  $(KDIR)dtrmm_kernel_RN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(DTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o - > dtrmm_kernel_rn.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o - > dtrmm_kernel_rn.s
+ 	m4 dtrmm_kernel_rn.s > dtrmm_kernel_rn_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -UTRANSA dtrmm_kernel_rn_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -UTRANSA dtrmm_kernel_rn_nomacros.s -o $@
+ 	rm dtrmm_kernel_rn.s dtrmm_kernel_rn_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o $@
+ endif
  
  $(KDIR)dtrmm_kernel_RT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(DTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o - > dtrmm_kernel_rt.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o - > dtrmm_kernel_rt.s
+ 	m4 dtrmm_kernel_rt.s > dtrmm_kernel_rt_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -DTRANSA dtrmm_kernel_rt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -DTRANSA dtrmm_kernel_rt_nomacros.s -o $@
+ 	rm dtrmm_kernel_rt.s dtrmm_kernel_rt_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
+ endif
  
  $(KDIR)qtrmm_kernel_LN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(QGEMMKERNEL)
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DXDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o $@
@@ -1276,84 +1708,261 @@ index 0664263..de28ab3 100644
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DXDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
  
  $(KDIR)ctrmm_kernel_LN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN  $< -o - > ctrmm_kernel_ln.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN  $< -o - > ctrmm_kernel_ln.s
+ 	m4 ctrmm_kernel_ln.s > ctrmm_kernel_ln_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN ctrmm_kernel_ln_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN ctrmm_kernel_ln_nomacros.s -o $@
+ 	rm ctrmm_kernel_ln.s ctrmm_kernel_ln_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN $< -o $@
+ endif
  
  $(KDIR)ctrmm_kernel_LT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN $< -o - > ctrmm_kernel_lt.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN $< -o - > ctrmm_kernel_lt.s
+ 	m4 ctrmm_kernel_lt.s > ctrmm_kernel_lt_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN ctrmm_kernel_lt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN ctrmm_kernel_lt_nomacros.s -o $@
+ 	rm ctrmm_kernel_lt.s ctrmm_kernel_lt_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN $< -o $@
+ endif
  
  $(KDIR)ctrmm_kernel_LR$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN $< -o - > ctrmm_kernel_lr.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN $< -o - > ctrmm_kernel_lr.s
+ 	m4 ctrmm_kernel_lr.s > ctrmm_kernel_lr_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN  ctrmm_kernel_lr_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN  ctrmm_kernel_lr_nomacros.s -o $@
+ 	rm ctrmm_kernel_lr.s ctrmm_kernel_lr_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN $< -o $@
+ endif
  
  $(KDIR)ctrmm_kernel_LC$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN $< -o - > ctrmm_kernel_lc.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN $< -o - > ctrmm_kernel_lc.s
+ 	m4 ctrmm_kernel_lc.s > ctrmm_kernel_lc_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN ctrmm_kernel_lc_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN ctrmm_kernel_lc_nomacros.s -o $@
+ 	rm ctrmm_kernel_lc_nomacros.s ctrmm_kernel_lc.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN $< -o $@
+ endif
  
  $(KDIR)ctrmm_kernel_RN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN $< -o - > ctrmm_kernel_rn.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN $< -o - > ctrmm_kernel_rn.s
+ 	m4 ctrmm_kernel_rn.s > ctrmm_kernel_rn_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN ctrmm_kernel_rn_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN ctrmm_kernel_rn_nomacros.s -o $@
+ 	rm ctrmm_kernel_rn.s ctrmm_kernel_rn_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN $< -o $@
+ endif
  
  $(KDIR)ctrmm_kernel_RT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN $< -o - > ctrmm_kernel_rt.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN $< -o - > ctrmm_kernel_rt.s
+ 	m4 ctrmm_kernel_rt.s > ctrmm_kernel_rt_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN ctrmm_kernel_rt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN ctrmm_kernel_rt_nomacros.s -o $@
+ 	rm ctrmm_kernel_rt.s ctrmm_kernel_rt_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN $< -o $@
+ endif
  
  $(KDIR)ctrmm_kernel_RR$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC $< -o - > ctrmm_kernel_rr.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC $< -o - > ctrmm_kernel_rr.s
+ 	m4 ctrmm_kernel_rr.s > ctrmm_kernel_rr_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC ctrmm_kernel_rr_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC ctrmm_kernel_rr_nomacros.s -o $@
+ 	rm ctrmm_kernel_rr.s ctrmm_kernel_rr_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC $< -o $@
+ endif
  
  $(KDIR)ctrmm_kernel_RC$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(CTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC $< -o - > ctrmm_kernel_RC.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC $< -o - > ctrmm_kernel_RC.s
+ 	m4 ctrmm_kernel_RC.s > ctrmm_kernel_RC_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC ctrmm_kernel_RC_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC ctrmm_kernel_RC_nomacros.s -o $@
+ 	rm ctrmm_kernel_RC.s ctrmm_kernel_RC_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC $< -o $@
+ endif
  
  $(KDIR)ztrmm_kernel_LN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN $< -o - > ztrmm_kernel_ln.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN $< -o - > ztrmm_kernel_ln.s
+ 	m4 ztrmm_kernel_ln.s > ztrmm_kernel_ln_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN ztrmm_kernel_ln_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN ztrmm_kernel_ln_nomacros.s -o $@
+ 	rm ztrmm_kernel_ln.s ztrmm_kernel_ln_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -UCONJ -DNN $< -o $@
+ endif
  
  $(KDIR)ztrmm_kernel_LT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN $< -o - > ztrmm_kernel_lt.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN $< -o - > ztrmm_kernel_lt.s
+ 	m4 ztrmm_kernel_lt.s > ztrmm_kernel_lt_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN ztrmm_kernel_lt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN ztrmm_kernel_lt_nomacros.s -o $@
+ 	rm ztrmm_kernel_lt.s ztrmm_kernel_lt_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -UCONJ -DNN $< -o $@
+ endif
  
  $(KDIR)ztrmm_kernel_LR$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN $< -o - > ztrmm_kernel_lr.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN $< -o - > ztrmm_kernel_lr.s
+ 	m4 ztrmm_kernel_lr.s > ztrmm_kernel_lr_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN ztrmm_kernel_lr_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN ztrmm_kernel_lr_nomacros.s -o $@
+ 	rm ztrmm_kernel_lr.s ztrmm_kernel_lr_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -UTRANSA -DCONJ -DCN $< -o $@
+ endif
  
  $(KDIR)ztrmm_kernel_LC$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN $< -o - > ztrmm_kernel_lc.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN $< -o - > ztrmm_kernel_lc.s
+ 	m4 ztrmm_kernel_lc.s >ztrmm_kernel_lc_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN ztrmm_kernel_lc_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN ztrmm_kernel_lc_nomacros.s -o $@
+ 	rm ztrmm_kernel_lc.s ztrmm_kernel_lc_nomacros.s 
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -DLEFT -DTRANSA -DCONJ -DCN $< -o $@
+ endif
  
  $(KDIR)ztrmm_kernel_RN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN $< -o - > ztrmm_kernel_rn.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN $< -o - > ztrmm_kernel_rn.s
+ 	m4 ztrmm_kernel_rn.s > ztrmm_kernel_rn_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN ztrmm_kernel_rn_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN ztrmm_kernel_rn_nomacros.s -o $@
+ 	rm ztrmm_kernel_rn.s ztrmm_kernel_rn_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -UCONJ -DNN $< -o $@
+ endif
  
  $(KDIR)ztrmm_kernel_RT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN $< -o - > ztrmm_kernel_rt.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN $< -o - > ztrmm_kernel_rt.s
+ 	m4 ztrmm_kernel_rt.s > ztrmm_kernel_rt_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN ztrmm_kernel_rt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN ztrmm_kernel_rt_nomacros.s -o $@
+ 	rm ztrmm_kernel_rt.s ztrmm_kernel_rt_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -UCONJ -DNN $< -o $@
+ endif
  
  $(KDIR)ztrmm_kernel_RR$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC $< -o - > ztrmm_kernel_rr.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC $< -o - > ztrmm_kernel_rr.s
+ 	m4 ztrmm_kernel_rr.s > ztrmm_kernel_rr_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC ztrmm_kernel_rr_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC ztrmm_kernel_rr_nomacros.s -o $@
+ 	rm ztrmm_kernel_rr.s ztrmm_kernel_rr_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -UTRANSA -DCONJ -DNC $< -o $@
+ endif
  
  $(KDIR)ztrmm_kernel_RC$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZTRMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC $< -o - > ztrmm_kernel_rc.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC $< -o - > ztrmm_kernel_rc.s
+ 	m4 ztrmm_kernel_rc.s > ztrmm_kernel_rc_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC ztrmm_kernel_rc_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC ztrmm_kernel_rc_nomacros.s -o $@
+ 	rm ztrmm_kernel_rc.s ztrmm_kernel_rc_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -DDOUBLE -DCOMPLEX -ULEFT -DTRANSA -DCONJ -DNC $< -o $@
+ endif
+ 
  else
  $(KDIR)strmm_kernel_LN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(SGEMMKERNEL)
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o $@
@@ -1371,9 +1980,20 @@ index 0664263..de28ab3 100644
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o $@
  
  $(KDIR)strmm_kernel_RT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(SGEMMKERNEL)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o - > strmm_kernel_rt.s	
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o - > strmm_kernel_rt.s	
+ 	m4 strmm_kernel_rt.s > strmm_kernel_rt_nomacros.s
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA strmm_kernel_rt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA strmm_kernel_rt_nomacros.s -o $@
+ 	rm strmm_kernel_rt.s strmm_kernel_rt_nomacros.s
+ else
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
+ endif
  
  $(KDIR)dtrmm_kernel_LN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(DGEMMKERNEL)
 -	$(CC) $(CFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o $@
@@ -1580,9 +2200,20 @@ index 0664263..de28ab3 100644
 +	$(CC) -c $$CFLAGS -DTRSMKERNEL -UCOMPLEX -DDOUBLE -DUPPER -DLN -UCONJ $< -o $@
  
  $(KDIR)dtrsm_kernel_LT$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(DTRSMKERNEL_LT) $(DTRSMDEPEND)
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRSMKERNEL -UCOMPLEX -DDOUBLE -UUPPER -DLT -UCONJ $< -o - > dtrsm_kernel_lt.s
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRSMKERNEL -UCOMPLEX -DDOUBLE -UUPPER -DLT -UCONJ $< -o - > dtrsm_kernel_lt.s
+ 	m4 dtrsm_kernel_lt.s > dtrsm_kernel_lt_nomacros.s
+-	$(CC) -c $(CFLAGS) -DTRSMKERNEL -UCOMPLEX -DDOUBLE -UUPPER -DLT -UCONJ dtrsm_kernel_lt_nomacros.s -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) -c $$CFLAGS -DTRSMKERNEL -UCOMPLEX -DDOUBLE -UUPPER -DLT -UCONJ dtrsm_kernel_lt_nomacros.s -o $@
+ 	rm dtrsm_kernel_lt.s dtrsm_kernel_lt_nomacros.s
+ else
 -	$(CC) -c $(CFLAGS) -DTRSMKERNEL -UCOMPLEX -DDOUBLE -UUPPER -DLT -UCONJ $< -o $@
 +	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
 +	$(CC) -c $$CFLAGS -DTRSMKERNEL -UCOMPLEX -DDOUBLE -UUPPER -DLT -UCONJ $< -o $@
+ endif
  
  $(KDIR)dtrsm_kernel_RN$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(DTRSMKERNEL_RN) $(DTRSMDEPEND)
 -	$(CC) -c $(CFLAGS) -DTRSMKERNEL -UCOMPLEX -DDOUBLE -DUPPER -DRN -UCONJ $< -o $@
@@ -3421,6 +4052,13 @@ index 0664263..de28ab3 100644
 +	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
 +	$(CC) $$PFLAGS -c -UDOUBLE -UCOMPLEX $< -o $@
  
+ ifeq ($(BUILD_BFLOAT16),1)
+ $(KDIR)sbgemm_beta$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(SBGEMM_BETA)
+-	$(CC) $(PFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
++	$(CC) $$PFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ endif
+ 
  $(KDIR)dgemm_beta$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(DGEMM_BETA)
 -	$(CC) $(PFLAGS) -c -DDOUBLE -UCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
@@ -3445,6 +4083,32 @@ index 0664263..de28ab3 100644
 -	$(CC) $(PFLAGS) -c -DXDOUBLE -DCOMPLEX $< -o $@
 +	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
 +	$(CC) $$PFLAGS -c -DXDOUBLE -DCOMPLEX $< -o $@
+ 
+ 
+ ifeq ($(BUILD_BFLOAT16), 1)
+ $(SBGEMMONCOPYOBJ_P) : $(KERNELDIR)/$(SBGEMMONCOPY)
+-	$(CC) $(PFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
++	$(CC) $$PFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ 
+ $(SBGEMMOTCOPYOBJ_P) : $(KERNELDIR)/$(SBGEMMOTCOPY)
+-	$(CC) $(PFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
++	$(CC) $$PFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ 
+ ifneq ($(SBGEMM_UNROLL_M), $(SBGEMM_UNROLL_N))
+ $(SBGEMMINCOPYOBJ_P) : $(KERNELDIR)/$(SBGEMMINCOPY)
+-	$(CC) $(PFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
++	$(CC) $$PFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ 
+ $(SBGEMMITCOPYOBJ_P) : $(KERNELDIR)/$(SBGEMMITCOPY)
+-	$(CC) $(PFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
++	$(CC) $$PFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
+ 
+ endif
+ endif
  
  $(SGEMMONCOPYOBJ_P) : $(KERNELDIR)/$(SGEMMONCOPY)
 -	$(CC) $(PFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@
@@ -3596,6 +4260,13 @@ index 0664263..de28ab3 100644
  
  endif
  
+@@ -2520,1301 +3135,1732 @@ endif
+ 
+ ifeq ($(BUILD_BFLOAT16), 1)
+ $(KDIR)sbgemm_kernel$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(SBGEMMKERNEL) $(SBGEMMDEPEND)
+-	$(CC) $(PFLAGS) -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
++	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
++	$(CC) $$PFLAGS -c -DBFLOAT16 -UDOUBLE -UCOMPLEX $< -o $@
  endif
  
  $(KDIR)sgemm_kernel$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(SGEMMKERNEL) $(SGEMMDEPEND)
@@ -3624,9 +4295,20 @@ index 0664263..de28ab3 100644
 +	$(CC) $$PFLAGS -c -UDOUBLE -DCOMPLEX -DCN $< -o $@
  
  $(KDIR)cgemm_kernel_r$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(CGEMMKERNEL) $(CGEMMDEPEND)
--	$(CC) $(PFLAGS) -c -UDOUBLE -DCOMPLEX -DNC $< -o $@
+ ifeq ($(OS), AIX)
+-	$(CC) $(PFLAGS) -S -UDOUBLE -DCOMPLEX -DNC $< -o - > cgemm_kernel_r.s
 +	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
-+	$(CC) $$PFLAGS -c -UDOUBLE -DCOMPLEX -DNC $< -o $@
++	$(CC) $$PFLAGS -E -UDOUBLE -DCOMPLEX -DNC $< -o - > cgemm_kernel_r.s
+ 	m4 cgemm_kernel_r.s > cgemm_kernel_r_nomacros.s
+-	$(CC) $(PFLAGS) -c -UDOUBLE -DCOMPLEX -DNC cgemm_kernel_r_nomacros.s -o $@
++	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
++	$(CC) $$PFLAGS -c -UDOUBLE -DCOMPLEX -DNC cgemm_kernel_r_nomacros.s -o $@
+ 	rm cgemm_kernel_r.s cgemm_kernel_r_nomacros.s 
+ else
+-	$(CC) $(CFLAGS) -c -UDOUBLE -DCOMPLEX -DNC $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -UDOUBLE -DCOMPLEX -DNC $< -o $@
+ endif
  
  $(KDIR)cgemm_kernel_b$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(CGEMMKERNEL) $(CGEMMDEPEND)
 -	$(CC) $(PFLAGS) -c -UDOUBLE -DCOMPLEX -DCC $< -o $@
@@ -3689,9 +4371,20 @@ index 0664263..de28ab3 100644
 +	$(CC) $$PFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -UTRANSA $< -o $@
  
  $(KDIR)strmm_kernel_RT$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(SGEMMKERNEL)
--	$(CC) $(PFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
+ ifeq ($(OS), AIX)
+-	$(CC) $(CFLAGS) -S -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o - > strmm_kernel_rt.s	
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -E -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o - > strmm_kernel_rt.s	
+ 	m4 strmmkernel_rn.s > strmm_kernel_rt_nomacros.s
+-	$(CC) $(PFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA strmm_kernel_rt_nomacros.s -o $@
 +	[[ "$<" == *.S ]] && PFLAGS="$(PFLAGS) $(ASMFLAGS)" || PFLAGS="$(PFLAGS)"; \
-+	$(CC) $$PFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
++	$(CC) $$PFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA strmm_kernel_rt_nomacros.s -o $@
+ 	rm strmm_kernel_rt.s strmm_kernel_rt_nomacros.s
+ else
+-	$(CC) $(CFLAGS) -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
++	[[ "$<" == *.S ]] && CFLAGS="$(CFLAGS) $(ASMFLAGS)" || CFLAGS="$(CFLAGS)"; \
++	$(CC) $$CFLAGS -c -DTRMMKERNEL -UDOUBLE -UCOMPLEX -ULEFT -DTRANSA $< -o $@
+ endif
  
  $(KDIR)dtrmm_kernel_LN$(TSUFFIX).$(PSUFFIX) : $(KERNELDIR)/$(DGEMMKERNEL)
 -	$(CC) $(PFLAGS) -c -DTRMMKERNEL -DDOUBLE -UCOMPLEX -DLEFT -UTRANSA $< -o $@
@@ -5731,7 +6424,7 @@ index 0664263..de28ab3 100644
  
  
  #####  BLAS extensions ######
-@@ -3303,112 +4243,128 @@ DOMATCOPY_CN = ../arm/omatcopy_cn.c
+@@ -3824,112 +4870,128 @@ DOMATCOPY_CN = ../arm/omatcopy_cn.c
  endif
  
  $(KDIR)domatcopy_k_cn$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(DOMATCOPY_CN)
@@ -5876,7 +6569,7 @@ index 0664263..de28ab3 100644
  
  
  ifndef COMATCOPY_CN
-@@ -3416,112 +4372,128 @@ COMATCOPY_CN = ../arm/zomatcopy_cn.c
+@@ -3937,112 +4999,128 @@ COMATCOPY_CN = ../arm/zomatcopy_cn.c
  endif
  
  $(KDIR)comatcopy_k_cn$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(COMATCOPY_CN)
@@ -6021,7 +6714,7 @@ index 0664263..de28ab3 100644
  
  
  
-@@ -3530,112 +4502,128 @@ ZOMATCOPY_CN = ../arm/zomatcopy_cn.c
+@@ -4051,112 +5129,128 @@ ZOMATCOPY_CN = ../arm/zomatcopy_cn.c
  endif
  
  $(KDIR)zomatcopy_k_cn$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(ZOMATCOPY_CN)
@@ -6166,7 +6859,7 @@ index 0664263..de28ab3 100644
  
  
  ifndef SGEADD_K
-@@ -3643,26 +4631,30 @@ SGEADD_K = ../generic/geadd.c
+@@ -4164,26 +5258,30 @@ SGEADD_K = ../generic/geadd.c
  endif
  
  $(KDIR)sgeadd_k$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(SGEADD_K)
@@ -6202,7 +6895,7 @@ index 0664263..de28ab3 100644
 +	$(CC) $$CFLAGS -c -DDOUBLE -DCOMPLEX -UROWM $< -o $@
  
 diff --git a/kernel/Makefile.LA b/kernel/Makefile.LA
-index 8834271..d9c6739 100644
+index 88342718..d9c67390 100644
 --- a/kernel/Makefile.LA
 +++ b/kernel/Makefile.LA
 @@ -14,38 +14,50 @@ XBLASOBJS	+= xneg_tcopy$(TSUFFIX).$(SUFFIX) xlaswp_ncopy$(TSUFFIX).$(SUFFIX)
