@@ -1,17 +1,17 @@
-From 4822b2805d70863c96445476e86eb7630fbc1f37 Mon Sep 17 00:00:00 2001
+From 83cb165627e2f7f87975d0f71a508ab12165470f Mon Sep 17 00:00:00 2001
 From: Jacco Ligthart <jacco@redsleeve.org>
-Date: Sat, 23 Nov 2019 22:49:44 +0100
+Date: Fri, 1 Oct 2021 10:38:26 +0000
 Subject: [PATCH] added arm to the ExclusiveArch and nobuildarches lists
 
 ---
- SPECS/kernel.spec | 14 +++++++++++---
- 1 file changed, 11 insertions(+), 3 deletions(-)
+ SPECS/kernel.spec | 18 +++++++++++++-----
+ 1 file changed, 13 insertions(+), 5 deletions(-)
 
 diff --git a/SPECS/kernel.spec b/SPECS/kernel.spec
-index 9d90f97..c4aad94 100644
+index a564c0d..d52f9a9 100644
 --- a/SPECS/kernel.spec
 +++ b/SPECS/kernel.spec
-@@ -247,6 +247,11 @@
+@@ -295,6 +295,11 @@
  %define kernel_image arch/arm64/boot/Image.gz
  %endif
  
@@ -23,7 +23,7 @@ index 9d90f97..c4aad94 100644
  # To temporarily exclude an architecture from being built, add it to
  # %%nobuildarches. Do _NOT_ use the ExclusiveArch: line, because if we
  # don't build kernel-headers then the new build system will no longer let
-@@ -254,7 +259,7 @@
+@@ -302,7 +307,7 @@
  # Which is a BadThing(tm).
  
  # We only build kernel-headers on the following...
@@ -32,30 +32,51 @@ index 9d90f97..c4aad94 100644
  
  %ifarch %nobuildarches
  %define with_up 0
-@@ -284,11 +289,11 @@ Group: System Environment/Kernel
+@@ -332,14 +337,14 @@ Group: System Environment/Kernel
  License: GPLv2 and Redistributable, no modification permitted
  URL: http://www.kernel.org/
  Version: %{rpmversion}
 -Release: %{pkg_release}
 +Release: %{pkg_release}.redsleeve
  Summary: The Linux kernel, based on version %{version}, heavily modified with backports
+ %if %{with_realtime}
+ ExclusiveArch: x86_64
+ %else
  # DO NOT CHANGE THE 'ExclusiveArch' LINE TO TEMPORARILY EXCLUDE AN ARCHITECTURE BUILD.
  # SET %%nobuildarches (ABOVE) INSTEAD
 -ExclusiveArch: noarch i386 i686 x86_64 s390x aarch64 ppc64le
 +ExclusiveArch: noarch i386 i686 x86_64 s390x aarch64 ppc64le %{arm}
+ %endif
  ExclusiveOS: Linux
  %ifnarch %{nobuildarches}
- Requires: kernel-core-uname-r = %{KVERREL}%{?variant}
-@@ -2317,6 +2322,9 @@ fi
+@@ -357,7 +362,7 @@ Requires: rt-setup
+ BuildRequires: kmod, patch, bash, coreutils, tar, git, which
+ BuildRequires: bzip2, xz, findutils, gzip, m4, perl-interpreter, perl-Carp, perl-devel, perl-generators, make, diffutils, gawk
+ BuildRequires: gcc, binutils, redhat-rpm-config, hmaccalc, python3-devel
+-BuildRequires: net-tools, hostname, bc, bison, flex, elfutils-devel, dwarves
++BuildRequires: net-tools, hostname, bc, bison, flex, elfutils-devel
+ %if %{with_doc}
+ BuildRequires: xmlto, asciidoc, python3-sphinx
+ %endif
+@@ -1783,7 +1788,7 @@ BuildKernel %make_target %kernel_image %{with_vdso_install} zfcpdump
+ BuildKernel %make_target %kernel_image %{with_vdso_install}
+ %endif
+ 
+-%ifnarch noarch i686
++%ifnarch noarch i686 %{arm}
+ %if !%{with_debug} && !%{with_zfcpdump} && !%{with_up}
+ # If only building the user space tools, then initialize the build environment
+ # and some variables so that the various userspace tools can be built.
+@@ -2611,6 +2616,9 @@ fi
  #
  #
  %changelog
-+* Sat Nov 23 2019 Jacco Ligthart <jacco@redsleeve.org> 4.18.0-147.0.3.el8.redsleeve
++* Fri Oct 01 2021 Jacco Ligthart <jacco@redsleeve.org> 4.18.0-305.19.1.el8.redsleeve
 +- added arm to the ExclusiveArch and nobuildarches lists
 +
- * Wed Nov 13 2019 CentOS Sources <bugs@centos.org> - 4.18.0-147.0.3.el8.centos
+ * Wed Sep 15 2021 CentOS Sources <bugs@centos.org> - 4.18.0-305.19.1.el8.centos
  - Apply debranding changes
  
 -- 
-2.18.1
+2.27.0
 
