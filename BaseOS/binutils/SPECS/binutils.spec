@@ -43,7 +43,7 @@
 Summary: A GNU collection of binary utilities
 Name: binutils%{?name_cross}%{?_with_debug:-debug}
 Version: 2.30
-Release: 93%{?dist}
+Release: 108%{?dist}.1
 License: GPLv3+
 URL: https://sourceware.org/binutils
 
@@ -117,6 +117,11 @@ URL: https://sourceware.org/binutils
 %if %{with debug}
 %undefine with_testsuite
 %endif
+
+# BZ 1924068.  Since applications that use the BFD library are
+# required to link against the static version, ensure that it retains
+# its debug informnation.
+%undefine __brp_strip_static_archive
 
 #----------------------------------------------------------------------------
 
@@ -553,6 +558,43 @@ Patch83: binutils-common-sym-versioning.patch
 # Lifetime: Fixed in 2.37
 Patch84: binutils-ppc64le-note-merge.patch
 
+# Purpose:  Another fix for weak symbol handling with LTO.
+# Lifetime: Fixed in 2.36
+Patch85: binutils-plugin-as-needed-2.patch
+
+# Purpose:  Fix a potential vulnerability involing symlink overwriting.
+# Lifetime: Fixed in 2.37
+Patch86: binutils-CVE-2021-20197.patch
+
+# Purpose:  Fix copy relocs that refer to weak aliases
+# Lifetime: Fixed in 2.35
+Patch87: binutils-mark-all-weak-aliases.patch
+
+# Purpose:  Fix excessive memory consumption when attempting to parse corrupt
+#            DWARF debug information.
+# Lifetime: Fixed in 2.36
+Patch88: binutils-CVE-2021-3487.patch
+
+# Purpose:  Fix illegal memory access when parsing corrupt ELF files.
+# Lifetime: Fixed in 2.36
+Patch89: binutils-CVE-2020-35448.patch
+
+# Purpose: Fixed heap-based buffer overflow in _bfd_elf_slurp_secondary_reloc_section.
+# Lifetime: Fixed in 2.36
+Patch90: binutils-CVE-2021-20284.patch
+
+# Purpose: Fixed the handling of relocations against discarded sections.
+# Lifetime: Fixed in 2.34
+Patch91: binutils-clearing-discarded-relocs.patch
+
+# Purpose: Fix the GOLD linker's generation of .note.gnu.property sections for x86.
+# Lifetime: Fixed in 2.37 (maybe)
+Patch92: binutils-gold-i386-gnu-property-notes.patch
+
+# Purpose: Add options to control the display of multibyte characters.  CVE 2021-42574
+# Lifetime: Fixed in 2.38 (maybe)
+Patch93: binutils.unicode.patch
+
 #----------------------------------------------------------------------------
 
 Provides: bundled(libiberty)
@@ -678,6 +720,14 @@ dynamic libraries.
 Developers starting new projects are strongly encouraged to consider
 using libelf instead of BFD.
 
+# BZ 1924068.  Since applications that use the BFD library are
+# required to link against the static version, ensure that it retains
+# its debug informnation.
+# FIXME: Yes - this is being done twice.  I have no idea why this
+# second invocation is necessary but if both are not present the
+# static archives will be stripped.
+%undefine __brp_strip_static_archive
+
 #----------------------------------------------------------------------------
 
 %prep
@@ -766,6 +816,15 @@ using libelf instead of BFD.
 %patch82 -p1
 %patch83 -p1
 %patch84 -p1
+%patch85 -p1
+%patch86 -p1
+%patch87 -p1
+%patch88 -p1
+%patch89 -p1
+%patch90 -p1
+%patch91 -p1
+%patch92 -p1
+%patch93 -p1
 
 # We cannot run autotools as there is an exact requirement of autoconf-2.59.
 # FIXME - this is no longer true.  Maybe try reinstating autotool use ?
@@ -1215,6 +1274,52 @@ exit 0
 
 #----------------------------------------------------------------------------
 %changelog
+* Wed Oct 20 2021 Nick Clifton  <nickc@redhat.com> - 2.30-108.1
+- Add ability to control the display of unicode characters.  (#2009172)
+
+* Wed Jul 07 2021 Nick Clifton  <nickc@redhat.com> - 2.30-108
+- Fix thinko in previous delta.  (#1970961)
+
+* Wed Jun 23 2021 Nick Clifton  <nickc@redhat.com> - 2.30-107
+- Fix the GOLD linker's generation of .note.gnu.property sections for x86.  (#1970961)
+
+* Tue Jun 15 2021 Nick Clifton  <nickc@redhat.com> - 2.30-105
+- Fix the handling of relocations against discarded sections.  (#1969775)
+
+* Wed May 19 2021 Nick Clifton  <nickc@redhat.com> - 2.30-104
+- Fix heap-based buffer overflow in _bfd_elf_slurp_secondary_reloc_section. (#1961526)
+
+* Tue May 04 2021 Nick Clifton  <nickc@redhat.com> - 2.30-103
+- Fix an illegal memory access when parsing a corrupt ELF file.  (#1953659)
+
+* Mon Apr 26 2021 Nick Clifton  <nickc@redhat.com> - 2.30-102
+- Bump NVR to allow rebuild against binutils-2.30-101.
+
+* Wed Apr 14 2021 Nick Clifton  <nickc@redhat.com> - 2.30-101
+- Fix excessive memory consumption in the BFD librart when parsing corrupt DWARF information.  (#1947134)
+
+* Fri Apr 09 2021 Nick Clifton  <nickc@redhat.com> - 2.30-100
+- Do not strip the static BFD library.  (For real this time).  (#1924068)
+- Remove support for ARM v8.6 ISA.  (#1875912)
+
+* Thu Mar 25 2021 Nick Clifton  <nickc@redhat.com> - 2.30-99
+- Fix bug in previous patch to enable support for ARM v8.6 ISA.  (#1875912)
+
+* Wed Mar 24 2021 Nick Clifton  <nickc@redhat.com> - 2.30-98
+- Do not strip the static BFD library.  (#1924068)
+
+* Tue Mar 23 2021 Nick Clifton  <nickc@redhat.com> - 2.30-97
+- Enable support for ARM v8.6 ISA.  (#1875912)
+
+* Fri Mar 19 2021 Nick Clifton  <nickc@redhat.com> - 2.30-96
+- Fix problems involving copy relocs that refer to weak aliases.  (#1935785)
+
+* Thu Mar 18 2021 Nick Clifton  <nickc@redhat.com> - 2.30-95
+- Fix CVE involivng overwriting symlinks.  (#1920642)
+
+* Thu Mar 18 2021 Nick Clifton  <nickc@redhat.com> - 2.30-94
+- Fix LTO and weak symbols again.  (#1930988)
+
 * Thu Feb 18 2021 Nick Clifton  <nickc@redhat.com> - 2.30-93
 - Fix merging ppc64le notes.  (#1928936)
 
