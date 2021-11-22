@@ -1,10 +1,10 @@
-%global DATE 20200928
-%global gitrev 8ed81e8ef69a535cbc168f55d06941bf3e4ef8ee
-%global gcc_version 8.4.1
+%global DATE 20210514
+%global gitrev a3253c88425835d5b339d6998a1110a66ccd8b44
+%global gcc_version 8.5.0
 %global gcc_major 8
 # Note, gcc_release must be integer, if you want to add suffixes to
 # %%{release}, append them after %%{gcc_release} on Release: line.
-%global gcc_release 1
+%global gcc_release 4
 %global nvptx_tools_gitrev c28050f60193b3b95a18866a96f03334e874e78f
 %global nvptx_newlib_gitrev aadc8eb0ec43b7cd0dd2dfb484bae63c8b05ef24
 %global _unpackaged_files_terminate_build 0
@@ -252,7 +252,10 @@ Obsoletes: libcilkrts-static
 Requires(post): /sbin/install-info
 Requires(preun): /sbin/install-info
 AutoReq: true
+# Various libraries are imported.  #1859893 asks us to list them all.
 Provides: bundled(libiberty)
+Provides: bundled(libbacktrace)
+Provides: bundled(libffi)
 Provides: gcc(major) = %{gcc_major}
 
 Patch0: gcc8-hack.patch
@@ -272,7 +275,11 @@ Patch14: gcc8-libgcc-hardened.patch
 Patch15: gcc8-rh1670535.patch
 Patch16: gcc8-libgomp-20190503.patch
 Patch17: gcc8-libgomp-testsuite.patch
-Patch18: gcc8-pr95614-revert.patch
+Patch18: gcc8-remove-old-demangle.patch
+Patch19: gcc8-rh1960701.patch
+Patch20: gcc8-pr100797.patch
+Patch21: gcc8-rh1981822.patch
+Patch22: gcc8-add-Wbidirectional.patch
 
 Patch30: gcc8-rh1668903-1.patch
 Patch31: gcc8-rh1668903-2.patch
@@ -849,8 +856,11 @@ to NVidia PTX capable devices if available.
 %patch15 -p0 -b .rh1670535~
 %patch16 -p0 -b .libgomp-20190503~
 %patch17 -p0 -b .libgomp-testsuite~
-%patch18 -p0 -b .pr95614-revert~
-rm -f gcc/testsuite/gfortran.dg/pr95614_*.f90
+%patch18 -p0 -b .demangle~
+%patch19 -p0 -b .rh1960701~
+%patch20 -p0 -b .pr100797~
+%patch21 -p0 -b .rh1981822~
+%patch22 -p1 -b .bidi~
 
 %patch30 -p0 -b .rh1668903-1~
 %patch31 -p0 -b .rh1668903-2~
@@ -3167,6 +3177,33 @@ fi
 %endif
 
 %changelog
+* Fri Oct 29 2021 Marek Polacek <polacek@redhat.com> 8.5.0-4
+- add -Wbidirectional patch (#2008391)
+
+* Tue Jul 13 2021 Marek Polacek <polacek@redhat.com> 8.5.0-3
+- fix mangling of lambdas in default args (PR c++/91241, #1981822)
+- add a few Provides: bundled
+
+* Tue Jun  1 2021 Marek Polacek <polacek@redhat.com> 8.5.0-2
+- revert upstream PR85873 gcc-8 fix, apply the fix from gcc-9 (#1960701)
+- fix 'this' adjustment for devirtualized call (PR c++/100797, #1965951)
+
+* Fri May 14 2021 Marek Polacek <polacek@redhat.com> 8.5.0-1
+- update from GCC 8.5 release (#1946758)
+- this includes a fix for PR target/87839 (#1958295)
+
+* Mon Apr 26 2021 Marek Polacek <polacek@redhat.com> 8.4.1-2.1
+- remove support for demangling GCC 2.x era mangling schemes (#1668394)
+
+* Fri Apr 23 2021 Marek Polacek <polacek@redhat.com> 8.4.1-2
+- update from GCC 8.4 release (#1946758)
+
+* Fri Apr  9 2021 Marek Polacek <polacek@redhat.com> 8.4.1-1.2
+- back out the PR97236 patch
+
+* Fri Apr  9 2021 Marek Polacek <polacek@redhat.com> 8.4.1-1.1
+- fix bad use of VMAT_CONTIGUOUS (PR tree-optimization/97236, #1925632)
+
 * Tue Sep 29 2020 Marek Polacek <polacek@redhat.com> 8.4.1-1
 - update from GCC 8.4 release (#1868446)
 - remove symlinks to 32-bit versions of these static libraries: libasan.a,

@@ -1,0 +1,70 @@
+From 55f40d968b0bd3be4478a9481e829a99ee0fa04f Mon Sep 17 00:00:00 2001
+From: Jason Merrill <jason@redhat.com>
+Date: Mon, 5 Apr 2021 22:50:44 -0400
+Subject: [PATCH] c++: mangling of lambdas in default args [PR91241]
+
+In this testcase, the parms remembered in LAMBDA_EXPR_EXTRA_SCOPE are no
+longer the parms of the FUNCTION_DECL they have as their DECL_CONTEXT, so we
+were mangling both lambdas as parm #0.  But since the parms are numbered
+from right to left we don't need to need to find them in the FUNCTION_DECL,
+we can measure their own DECL_CHAIN.
+
+gcc/cp/ChangeLog:
+
+	PR c++/91241
+	* mangle.c (write_compact_number): Add sanity check.
+	(write_local_name): Use list_length for parm number.
+
+gcc/testsuite/ChangeLog:
+
+	PR c++/91241
+	* g++.dg/abi/lambda-defarg1.C: New test.
+---
+ gcc/cp/mangle.c                           | 11 ++---------
+ gcc/testsuite/g++.dg/abi/lambda-defarg1.C | 11 +++++++++++
+ 2 files changed, 13 insertions(+), 9 deletions(-)
+ create mode 100644 gcc/testsuite/g++.dg/abi/lambda-defarg1.C
+
+--- gcc/cp/mangle.c
++++ gcc/cp/mangle.c
+@@ -1628,6 +1628,7 @@ write_literal_operator_name (tree identifier)
+ static void
+ write_compact_number (int num)
+ {
++  gcc_checking_assert (num >= 0);
+   if (num > 0)
+     write_unsigned_number (num - 1);
+   write_char ('_');
+@@ -2027,15 +2028,7 @@ write_local_name (tree function, const tree local_entity,
+   /* For this purpose, parameters are numbered from right-to-left.  */
+   if (parm)
+     {
+-      tree t;
+-      int i = 0;
+-      for (t = DECL_ARGUMENTS (function); t; t = DECL_CHAIN (t))
+-	{
+-	  if (t == parm)
+-	    i = 1;
+-	  else if (i)
+-	    ++i;
+-	}
++      int i = list_length (parm);
+       write_char ('d');
+       write_compact_number (i - 1);
+     }
+--- /dev/null
++++ gcc/testsuite/g++.dg/abi/lambda-defarg1.C
+@@ -0,0 +1,11 @@
++// PR c++/91241
++// { dg-do compile { target c++11 } }
++
++struct A {
++  int *b(const int & = []() -> int { return 0; }(),
++	 const int & = []() -> int { return 0; }());
++};
++int *A::b(const int &, const int &) { b(); return 0; }
++// { dg-final { scan-assembler "_ZN1A1bERKiS1_" } }
++// { dg-final { scan-assembler "_ZZN1A1bERKiS1_Ed_NKUlvE_clEv" } }
++// { dg-final { scan-assembler "_ZZN1A1bERKiS1_Ed0_NKUlvE_clEv" } }
+-- 
+2.27.0
