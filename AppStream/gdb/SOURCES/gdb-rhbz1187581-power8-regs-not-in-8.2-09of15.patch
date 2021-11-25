@@ -1,0 +1,36 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 11 Jan 2019 17:02:16 -0500
+Subject: gdb-rhbz1187581-power8-regs-not-in-8.2-09of15.patch
+
+;; [PowerPC] Refactor have_ initializers in rs6000-tdep.c
+;; Pedro Franco de Carvalho, RH BZ 1187581
+
+[PowerPC] Refactor have_ initializers in rs6000-tdep.c
+
+This patch refactors a series of initializers in rs6000_gdbarch_init
+for clarity.  The have_fpu initializer is also changed to set the
+variable to 0, like the other similar variables.  This doesn't affect
+program behavior.
+
+gdb/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * rs6000-tdep.c (rs6000_gdbarch_init): Replace line wrapping by a
+    second initializer line for the have_* variables.  Initialize
+    have_fpu to 0 instead of 1.
+
+diff --git a/gdb/rs6000-tdep.c b/gdb/rs6000-tdep.c
+--- a/gdb/rs6000-tdep.c
++++ b/gdb/rs6000-tdep.c
+@@ -5845,8 +5845,8 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
+   enum powerpc_long_double_abi long_double_abi = POWERPC_LONG_DOUBLE_AUTO;
+   enum powerpc_vector_abi vector_abi = powerpc_vector_abi_global;
+   enum powerpc_elf_abi elf_abi = POWERPC_ELF_AUTO;
+-  int have_fpu = 1, have_spe = 0, have_mq = 0, have_altivec = 0, have_dfp = 0,
+-      have_vsx = 0;
++  int have_fpu = 0, have_spe = 0, have_mq = 0, have_altivec = 0;
++  int have_dfp = 0, have_vsx = 0;
+   int tdesc_wordsize = -1;
+   const struct target_desc *tdesc = info.target_desc;
+   struct tdesc_arch_data *tdesc_data = NULL;

@@ -1,0 +1,169 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Tue, 28 Jul 2020 09:32:50 -0400
+Subject: gdb-rhbz1842691-corefile-mem-access-12of15.patch
+
+;; Add new command "maint print core-file-backed-mappings"
+;; Kevin Buettner, RH BZ 1842961
+
+   Author: Kevin Buettner <kevinb@redhat.com>
+   Date:   Fri Jul 3 21:55:51 2020 -0700
+
+    Add new command "maint print core-file-backed-mappings"
+
+    I wrote a read_core_file_mappings method for FreeBSD and then registered
+    this gdbarch method.  I saw some strange behavior while testing it and
+    wanted a way to make sure that mappings were being correctly loaded
+    into corelow.c, so I wrote the new command which is the topic of this
+    commit.  I think it might be occasionally useful for debugging strange
+    corefile behavior.
+
+    With regard to FreeBSD, my work isn't ready yet.  Unlike Linux,
+    FreeBSD puts all mappings into its core file note.  And, unlike Linux,
+    it doesn't dump load segments which occupy no space in the file.  So
+    my (perhaps naive) implementation of a FreeBSD read_core_file_mappings
+    didn't work all that well:  I saw more failures in the corefile2.exp
+    tests than without it.  I think it should be possible to make FreeBSD
+    work as well as Linux, but it will require doing something with all of
+    the mappings, not just the file based mappings that I was considering.
+
+    In the v4 series, Pedro asked the following:
+
+        I don't understand what this command provides that "info proc
+        mappings" doesn't?  Can you give an example of when you'd use this
+        command over "info proc mappings" ?
+
+    On Linux, "info proc mappings" and "maint print core-file-backed-mappings"
+    will produce similar, possibly identical, output.  This need not be
+    the case for other OSes.  E.g. on FreeBSD, had I finished the
+    implementation, the output from these commands would have been very
+    different.  The FreeBSD "info proc mappings" command would show
+    additional (non-file-backed) mappings in addition to at least one
+    additional field (memory permissions) for each mapping.
+
+    As noted earlier, I was seeing some unexpected behavior while working
+    on the FreeBSD implementation and wanted to be certain that the
+    mappings were being correctly loaded by corelow.c.  "info proc
+    mappings" prints the core file mappings, but doesn't tell us anything
+    about whether they've been loaded by corelow.c This new maintenance
+    command directly interrogates the data structures and prints the
+    values found there.
+
+    gdb/ChangeLog:
+
+    	* corelow.c (gdbcmd.h): Include.
+    	(core_target::info_proc_mappings): New method.
+    	(get_current_core_target): New function.
+    	(maintenance_print_core_file_backed_mappings): New function.
+    	(_initialize_corelow): Add core-file-backed-mappings to
+    	"maint print" commands.
+
+diff --git a/gdb/corelow.c b/gdb/corelow.c
+--- a/gdb/corelow.c
++++ b/gdb/corelow.c
+@@ -118,6 +118,9 @@ public:
+ 				  const char *human_name,
+ 				  bool required);
+ 
++  /* See definition.  */
++  void info_proc_mappings (struct gdbarch *gdbarch);
++
+ private: /* per-core data */
+ 
+   /* The core's section table.  Note that these target sections are
+@@ -1292,6 +1295,86 @@ core_target::info_proc (const char *args, enum info_proc_what request)
+   return true;
+ }
+ 
++/* Get a pointer to the current core target.  If not connected to a
++   core target, return NULL.  */
++
++static core_target *
++get_current_core_target ()
++{
++  target_ops *proc_target = find_target_at (process_stratum);
++  return dynamic_cast<core_target *> (proc_target);
++}
++
++/* Display file backed mappings from core file.  */
++
++void
++core_target::info_proc_mappings (struct gdbarch *gdbarch)
++{
++  if (m_core_file_mappings.sections != m_core_file_mappings.sections_end)
++    {
++      printf_filtered (_("Mapped address spaces:\n\n"));
++      if (gdbarch_addr_bit (gdbarch) == 32)
++	{
++	  printf_filtered ("\t%10s %10s %10s %10s %s\n",
++			   "Start Addr",
++			   "  End Addr",
++			   "      Size", "    Offset", "objfile");
++	}
++      else
++	{
++	  printf_filtered ("  %18s %18s %10s %10s %s\n",
++			   "Start Addr",
++			   "  End Addr",
++			   "      Size", "    Offset", "objfile");
++	}
++    }
++
++  for (const struct target_section *tsp = m_core_file_mappings.sections;
++       tsp < m_core_file_mappings.sections_end;
++       tsp++)
++    {
++      ULONGEST start = tsp->addr;
++      ULONGEST end = tsp->endaddr;
++      ULONGEST file_ofs = tsp->the_bfd_section->filepos;
++      const char *filename = bfd_get_filename (tsp->the_bfd_section->owner);
++
++      if (gdbarch_addr_bit (gdbarch) == 32)
++	printf_filtered ("\t%10s %10s %10s %10s %s\n",
++			 paddress (gdbarch, start),
++			 paddress (gdbarch, end),
++			 hex_string (end - start),
++			 hex_string (file_ofs),
++			 filename);
++      else
++	printf_filtered ("  %18s %18s %10s %10s %s\n",
++			 paddress (gdbarch, start),
++			 paddress (gdbarch, end),
++			 hex_string (end - start),
++			 hex_string (file_ofs),
++			 filename);
++    }
++}
++
++/* Implement "maintenance print core-file-backed-mappings" command.  
++
++   If mappings are loaded, the results should be similar to the
++   mappings shown by "info proc mappings".  This command is mainly a
++   debugging tool for GDB developers to make sure that the expected
++   mappings are present after loading a core file.  For Linux, the
++   output provided by this command will be very similar (if not
++   identical) to that provided by "info proc mappings".  This is not
++   necessarily the case for other OSes which might provide
++   more/different information in the "info proc mappings" output.  */
++
++static void
++maintenance_print_core_file_backed_mappings (const char *args, int from_tty)
++{
++  core_target *targ = get_current_core_target ();
++  if (targ != nullptr)
++    targ->info_proc_mappings (targ->core_gdbarch ());
++}
++
++void _initialize_corelow ();
+ void
+ _initialize_corelow (void)
+ {
+@@ -1303,4 +1386,8 @@ Set whether CORE-FILE loads the build-id associated files automatically."), _("\
+ Show whether CORE-FILE loads the build-id associated files automatically."),
+ 			   NULL, NULL, NULL,
+ 			   &setlist, &showlist);
++  add_cmd ("core-file-backed-mappings", class_maintenance,
++           maintenance_print_core_file_backed_mappings,
++	   _("Print core file's file-backed mappings"),
++	   &maintenanceprintlist);
+ }

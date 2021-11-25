@@ -1,0 +1,49 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Sergio Durigan Junior <sergiodj@redhat.com>
+Date: Tue, 7 Jan 2020 21:02:19 -0500
+Subject: gdb-rhbz1768593-s390x-arch13-01.patch
+
+;; Fix 'GDB needs s390x arch13 binutils patches'
+;; RHBZ 1768593, Andreas Krebbel
+;; This patch contains only the opcodes change.
+
+S/390: Support vector alignment hints
+
+This patch adds the vector alignment hints to the vector load and
+store instructions as documented in the IBM z14 Principles of
+Operations manual:
+
+http://publibfi.boulder.ibm.com/epubs/pdf/dz9zr011.pdf
+
+opcodes/ChangeLog:
+
+2018-10-23  Andreas Krebbel  <krebbel@linux.ibm.com>
+
+	* s390-opc.txt: Add vector load/store instructions with additional
+	alignment parameter.
+
+gas/ChangeLog:
+
+2018-10-23  Andreas Krebbel  <krebbel@linux.ibm.com>
+
+	* config/tc-s390.c (md_gather_operands): Fix for optional operands
+	following memory addresses.
+	* testsuite/gas/s390/zarch-arch12.d: Add regexp checks for new
+	instruction variants.
+	* testsuite/gas/s390/zarch-arch12.s: Emit new instruction
+	variants.
+
+diff --git a/opcodes/s390-opc.txt b/opcodes/s390-opc.txt
+--- a/opcodes/s390-opc.txt
++++ b/opcodes/s390-opc.txt
+@@ -1880,3 +1880,10 @@ b929 kma RRF_R0RR "cipher message with galois counter mode" arch12 zarch
+ b93c prno RRE_RR "perform pseudorandom number operation" arch12 zarch
+ b9a1 tpei RRE_RR "test pending external interruption" arch12 zarch
+ b9ac irbm RRE_RR "insert reference bits multiple" arch12 zarch
++
++# Aligned vector store hints
++
++e70000000006 vl VRX_VRRDU "vector memory load" arch12 zarch optparm
++e70000000036 vlm VRS_VVRDU "vector load multiple" arch12 zarch optparm
++e7000000000e vst VRX_VRRDU "vector store" arch12 zarch optparm
++e7000000003e vstm VRS_VVRDU "vector store multiple" arch12 zarch optparm

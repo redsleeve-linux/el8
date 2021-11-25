@@ -1,0 +1,38 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 11 Jan 2019 17:02:18 -0500
+Subject: gdb-rhbz1187581-power8-regs-not-in-8.2-13of15.patch
+
+;; [PowerPC] Reject tdescs with VSX and no FPU or Altivec
+;; Pedro Franco de Carvalho, RH BZ 1187581
+
+[PowerPC] Reject tdescs with VSX and no FPU or Altivec
+
+Currently rs6000_gdbarch_init will accept a tdesc with the
+"org.gnu.gdb.power.vsx" feature but without the
+"org.gnu.gdb.power.altivec" or "org.gnu.gdb.power.fpu".
+
+It isn't clear from the standard features documentation that these are
+requirements.  However, these tdescs would cause trouble in the VSX
+pseudo-register functions, so this patch will cause them to be
+rejected.
+
+gdb/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * rs6000-tdep.c (rs6000_gdbarch_init): Reject tdescs with vsx but
+    without altivec or fpu.
+
+diff --git a/gdb/rs6000-tdep.c b/gdb/rs6000-tdep.c
+--- a/gdb/rs6000-tdep.c
++++ b/gdb/rs6000-tdep.c
+@@ -6096,7 +6096,8 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
+ 	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
+ 						PPC_VSR0_UPPER_REGNUM + i,
+ 						vsx_regs[i]);
+-	  if (!valid_p)
++
++	  if (!valid_p || !have_fpu || !have_altivec)
+ 	    {
+ 	      tdesc_data_cleanup (tdesc_data);
+ 	      return NULL;

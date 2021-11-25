@@ -1,0 +1,176 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Sergio Durigan Junior <sergiodj@redhat.com>
+Date: Fri, 30 Nov 2018 15:20:27 -0500
+Subject: 
+ gdb-rhbz1639242-fix-dwarf2_find_containing_comp_unit-binary-search.patch
+
+;; Fix for 'py-bt is broken, results in exception'.
+;; RHBZ 1639242
+
+Fix dwarf2read.c:dwarf2_find_containing_comp_unit's binary search
+
+First of all, I would like to express my gratitude to Keith Seitz, Jan
+Kratochvil and Tom Tromey, who were really kind and helped a lot with
+this bug.  The patch itself was authored by Jan.
+
+This all began with:
+
+  https://bugzilla.redhat.com/show_bug.cgi?id=1639242
+  py-bt is broken, results in exception
+
+In summary, the error reported by the bug above is:
+
+  $ gdb -args python3
+  GNU gdb (GDB) Fedora 8.1.1-3.fc28
+  (...)
+  Reading symbols from python3...Reading symbols from /usr/lib/debug/usr/bin/python3.6-3.6.6-1.fc28.x86_64.debug...done.
+  done.
+  Dwarf Error: could not find partial DIE containing offset 0x316 [in module /usr/lib/debug/usr/bin/python3.6-3.6.6-1.fc28.x86_64.debug]
+
+After a long investigation, and after thinking that the problem might
+actually be on DWZ's side, we were able to determine that there's
+something wrong going on when
+dwarf2read.c:dwarf2_find_containing_comp_unit performs a binary search
+over all of the CUs belonging to an objfile in order to find the CU
+which contains a DIE at an specific offset.  The current algorithm is:
+
+  static struct dwarf2_per_cu_data *
+  dwarf2_find_containing_comp_unit (sect_offset sect_off,
+				    unsigned int offset_in_dwz,
+				    struct dwarf2_per_objfile *dwarf2_per_objfile)
+  {
+    struct dwarf2_per_cu_data *this_cu;
+    int low, high;
+    const sect_offset *cu_off;
+
+    low = 0;
+    high = dwarf2_per_objfile->all_comp_units.size () - 1;
+    while (high > low)
+      {
+	struct dwarf2_per_cu_data *mid_cu;
+	int mid = low + (high - low) / 2;
+
+	mid_cu = dwarf2_per_objfile->all_comp_units[mid];
+	cu_off = &mid_cu->sect_off;
+	if (mid_cu->is_dwz > offset_in_dwz
+	    || (mid_cu->is_dwz == offset_in_dwz && *cu_off >= sect_off))
+	  high = mid;
+	else
+	  low = mid + 1;
+      }
+
+For the sake of this example, let's consider that "sect_off =
+0x7d".
+
+There are a few important things going on here.  First,
+"dwarf2_per_objfile->all_comp_units ()" will be sorted first by
+whether the CU is a DWZ CU, and then by cu->sect_off.  In this
+specific bug, "offset_in_dwz" is false, which means that, for the most
+part of the loop, we're going to do "high = mid" (i.e, we'll work with
+the lower part of the vector).
+
+In our particular case, when we reach the part where "mid_cu->is_dwz
+== offset_in_dwz" (i.e, both are false), we end up with "high = 2" and
+"mid = 1".  I.e., there are only 2 elements in the vector who are not
+DWZ.  The vector looks like this:
+
+  #0: cu->sect_off = 0;   length = 114;  is_dwz = false  <-- low
+  #1: cu->sect_off = 114; length = 7796; is_dwz = false  <-- mid
+  #2: cu->sect_off = 0;   length = 28;   is_dwz = true   <-- high
+  ...
+
+The CU we want is #1, which is exactly where "mid" is.  Also, #1 is
+not DWZ, which is also exactly what we want.  So we perform the second
+comparison:
+
+  (mid_cu->is_dwz == offset_in_dwz && *cu_off >= sect_off)
+                                      ^^^^^^^^^^^^^^^^^^^
+
+Because "*cu_off = 114" and "sect_off = 0x7d", this evaluates to
+false, so we end up with "low = mid + 1 = 2", which actually gives us
+the wrong CU (i.e., a CU that is DWZ).  Next in the code, GDB does:
+
+    gdb_assert (low == high);
+    this_cu = dwarf2_per_objfile->all_comp_units[low];
+    cu_off = &this_cu->sect_off;
+    if (this_cu->is_dwz != offset_in_dwz || *cu_off > sect_off)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      {
+	if (low == 0 || this_cu->is_dwz != offset_in_dwz)
+	  error (_("Dwarf Error: could not find partial DIE containing "
+		 "offset %s [in module %s]"),
+		 sect_offset_str (sect_off),
+		 bfd_get_filename (dwarf2_per_objfile->objfile->obfd));
+	...
+
+Triggering the error we saw in the original bug report.
+
+It's important to notice that we see the error message because the
+selected CU is a DWZ one, but we're looking for a non-DWZ CU here.
+However, even when the selected CU is *not* a DWZ (and we don't see
+any error message), we still end up with the wrong CU.  For example,
+suppose that the vector had:
+
+  #0: cu->sect_off = 0;    length = 114;  is_dwz = false
+  #1: cu->sect_off = 114;  length = 7796; is_dwz = false
+  #2: cu->sect_off = 7910; length = 28;   is_dwz = false
+  ...
+
+I.e., #2's "is_dwz" is false instead of true.  In this case, we still
+want #1, because that's where the DIE is located.  After the loop ends
+up in #2, we have "is_dwz" as false, which is what we wanted, so we
+compare offsets.  In this case, "7910 >= 0x7d", so we set "mid = high
+= 2".  Next iteration, we have "mid = 0 + (2 - 0) / 2 = 1", and thus
+we examining #1.  "is_dwz" is still false, but "114 >= 0x7d" also
+evaluates to false, so "low = mid + 1 = 2", which makes the loop stop.
+Therefore, we end up choosing #2 as our CU, even though #1 is the
+right one.
+
+The problem here is happening because we're comparing "sect_off"
+directly against "*cu_off", while we should actually be comparing
+against "*cu_off + mid_cu->length" (i.e., the end offset):
+
+  ...
+  || (mid_cu->is_dwz == offset_in_dwz
+      && *cu_off + mid_cu->length >= sect_off))
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ...
+
+And this is what the patch does.  The idea is that if GDB is searching
+for an offset that falls above the *end* of the CU being
+analyzed (i.e., "mid"), then the next iteration should try a
+higher-offset CU next.  The previous algorithm was using
+the *beginning* of the CU.
+
+Unfortunately, I could not devise a testcase for this problem, so I am
+proposing a fix with this huge explanation attached to it in the hope
+that it is sufficient.  After talking a bit to Keith (our testcase
+guru), it seems that one would have to create an objfile with both DWZ
+and non-DWZ sections, which may prove very hard to do, I think.
+
+I ran this patch on our BuildBot, and no regressions were detected.
+
+gdb/ChangeLog:
+2018-11-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Keith Seitz  <keiths@redhat.com>
+	    Tom Tromey  <tom@tromey.com>
+	    Sergio Durigan Junior  <sergiodj@redhat.com>
+
+	https://bugzilla.redhat.com/show_bug.cgi?id=1613614
+	* dwarf2read.c (dwarf2_find_containing_comp_unit): Add
+	'mid_cu->length' to '*cu_off' when checking if 'sect_off' is
+	inside the CU.
+
+diff --git a/gdb/dwarf2read.c b/gdb/dwarf2read.c
+--- a/gdb/dwarf2read.c
++++ b/gdb/dwarf2read.c
+@@ -25039,7 +25039,8 @@ dwarf2_find_containing_comp_unit (sect_offset sect_off,
+       mid_cu = dwarf2_per_objfile->all_comp_units[mid];
+       cu_off = &mid_cu->sect_off;
+       if (mid_cu->is_dwz > offset_in_dwz
+-	  || (mid_cu->is_dwz == offset_in_dwz && *cu_off >= sect_off))
++	  || (mid_cu->is_dwz == offset_in_dwz
++	      && *cu_off + mid_cu->length >= sect_off))
+ 	high = mid;
+       else
+ 	low = mid + 1;

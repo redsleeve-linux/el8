@@ -1,0 +1,19 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Fedora GDB patches <invalid@email.com>
+Date: Fri, 27 Oct 2017 21:07:50 +0200
+Subject: gdb-6.8-sparc64-silence-memcpy-check.patch
+
+;; Silence memcpy check which returns false positive (sparc64)
+;;=push: But it is just a GCC workaround, look up the existing GCC PR for it.
+
+diff --git a/gdb/sparc-tdep.c b/gdb/sparc-tdep.c
+--- a/gdb/sparc-tdep.c
++++ b/gdb/sparc-tdep.c
+@@ -1462,6 +1462,7 @@ sparc32_store_return_value (struct type *type, struct regcache *regcache,
+   if (sparc_floating_p (type) || sparc_complex_floating_p (type))
+     {
+       /* Floating return values.  */
++      len = (len <= 8) ? len : 8;
+       memcpy (buf, valbuf, len);
+       regcache->cooked_write (SPARC_F0_REGNUM, buf);
+       if (len > 4)

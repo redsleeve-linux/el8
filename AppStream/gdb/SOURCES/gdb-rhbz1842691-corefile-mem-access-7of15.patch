@@ -1,0 +1,180 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Mon, 27 Jul 2020 18:01:32 -0400
+Subject: gdb-rhbz1842691-corefile-mem-access-7of15.patch
+
+;; Add new gdbarch method, read_core_file_mappings
+;; Kevin Buettner, RH BZ 1842961
+
+   Author: Kevin Buettner <kevinb@redhat.com>
+   Date:   Fri Jul 3 13:32:08 2020 -0700
+
+    Add new gdbarch method, read_core_file_mappings
+
+    The new gdbarch method, read_core_file_mappings, will be used for
+    reading file-backed mappings from a core file.  It'll be used
+    for two purposes: 1) to construct a table of file-backed mappings
+    in corelow.c, and 2) for display of core file mappings.
+
+    For Linux, I tried a different approach in which knowledge of the note
+    format was placed directly in corelow.c.  This seemed okay at first;
+    it was only one note format and the note format was fairly simple.
+    After looking at FreeBSD's note/mapping reading code, I concluded
+    that it's best to leave architecture specific details for decoding
+    the note in (architecture specific) tdep files.
+
+    With regard to display of core file mappings, I experimented with
+    placing the mappings display code in corelow.c.  It has access to the
+    file-backed mappings which were read in when the core file was loaded.
+    And, better, still common code could be used for all architectures.
+    But, again, the FreeBSD mapping code convinced me that this was not
+    the best approach since it has even more mapping info than Linux.
+    Display code which would work well for Linux will leave out mappings
+    as well as protection info for mappings.
+
+    So, for these reasons, I'm introducing a new gdbarch method for
+    reading core file mappings.
+
+    gdb/ChangeLog:
+
+    	* arch-utils.c (default_read_core_file_mappings): New function.
+    	* arch-utils.c (default_read_core_file_mappings): Declare.
+    	* gdbarch.sh (read_core_file_mappings): New gdbarch method.
+    	* gdbarch.h, gdbarch.c: Regenerate.
+
+diff --git a/gdb/arch-utils.c b/gdb/arch-utils.c
+--- a/gdb/arch-utils.c
++++ b/gdb/arch-utils.c
+@@ -997,6 +997,22 @@ default_type_align (struct gdbarch *gdbarch, struct type *type)
+   return type_length_units (check_typedef (type));
+ }
+ 
++/* See arch-utils.h.  */
++void
++default_read_core_file_mappings (struct gdbarch *gdbarch,
++                                 struct bfd *cbfd,
++                                gdb::function_view<void (ULONGEST count)>
++                                  pre_loop_cb,
++                                gdb::function_view<void (int num,
++                                                         ULONGEST start,
++                                                         ULONGEST end,
++                                                         ULONGEST file_ofs,
++                                                         const char *filename,
++                                                         const void *other)>
++                                  loop_cb)
++{
++}
++
+ void
+ _initialize_gdbarch_utils (void)
+ {
+diff --git a/gdb/arch-utils.h b/gdb/arch-utils.h
+--- a/gdb/arch-utils.h
++++ b/gdb/arch-utils.h
+@@ -271,4 +271,16 @@ extern bool default_in_indirect_branch_thunk (gdbarch *gdbarch,
+ extern ULONGEST default_type_align (struct gdbarch *gdbarch,
+ 				    struct type *type);
+ 
++/* Default implementation of gdbarch read_core_file_mappings method.  */
++extern void default_read_core_file_mappings (struct gdbarch *gdbarch,
++                                            struct bfd *cbfd,
++                                            gdb::function_view<void (ULONGEST count)>
++                                              pre_loop_cb,
++                                            gdb::function_view<void (int num,
++                                                                     ULONGEST start,
++                                                                     ULONGEST end,
++                                                                     ULONGEST file_ofs,
++                                                                     const char *filename,
++                                                                     const void *other)>
++					     loop_cb);
+ #endif
+diff --git a/gdb/gdbarch.c b/gdb/gdbarch.c
+--- a/gdb/gdbarch.c
++++ b/gdb/gdbarch.c
+@@ -354,6 +354,7 @@ struct gdbarch
+   char ** disassembler_options;
+   const disasm_options_and_args_t * valid_disassembler_options;
+   gdbarch_type_align_ftype *type_align;
++  gdbarch_read_core_file_mappings_ftype *read_core_file_mappings;
+ };
+ 
+ /* Create a new ``struct gdbarch'' based on information provided by
+@@ -466,6 +467,7 @@ gdbarch_alloc (const struct gdbarch_info *info,
+   gdbarch->gnu_triplet_regexp = default_gnu_triplet_regexp;
+   gdbarch->addressable_memory_unit_size = default_addressable_memory_unit_size;
+   gdbarch->type_align = default_type_align;
++  gdbarch->read_core_file_mappings = default_read_core_file_mappings;
+   /* gdbarch_alloc() */
+ 
+   return gdbarch;
+@@ -712,6 +714,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
+   /* Skip verify of disassembler_options, invalid_p == 0 */
+   /* Skip verify of valid_disassembler_options, invalid_p == 0 */
+   /* Skip verify of type_align, invalid_p == 0 */
++  /* Skip verify of read_core_file_mappings, invalid_p == 0 */
+   if (!log.empty ())
+     internal_error (__FILE__, __LINE__,
+                     _("verify_gdbarch: the following are invalid ...%s"),
+@@ -1275,6 +1278,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
+   fprintf_unfiltered (file,
+                       "gdbarch_dump: ravenscar_ops = %s\n",
+                       host_address_to_string (gdbarch->ravenscar_ops));
++  fprintf_unfiltered (file,
++                      "gdbarch_dump: read_core_file_mappings = <%s>\n",
++                      host_address_to_string (gdbarch->read_core_file_mappings));
+   fprintf_unfiltered (file,
+                       "gdbarch_dump: gdbarch_read_pc_p() = %d\n",
+                       gdbarch_read_pc_p (gdbarch));
+@@ -5117,6 +5123,23 @@ set_gdbarch_type_align (struct gdbarch *gdbarch,
+   gdbarch->type_align = type_align;
+ }
+ 
++void
++gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, struct bfd *cbfd,gdb::function_view<void (ULONGEST count)> pre_loop_cb,gdb::function_view<void (int num, ULONGEST start, ULONGEST end, ULONGEST file_ofs, const char *filename, const void *other)> loop_cb)
++{
++  gdb_assert (gdbarch != NULL);
++  gdb_assert (gdbarch->read_core_file_mappings != NULL);
++  if (gdbarch_debug >= 2)
++    fprintf_unfiltered (gdb_stdlog, "gdbarch_read_core_file_mappings called\n");
++  gdbarch->read_core_file_mappings (gdbarch, cbfd, pre_loop_cb, loop_cb);
++}
++
++void
++set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch,
++                                     gdbarch_read_core_file_mappings_ftype read_core_file_mappings)
++{
++  gdbarch->read_core_file_mappings = read_core_file_mappings;
++}
++
+ 
+ /* Keep a registry of per-architecture data-pointers required by GDB
+    modules.  */
+diff --git a/gdb/gdbarch.h b/gdb/gdbarch.h
+--- a/gdb/gdbarch.h
++++ b/gdb/gdbarch.h
+@@ -1566,6 +1566,12 @@ typedef ULONGEST (gdbarch_type_align_ftype) (struct gdbarch *gdbarch, struct typ
+ extern ULONGEST gdbarch_type_align (struct gdbarch *gdbarch, struct type *type);
+ extern void set_gdbarch_type_align (struct gdbarch *gdbarch, gdbarch_type_align_ftype *type_align);
+ 
++/* Read core file mappings */
++
++typedef void (gdbarch_read_core_file_mappings_ftype) (struct gdbarch *gdbarch, struct bfd *cbfd,gdb::function_view<void (ULONGEST count)> pre_loop_cb,gdb::function_view<void (int num, ULONGEST start, ULONGEST end, ULONGEST file_ofs, const char *filename, const void *other)> loop_cb);
++extern void gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, struct bfd *cbfd,gdb::function_view<void (ULONGEST count)> pre_loop_cb,gdb::function_view<void (int num, ULONGEST start, ULONGEST end, ULONGEST file_ofs, const char *filename, const void *other)> loop_cb);
++extern void set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, gdbarch_read_core_file_mappings_ftype *read_core_file_mappings);
++
+ /* Definition for an unknown syscall, used basically in error-cases.  */
+ #define UNKNOWN_SYSCALL (-1)
+ 
+diff --git a/gdb/gdbarch.sh b/gdb/gdbarch.sh
+--- a/gdb/gdbarch.sh
++++ b/gdb/gdbarch.sh
+@@ -1164,6 +1164,9 @@ v;const disasm_options_and_args_t *;valid_disassembler_options;;;0;0;;0;host_add
+ # Type alignment.
+ m;ULONGEST;type_align;struct type *type;type;;default_type_align;;0
+ 
++# Read core file mappings
++m;void;read_core_file_mappings;struct bfd *cbfd,gdb::function_view<void (ULONGEST count)> pre_loop_cb,gdb::function_view<void (int num, ULONGEST start, ULONGEST end, ULONGEST file_ofs, const char *filename, const void *other)> loop_cb;cbfd, pre_loop_cb, loop_cb;;default_read_core_file_mappings;;0
++
+ EOF
+ }
+ 

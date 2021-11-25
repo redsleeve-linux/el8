@@ -1,0 +1,145 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Tom Tromey <tom@tromey.com>
+Date: Fri, 5 Oct 2018 14:54:35 -0600
+Subject: gdb-rhbz1653410-avoid-crash-when-calling-warning-too-early.patch
+
+;; Fix for 'GDB crashes when running from a deleted directory'
+;; (Tom Tromey, RHBZ#1653410)
+
+Avoid crash when calling warning too early
+
+I noticed that if you pass the name of an existing file (not a
+directory) as the argument to --data-directory, gdb will crash:
+
+    $ ./gdb -nx  --data-directory  ./gdb
+    ../../binutils-gdb/gdb/target.c:590:56: runtime error: member call on null pointer of type 'struct target_ops'
+
+This was later reported as PR gdb/23838.
+
+This happens because warning ends up calling
+target_supports_terminal_ours, which calls current_top_target, which
+returns nullptr this early.
+
+This fixes the problem by handling this case specially in
+target_supports_terminal_ours.  I also changed
+target_supports_terminal_ours to return bool.
+
+gdb/ChangeLog
+2018-11-08  Tom Tromey  <tom@tromey.com>
+
+	PR gdb/23555:
+	PR gdb/23838:
+	* target.h (target_supports_terminal_ours): Return bool.
+	* target.c (target_supports_terminal_ours): Handle case where
+	current_top_target returns nullptr.  Return bool.
+
+gdb/testsuite/ChangeLog
+2018-11-08  Tom Tromey  <tom@tromey.com>
+
+	PR gdb/23555:
+	PR gdb/23838:
+	* gdb.base/warning.exp: New file.
+
+diff --git a/gdb/ChangeLog b/gdb/ChangeLog
+--- a/gdb/ChangeLog
++++ b/gdb/ChangeLog
+@@ -1,3 +1,11 @@
++2018-11-08  Tom Tromey  <tom@tromey.com>
++
++	PR gdb/23555:
++	PR gdb/23838:
++	* target.h (target_supports_terminal_ours): Return bool.
++	* target.c (target_supports_terminal_ours): Handle case where
++	current_top_target returns nullptr.  Return bool.
++
+ 2018-08-16  Gary Benson <gbenson@redhat.com>
+ 
+ 	PR gdb/13000:
+diff --git a/gdb/target.c b/gdb/target.c
+--- a/gdb/target.c
++++ b/gdb/target.c
+@@ -584,10 +584,16 @@ target_terminal::info (const char *arg, int from_tty)
+ 
+ /* See target.h.  */
+ 
+-int
++bool
+ target_supports_terminal_ours (void)
+ {
+-  return current_top_target ()->supports_terminal_ours ();
++  /* This can be called before there is any target, so we must check
++     for nullptr here.  */
++  target_ops *top = current_top_target ();
++
++  if (top == nullptr)
++    return false;
++  return top->supports_terminal_ours ();
+ }
+ 
+ static void
+diff --git a/gdb/target.h b/gdb/target.h
+--- a/gdb/target.h
++++ b/gdb/target.h
+@@ -1576,7 +1576,7 @@ extern int target_remove_breakpoint (struct gdbarch *gdbarch,
+ /* Return true if the target stack has a non-default
+   "terminal_ours" method.  */
+ 
+-extern int target_supports_terminal_ours (void);
++extern bool target_supports_terminal_ours (void);
+ 
+ /* Kill the inferior process.   Make it go away.  */
+ 
+diff --git a/gdb/testsuite/ChangeLog b/gdb/testsuite/ChangeLog
+--- a/gdb/testsuite/ChangeLog
++++ b/gdb/testsuite/ChangeLog
+@@ -1,3 +1,9 @@
++2018-11-08  Tom Tromey  <tom@tromey.com>
++
++	PR gdb/23555:
++	PR gdb/23838:
++	* gdb.base/warning.exp: New file.
++
+ 2018-09-04  Gary Benson <gbenson@redhat.com>
+ 
+ 	* gdb.base/batch-exit-status.exp: Use gdb_test_multiple and expect
+diff --git a/gdb/testsuite/gdb.base/warning.exp b/gdb/testsuite/gdb.base/warning.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.base/warning.exp
+@@ -0,0 +1,36 @@
++# Copyright 2018 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++# Test that an early warning does not cause a crash.
++
++if {[is_remote host]} {
++    unsupported "warning.exp can only run on local host"
++    return
++}
++
++set tname [standard_temp_file warning]
++set fd [open $tname w]
++puts $fd "anything"
++close $fd
++
++set save $INTERNAL_GDBFLAGS
++set INTERNAL_GDBFLAGS "-nw -nx -data-directory $tname"
++
++gdb_start
++
++# Make sure gdb started up.
++gdb_test "echo 23\\n" "23"
++
++set INTERNAL_GDBFLAGS $save

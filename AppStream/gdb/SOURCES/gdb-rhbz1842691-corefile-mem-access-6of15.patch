@@ -1,0 +1,62 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Mon, 27 Jul 2020 17:32:50 -0400
+Subject: gdb-rhbz1842691-corefile-mem-access-6of15.patch
+
+;; Update binary_get_section_contents to seek using section's file position
+;; Kevin Buettner, RH BZ 1842961
+
+   Author: Kevin Buettner <kevinb@redhat.com>
+   Date:   Thu Jun 11 18:58:49 2020 -0700
+
+    Update binary_get_section_contents to seek using section's file position
+
+    I have a patch for GDB which opens and reads from BFDs using the
+    "binary" target.  However, for it to work, we need to be able to get a
+    section's contents based from the file position of that section.
+
+    At the moment, reading a section's contents will always read from the
+    start of the file regardless of where that section is located.  While
+    this was fine for the original use of the "binary" target, it won't
+    work for my use case.  This change shouldn't impact any existing
+    callers due to the fact that the single .data section is initialized
+    with a filepos of 0.
+
+    bfd/ChangeLog:
+
+    	* binary.c (binary_get_section_contents): Seek using offset
+    	from section's file position.
+
+diff --git a/bfd/binary.c b/bfd/binary.c
+--- a/bfd/binary.c
++++ b/bfd/binary.c
+@@ -19,10 +19,10 @@
+    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+    MA 02110-1301, USA.  */
+ 
+-/* This is a BFD backend which may be used to write binary objects.
+-   It may only be used for output, not input.  The intention is that
+-   this may be used as an output format for objcopy in order to
+-   generate raw binary data.
++/* This is a BFD backend which may be used to read or write binary
++   objects.  Historically, it was used as an output format for objcopy
++   in order to generate raw binary data, but is now used for other
++   purposes as well.
+ 
+    This is very simple.  The only complication is that the real data
+    will start at some address X, and in some cases we will not want to
+@@ -97,12 +97,12 @@ binary_object_p (bfd *abfd)
+ 
+ static bfd_boolean
+ binary_get_section_contents (bfd *abfd,
+-			     asection *section ATTRIBUTE_UNUSED,
++			     asection *section,
+ 			     void * location,
+ 			     file_ptr offset,
+ 			     bfd_size_type count)
+ {
+-  if (bfd_seek (abfd, offset, SEEK_SET) != 0
++  if (bfd_seek (abfd, section->filepos + offset, SEEK_SET) != 0
+       || bfd_bread (location, count, abfd) != count)
+     return FALSE;
+   return TRUE;

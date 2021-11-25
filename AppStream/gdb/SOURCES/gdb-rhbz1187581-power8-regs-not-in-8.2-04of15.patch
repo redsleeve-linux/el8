@@ -1,0 +1,88 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 11 Jan 2019 17:02:13 -0500
+Subject: gdb-rhbz1187581-power8-regs-not-in-8.2-04of15.patch
+
+;; [PowerPC] Don't zero-initialize vector register buffers
+;; Pedro Franco de Carvalho, RH BZ 1187581
+
+[PowerPC] Don't zero-initialize vector register buffers
+
+Now that linux-tdep.c already zero-initializes the buffer used for
+generating core file notes, there is no need to do this in the linux
+collect functions for the vector regset.  The memsets in gdbserver were
+not useful to begin with.
+
+gdb/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * ppc-linux-tdep.c (ppc_linux_collect_vrregset): Remove.
+    (ppc32_le_linux_vrregset, ppc32_be_linux_vrregset): Replace
+    ppc_linux_collect_vrregset by regcache_collect_regset.
+
+gdb/gdbserver/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * linux-ppc-low.c (ppc_fill_vrregset): Remove memset calls.
+
+diff --git a/gdb/gdbserver/linux-ppc-low.c b/gdb/gdbserver/linux-ppc-low.c
+--- a/gdb/gdbserver/linux-ppc-low.c
++++ b/gdb/gdbserver/linux-ppc-low.c
+@@ -495,13 +495,9 @@ ppc_fill_vrregset (struct regcache *regcache, void *buf)
+   if (__BYTE_ORDER == __BIG_ENDIAN)
+     vscr_offset = 12;
+ 
+-  /* Zero-pad the unused bytes in the fields for vscr and vrsave in
+-     case they get displayed somewhere.  */
+-  memset (&regset[32 * 16], 0, 16);
+   collect_register_by_name (regcache, "vscr",
+ 			    &regset[32 * 16 + vscr_offset]);
+ 
+-  memset (&regset[33 * 16], 0, 16);
+   collect_register_by_name (regcache, "vrsave", &regset[33 * 16]);
+ }
+ 
+diff --git a/gdb/ppc-linux-tdep.c b/gdb/ppc-linux-tdep.c
+--- a/gdb/ppc-linux-tdep.c
++++ b/gdb/ppc-linux-tdep.c
+@@ -444,24 +444,6 @@ ppc_linux_collect_gregset (const struct regset *regset,
+     }
+ }
+ 
+-static void
+-ppc_linux_collect_vrregset (const struct regset *regset,
+-			    const struct regcache *regcache,
+-			    int regnum, void *buf, size_t len)
+-{
+-  gdb_byte *vrregs = (gdb_byte *) buf;
+-
+-  /* Zero-pad the unused bytes in the fields for vscr and vrsave
+-     in case they get displayed somewhere (e.g. in core files).  */
+-  if (regnum == PPC_VSCR_REGNUM || regnum == -1)
+-    memset (&vrregs[32 * 16], 0, 16);
+-
+-  if (regnum == PPC_VRSAVE_REGNUM || regnum == -1)
+-    memset (&vrregs[33 * 16], 0, 16);
+-
+-  regcache_collect_regset (regset, regcache, regnum, buf, len);
+-}
+-
+ /* Regset descriptions.  */
+ static const struct ppc_reg_offsets ppc32_linux_reg_offsets =
+   {
+@@ -544,13 +526,13 @@ static const struct regcache_map_entry ppc32_be_linux_vrregmap[] =
+ static const struct regset ppc32_le_linux_vrregset = {
+   ppc32_le_linux_vrregmap,
+   regcache_supply_regset,
+-  ppc_linux_collect_vrregset
++  regcache_collect_regset
+ };
+ 
+ static const struct regset ppc32_be_linux_vrregset = {
+   ppc32_be_linux_vrregmap,
+   regcache_supply_regset,
+-  ppc_linux_collect_vrregset
++  regcache_collect_regset
+ };
+ 
+ static const struct regcache_map_entry ppc32_linux_vsxregmap[] =

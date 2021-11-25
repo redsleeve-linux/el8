@@ -1,0 +1,43 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 11 Jan 2019 17:02:19 -0500
+Subject: gdb-rhbz1187581-power8-regs-not-in-8.2-15of15.patch
+
+;; [PowerPC] Document requirements for VSX feature
+;; Pedro Franco de Carvalho, RH BZ 1187581
+
+[PowerPC] Document requirements for VSX feature
+
+As suggested in
+https://sourceware.org/ml/gdb-patches/2018-10/msg00510.html, this
+patch changes the documentation for the VSX tdesc feature to make it
+clear that the altivec and FPU features are requirements.
+
+gdb/doc/ChangeLog:
+2018-11-09  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * gdb.texinfo (PowerPC Features): Document the altivec and fpu
+    requirements for the org.gnu.gdb.power.vsx feature.
+
+diff --git a/gdb/doc/gdb.texinfo b/gdb/doc/gdb.texinfo
+--- a/gdb/doc/gdb.texinfo
++++ b/gdb/doc/gdb.texinfo
+@@ -42541,11 +42541,13 @@ contain registers @samp{vr0} through @samp{vr31}, @samp{vscr},
+ and @samp{vrsave}.
+ 
+ The @samp{org.gnu.gdb.power.vsx} feature is optional.  It should
+-contain registers @samp{vs0h} through @samp{vs31h}.  @value{GDBN}
+-will combine these registers with the floating point registers
+-(@samp{f0} through @samp{f31}) and the altivec registers (@samp{vr0}
+-through @samp{vr31}) to present the 128-bit wide registers @samp{vs0}
+-through @samp{vs63}, the set of vector registers for POWER7.
++contain registers @samp{vs0h} through @samp{vs31h}.  @value{GDBN} will
++combine these registers with the floating point registers (@samp{f0}
++through @samp{f31}) and the altivec registers (@samp{vr0} through
++@samp{vr31}) to present the 128-bit wide registers @samp{vs0} through
++@samp{vs63}, the set of vector-scalar registers for POWER7.
++Therefore, this feature requires both @samp{org.gnu.gdb.power.fpu} and
++@samp{org.gnu.gdb.power.altivec}.
+ 
+ The @samp{org.gnu.gdb.power.spe} feature is optional.  It should
+ contain registers @samp{ev0h} through @samp{ev31h}, @samp{acc}, and

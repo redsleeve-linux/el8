@@ -1,0 +1,44 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Sergio Durigan Junior <sergiodj@redhat.com>
+Date: Thu, 6 Sep 2018 00:22:18 -0400
+Subject: gdb-use-pulongest-aarch64-linux-tdep.patch
+
+;; Use pulongest in aarch64-linux-tdep.c.
+;; This patch was forgotten during the 8.2 release process, and is
+;; needed to unbreak GDB when compiling on 32-bit arches.
+
+Use pulongest in aarch64-linux-tdep.c
+
+While testing a patch on the buildbot, I got this error:
+
+../../binutils-gdb/gdb/aarch64-linux-tdep.c: In function uint64_t aarch64_linux_core_read_vq(gdbarch*, bfd*):
+../../binutils-gdb/gdb/aarch64-linux-tdep.c:285:29: error: format %ld expects argument of type long int, but argument 2 has type uint64_t {aka long long unsigned int} [-Werror=format=]
+
+This patch avoids the problem by using pulongest rather than %ld.
+This seems safe to me because, if aarch64-linux-tdep.c is included in
+the build, then ULONGEST must be a 64-bit type.
+
+gdb/ChangeLog
+2018-08-15  Tom Tromey  <tom@tromey.com>
+
+	* aarch64-linux-tdep.c (aarch64_linux_core_read_vq): Use pulongest.
+
+diff --git a/gdb/aarch64-linux-tdep.c b/gdb/aarch64-linux-tdep.c
+--- a/gdb/aarch64-linux-tdep.c
++++ b/gdb/aarch64-linux-tdep.c
+@@ -282,12 +282,13 @@ aarch64_linux_core_read_vq (struct gdbarch *gdbarch, bfd *abfd)
+   if (vq > AARCH64_MAX_SVE_VQ)
+     {
+       warning (_("SVE Vector length in core file not supported by this version"
+-		 " of GDB.  (VQ=%ld)"), vq);
++		 " of GDB.  (VQ=%s)"), pulongest (vq));
+       return 0;
+     }
+   else if (vq == 0)
+     {
+-      warning (_("SVE Vector length in core file is invalid. (VQ=%ld"), vq);
++      warning (_("SVE Vector length in core file is invalid. (VQ=%s"),
++	       pulongest (vq));
+       return 0;
+     }
+ 

@@ -1,0 +1,217 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Sergio Durigan Junior <sergiodj@redhat.com>
+Date: Tue, 7 Jan 2020 21:07:53 -0500
+Subject: gdb-rhbz1768593-s390x-arch13-02.patch
+
+;; Fix 'GDB needs s390x arch13 binutils patches'
+;; RHBZ 1768593, Andreas Krebbel
+;; This patch contains only the opcodes and include changes.
+
+S/390: Implement instruction set extensions
+
+opcodes/ChangeLog:
+
+2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+
+	Backport from mainline
+	2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+
+	* s390-mkopc.c (main): Accept arch13 as cpu string.
+	* s390-opc.c: Add new instruction formats and instruction opcode
+	masks.
+	* s390-opc.txt: Add new arch13 instructions.
+
+include/ChangeLog:
+
+2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+
+	Backport from mainline
+	2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+
+	* opcode/s390.h (enum s390_opcode_cpu_val): Add
+	S390_OPCODE_ARCH13.
+
+gas/ChangeLog:
+
+2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+
+	Backport from mainline
+	2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+
+	* config/tc-s390.c (s390_parse_cpu): New entry for arch13.
+	* doc/c-s390.texi: Document arch13 march option.
+	* testsuite/gas/s390/s390.exp: Run the arch13 related tests.
+	* testsuite/gas/s390/zarch-arch13.d: New test.
+	* testsuite/gas/s390/zarch-arch13.s: New test.
+	* testsuite/gas/s390/zarch-z13.d: Expect the renamed mnemonics
+	also for z13.
+
+diff --git a/include/opcode/s390.h b/include/opcode/s390.h
+--- a/include/opcode/s390.h
++++ b/include/opcode/s390.h
+@@ -43,6 +43,7 @@ enum s390_opcode_cpu_val
+     S390_OPCODE_ZEC12,
+     S390_OPCODE_Z13,
+     S390_OPCODE_ARCH12,
++    S390_OPCODE_ARCH13,
+     S390_OPCODE_MAXCPU
+   };
+ 
+diff --git a/opcodes/s390-mkopc.c b/opcodes/s390-mkopc.c
+--- a/opcodes/s390-mkopc.c
++++ b/opcodes/s390-mkopc.c
+@@ -377,6 +377,8 @@ main (void)
+       else if (strcmp (cpu_string, "z14") == 0
+ 	       || strcmp (cpu_string, "arch12") == 0)
+ 	min_cpu = S390_OPCODE_ARCH12;
++      else if (strcmp (cpu_string, "arch13") == 0)
++	min_cpu = S390_OPCODE_ARCH13;
+       else {
+ 	fprintf (stderr, "Couldn't parse cpu string %s\n", cpu_string);
+ 	exit (1);
+diff --git a/opcodes/s390-opc.c b/opcodes/s390-opc.c
+--- a/opcodes/s390-opc.c
++++ b/opcodes/s390-opc.c
+@@ -359,6 +359,7 @@ const struct s390_operand s390_operands[] =
+ #define INSTR_RRF_RURR2    4, { R_24,R_16,R_28,U4_20,0,0 }       /* e.g. lptea */
+ #define INSTR_RRF_R0RR     4, { R_24,R_16,R_28,0,0,0 }           /* e.g. idte  */
+ #define INSTR_RRF_R0RR2    4, { R_24,R_28,R_16,0,0,0 }           /* e.g. ark   */
++#define INSTR_RRF_R0RR3    4, { R_24,R_28,R_16,0,0,0 }           /* e.g. selrz */
+ #define INSTR_RRF_U0FF     4, { F_24,U4_16,F_28,0,0,0 }          /* e.g. fidbr */
+ #define INSTR_RRF_U0FEFE   4, { FE_24,U4_16,FE_28,0,0,0 }        /* e.g. fixbr */
+ #define INSTR_RRF_U0RF     4, { R_24,U4_16,F_28,0,0,0 }          /* e.g. cfebr */
+@@ -513,6 +514,7 @@ const struct s390_operand s390_operands[] =
+ #define INSTR_VRR_VV0U0U   6, { V_8,V_12,U4_32,U4_24,0,0 }       /* e.g. vistr */
+ #define INSTR_VRR_0VV0U    6, { V_12,V_16,U4_24,0,0,0 }          /* e.g. vcp   */
+ #define INSTR_VRR_RV0U     6, { R_8,V_12,U4_24,0,0,0 }           /* e.g. vcvb  */
++#define INSTR_VRR_RV0UU    6, { R_8,V_12,U4_24,U4_28,0,0 }       /* e.g. vcvb  */
+ #define INSTR_VSI_URDV     6, { V_32,D_20,B_16,U8_8,0,0 }        /* e.g. vlrl  */
+ 
+ #define MASK_E            { 0xff, 0xff, 0x00, 0x00, 0x00, 0x00 }
+@@ -578,6 +580,7 @@ const struct s390_operand s390_operands[] =
+ #define MASK_RRF_RURR2    { 0xff, 0xff, 0x00, 0x00, 0x00, 0x00 }
+ #define MASK_RRF_R0RR     { 0xff, 0xff, 0x00, 0x00, 0x00, 0x00 }
+ #define MASK_RRF_R0RR2    { 0xff, 0xff, 0x00, 0x00, 0x00, 0x00 }
++#define MASK_RRF_R0RR3    { 0xff, 0xff, 0x0f, 0x00, 0x00, 0x00 }
+ #define MASK_RRF_U0FF     { 0xff, 0xff, 0x0f, 0x00, 0x00, 0x00 }
+ #define MASK_RRF_U0FEFE   { 0xff, 0xff, 0x0f, 0x00, 0x00, 0x00 }
+ #define MASK_RRF_U0RF     { 0xff, 0xff, 0x0f, 0x00, 0x00, 0x00 }
+@@ -732,6 +735,7 @@ const struct s390_operand s390_operands[] =
+ #define MASK_VRR_VV0U0U   { 0xff, 0x00, 0xff, 0x0f, 0x00, 0xff }
+ #define MASK_VRR_0VV0U    { 0xff, 0xf0, 0x0f, 0x0f, 0xf0, 0xff }
+ #define MASK_VRR_RV0U     { 0xff, 0x00, 0xff, 0x0f, 0xf0, 0xff }
++#define MASK_VRR_RV0UU    { 0xff, 0x00, 0xff, 0x00, 0xf0, 0xff }
+ #define MASK_VSI_URDV     { 0xff, 0x00, 0x00, 0x00, 0x00, 0xff }
+ 
+ 
+diff --git a/opcodes/s390-opc.txt b/opcodes/s390-opc.txt
+--- a/opcodes/s390-opc.txt
++++ b/opcodes/s390-opc.txt
+@@ -1887,3 +1887,107 @@ e70000000006 vl VRX_VRRDU "vector memory load" arch12 zarch optparm
+ e70000000036 vlm VRS_VVRDU "vector load multiple" arch12 zarch optparm
+ e7000000000e vst VRX_VRRDU "vector store" arch12 zarch optparm
+ e7000000003e vstm VRS_VVRDU "vector store multiple" arch12 zarch optparm
++
++# arch13 instructions
++
++b9f5 ncrk RRF_R0RR2 " " arch13 zarch
++b9e5 ncgrk RRF_R0RR2 " " arch13 zarch
++e50a mvcrl SSE_RDRD " " arch13 zarch
++b974 nnrk RRF_R0RR2 " " arch13 zarch
++b964 nngrk RRF_R0RR2 " " arch13 zarch
++b976 nork RRF_R0RR2 " " arch13 zarch
++b966 nogrk RRF_R0RR2 " " arch13 zarch
++b977 nxrk RRF_R0RR2 " " arch13 zarch
++b967 nxgrk RRF_R0RR2 " " arch13 zarch
++b975 ocrk RRF_R0RR2 " " arch13 zarch
++b965 ocgrk RRF_R0RR2 " " arch13 zarch
++b9e1 popcnt RRF_U0RR " " arch13 zarch optparm
++b9f0 selr RRF_RURR " " arch13 zarch
++b9f00000 selr*20 RRF_R0RR3 " " arch13 zarch
++b9e3 selgr RRF_RURR " " arch13 zarch
++b9e30000 selgr*20 RRF_R0RR3 " " arch13 zarch
++b9c0 selhhhr RRF_RURR " " arch13 zarch
++b9c00000 selhhhr*20 RRF_R0RR3 " " arch13 zarch
++
++e60000000006 vlbr VRX_VRRDU " " arch13 zarch
++e60000001006 vlbrh VRX_VRRD " " arch13 zarch
++e60000002006 vlbrf VRX_VRRD " " arch13 zarch
++e60000003006 vlbrg VRX_VRRD " " arch13 zarch
++e60000004006 vlbrq VRX_VRRD " " arch13 zarch
++
++e60000000007 vler VRX_VRRDU " " arch13 zarch
++e60000001007 vlerh VRX_VRRD " " arch13 zarch
++e60000002007 vlerf VRX_VRRD " " arch13 zarch
++e60000003007 vlerg VRX_VRRD " " arch13 zarch
++
++e60000000004 vllebrz VRX_VRRDU " " arch13 zarch
++e60000001004 vllebrzh VRX_VRRD " " arch13 zarch
++e60000002004 vllebrzf VRX_VRRD " " arch13 zarch
++e60000003004 ldrv VRX_VRRD " " arch13 zarch
++e60000003004 vllebrzg VRX_VRRD " " arch13 zarch
++e60000006004 lerv VRX_VRRD " " arch13 zarch
++e60000006004 vllebrze VRX_VRRD " " arch13 zarch
++
++e60000000001 vlebrh VRX_VRRDU " " arch13 zarch
++e60000000003 vlebrf VRX_VRRDU " " arch13 zarch
++e60000000002 vlebrg VRX_VRRDU " " arch13 zarch
++
++e60000000005 vlbrrep VRX_VRRDU " " arch13 zarch
++e60000001005 vlbrreph VRX_VRRD " " arch13 zarch
++e60000002005 vlbrrepf VRX_VRRD " " arch13 zarch
++e60000003005 vlbrrepg VRX_VRRD " " arch13 zarch
++
++e6000000000e vstbr VRX_VRRDU " " arch13 zarch
++e6000000100e vstbrh VRX_VRRD " " arch13 zarch
++e6000000200e vstbrf VRX_VRRD " " arch13 zarch
++e6000000300e vstbrg VRX_VRRD " " arch13 zarch
++e6000000400e vstbrq VRX_VRRD " " arch13 zarch
++
++e6000000000f vster VRX_VRRDU " " arch13 zarch
++e6000000100f vsterh VRX_VRRD " " arch13 zarch
++e6000000200f vsterf VRX_VRRD " " arch13 zarch
++e6000000300f vsterg VRX_VRRD " " arch13 zarch
++
++e60000000009 vstebrh VRX_VRRDU " " arch13 zarch
++e6000000000b vstebrf VRX_VRRDU " " arch13 zarch
++e6000000000b sterv VRX_VRRD " " arch13 zarch
++e6000000000a vstebrg VRX_VRRDU " " arch13 zarch
++e6000000000a stdrv VRX_VRRD " " arch13 zarch
++
++e70000000086 vsld VRI_VVV0U " " arch13 zarch
++e70000000087 vsrd VRI_VVV0U " " arch13 zarch
++
++e7000000008b vstrs VRR_VVVUU0V " " arch13 zarch optparm
++
++e7000000008b vstrsb VRR_VVVU0VB " " arch13 zarch optparm
++e7000100008b vstrsh VRR_VVVU0VB " " arch13 zarch optparm
++e7000200008b vstrsf VRR_VVVU0VB " " arch13 zarch optparm
++
++e7000020008b vstrszb VRR_VVVU0VB2 " " arch13 zarch optparm
++e7000120008b vstrszh VRR_VVVU0VB2 " " arch13 zarch optparm
++e7000220008b vstrszf VRR_VVVU0VB2 " " arch13 zarch optparm
++
++e700000000c3 vcfps VRR_VV0UUU " " arch13 zarch
++e700000020c3 vcefb VRR_VV0UU " " arch13 zarch
++e700000820c3 wcefb VRR_VV0UU8 " " arch13 zarch
++
++e700000000c1 vcfpl VRR_VV0UUU " " arch13 zarch
++e700000020c1 vcelfb VRR_VV0UU " " arch13 zarch
++e700000820c1 wcelfb VRR_VV0UU8 " " arch13 zarch
++
++e700000000c2 vcsfp VRR_VV0UUU " " arch13 zarch
++e700000020c2 vcfeb VRR_VV0UU " " arch13 zarch
++e700000820c2 wcfeb VRR_VV0UU8 " " arch13 zarch
++
++e700000000c0 vclfp VRR_VV0UUU " " arch13 zarch
++e700000020c0 vclfeb VRR_VV0UU " " arch13 zarch
++e700000820c0 wclfeb VRR_VV0UU8 " " arch13 zarch
++
++b939 dfltcc RRF_R0RR2 " " arch13 zarch
++
++b938 sortl RRE_RR " " arch13 zarch
++
++e60000000050 vcvb VRR_RV0UU " " arch13 zarch optparm
++e60000000052 vcvbg VRR_RV0UU " " arch13 zarch optparm
++
++b93a kdsa RRE_RR " " arch13 zarch

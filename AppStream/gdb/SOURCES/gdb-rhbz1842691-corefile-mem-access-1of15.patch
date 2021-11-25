@@ -1,0 +1,60 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Mon, 27 Jul 2020 16:34:37 -0400
+Subject: gdb-rhbz1842691-corefile-mem-access-1of15.patch
+
+;; Remove hack for GDB which sets the section size to 0
+;; Kevin Buettner, RH BZ 1842691
+
+    Author: Kevin Buettner <kevinb@redhat.com>
+
+    Remove hack for GDB which sets the section size to 0
+
+    This commit removes a hack for GDB which was introduced in 2007.
+    See:
+
+        https://sourceware.org/ml/binutils/2007-08/msg00044.html
+
+    That hack mostly allowed GDB's handling of core files to continue to
+    work without any changes to GDB.
+
+    The problem with setting the section size to zero is that GDB won't
+    know how big that section is/was.  Often, this doesn't matter because
+    the data in question are found in the exec file.  But it can happen
+    that the section describes memory that had been allocated, but never
+    written to.  In this instance, the contents of that memory region are
+    not written to the core file.  Also, since the region in question was
+    dynamically allocated, it won't appear in the exec file.  We don't
+    want these regions to appear as inaccessible to GDB (since they *were*
+    accessible when the process was live), so it's important that GDB know
+    the size of the region.
+
+    I've made changes to GDB which correctly handles this case.  When
+    attempting to access memory, GDB will first consider core file data
+    for which both SEC_ALLOC and SEC_HAS_CONTENTS is set.  Next, if that
+    fails, GDB will attempt to find the data in the exec file.  Finally,
+    if that also fails, GDB will attempt to access memory in the sections
+    which are flagged as SEC_ALLOC, but not SEC_HAS_CONTENTS.
+
+    bfd/ChangeLog:
+
+        * elf.c (_bfd_elf_make_section_from_phdr): Remove hack for GDB.
+
+diff --git a/bfd/elf.c b/bfd/elf.c
+--- a/bfd/elf.c
++++ b/bfd/elf.c
+@@ -2975,14 +2975,6 @@ _bfd_elf_make_section_from_phdr (bfd *abfd,
+       newsect->alignment_power = bfd_log2 (align);
+       if (hdr->p_type == PT_LOAD)
+ 	{
+-	  /* Hack for gdb.  Segments that have not been modified do
+-	     not have their contents written to a core file, on the
+-	     assumption that a debugger can find the contents in the
+-	     executable.  We flag this case by setting the fake
+-	     section size to zero.  Note that "real" bss sections will
+-	     always have their contents dumped to the core file.  */
+-	  if (bfd_get_format (abfd) == bfd_core)
+-	    newsect->size = 0;
+ 	  newsect->flags |= SEC_ALLOC;
+ 	  if (hdr->p_flags & PF_X)
+ 	    newsect->flags |= SEC_CODE;

@@ -1,0 +1,34 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 11 Jan 2019 17:02:14 -0500
+Subject: gdb-rhbz1187581-power8-regs-not-in-8.2-05of15.patch
+
+;; Add decfloat registers to float reggroup
+;; Pedro Franco de Carvalho, RH BZ 1187581
+
+Add decfloat registers to float reggroup
+
+This patch changes default_register_reggroup_p to return true when the
+register type is decimal floating point and the reggroup is
+float_reggroup.
+
+gdb/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * reggroups.c (default_register_reggroup_p): Return true for
+    decfloat registers and float_reggroup.
+
+diff --git a/gdb/reggroups.c b/gdb/reggroups.c
+--- a/gdb/reggroups.c
++++ b/gdb/reggroups.c
+@@ -202,7 +202,9 @@ default_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
+   if (group == all_reggroup)
+     return 1;
+   vector_p = TYPE_VECTOR (register_type (gdbarch, regnum));
+-  float_p = TYPE_CODE (register_type (gdbarch, regnum)) == TYPE_CODE_FLT;
++  float_p = (TYPE_CODE (register_type (gdbarch, regnum)) == TYPE_CODE_FLT
++	     || (TYPE_CODE (register_type (gdbarch, regnum))
++		 == TYPE_CODE_DECFLOAT));
+   raw_p = regnum < gdbarch_num_regs (gdbarch);
+   if (group == float_reggroup)
+     return float_p;

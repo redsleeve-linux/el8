@@ -1,0 +1,72 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 11 Jan 2019 17:02:14 -0500
+Subject: gdb-rhbz1187581-power8-regs-not-in-8.2-06of15.patch
+
+;; [PowerPC] Remove rs6000_pseudo_register_reggroup_p
+;; Pedro Franco de Carvalho, RH BZ 1187581
+
+[PowerPC] Remove rs6000_pseudo_register_reggroup_p
+
+This patch removes rs6000_pseudo_register_reggroup_p.
+
+Group membership for the pseudoregisters can be detected through their
+types in default_register_reggroup_p through
+tdesc_register_reggroup_p.
+
+gdb/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * rs6000-tdep.c: Remove reggroups.h include.
+    (rs6000_pseudo_register_reggroup_p): Remove.
+    (rs6000_gdbarch_init): Remove call to
+    set_tdesc_pseudo_register_reggroup_p.
+
+diff --git a/gdb/rs6000-tdep.c b/gdb/rs6000-tdep.c
+--- a/gdb/rs6000-tdep.c
++++ b/gdb/rs6000-tdep.c
+@@ -36,7 +36,6 @@
+ #include "infcall.h"
+ #include "sim-regno.h"
+ #include "gdb/sim-ppc.h"
+-#include "reggroups.h"
+ #include "dwarf2-frame.h"
+ #include "target-descriptions.h"
+ #include "user-regs.h"
+@@ -2461,27 +2460,6 @@ rs6000_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
+     return builtin_type (gdbarch)->builtin_double;
+ }
+ 
+-/* Is REGNUM a member of REGGROUP?  */
+-static int
+-rs6000_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
+-				   struct reggroup *group)
+-{
+-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+-
+-  /* These are the only pseudo-registers we support.  */
+-  gdb_assert (IS_SPE_PSEUDOREG (tdep, regnum)
+-	      || IS_DFP_PSEUDOREG (tdep, regnum)
+-	      || IS_VSX_PSEUDOREG (tdep, regnum)
+-	      || IS_EFP_PSEUDOREG (tdep, regnum));
+-
+-  /* These are the e500 pseudo-registers or the POWER7 VSX registers.  */
+-  if (IS_SPE_PSEUDOREG (tdep, regnum) || IS_VSX_PSEUDOREG (tdep, regnum))
+-    return group == all_reggroup || group == vector_reggroup;
+-  else
+-    /* PPC decimal128 or Extended FP pseudo-registers.  */
+-    return group == all_reggroup || group == float_reggroup;
+-}
+-
+ /* The register format for RS/6000 floating point registers is always
+    double, we need a conversion if the memory format is float.  */
+ 
+@@ -6493,8 +6471,6 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
+     }
+ 
+   set_tdesc_pseudo_register_type (gdbarch, rs6000_pseudo_register_type);
+-  set_tdesc_pseudo_register_reggroup_p (gdbarch,
+-					rs6000_pseudo_register_reggroup_p);
+   tdesc_use_registers (gdbarch, tdesc, tdesc_data);
+ 
+   /* Override the normal target description method to make the SPE upper

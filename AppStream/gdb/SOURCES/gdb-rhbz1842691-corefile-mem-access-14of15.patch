@@ -1,0 +1,439 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Tue, 28 Jul 2020 09:46:44 -0400
+Subject: gdb-rhbz1842691-corefile-mem-access-14of15.patch
+
+;; New core file tests with mappings over existing program memory
+;; Kevin Buettner, RH BZ 1842961
+
+   Author: Kevin Buettner <kevinb@redhat.com>
+   Date:   Wed Jun 17 19:25:47 2020 -0700
+
+    New core file tests with mappings over existing program memory
+
+    This test case was inspired by Pedro's demonstration of a problem
+    with my v2 patches.  It can be found here:
+
+        https://sourceware.org/pipermail/gdb-patches/2020-May/168826.html
+
+    In a nutshell, my earlier patches could not handle the case in
+    which a read-only mapping created with mmap() was created at
+    an address used by other file-backed read-only memory in use by
+    the process.
+
+    This problem has been fixed (for Linux, anyway) by the commit "Use
+    NT_FILE note section for reading core target memory".
+
+    When I run this test without any of my recent corefile patches,
+    I see these failures:
+
+    FAIL: gdb.base/corefile2.exp: kernel core: print/x mbuf_ro[0]@4
+    FAIL: gdb.base/corefile2.exp: kernel core: print/x mbuf_ro[pagesize-4]@4
+    FAIL: gdb.base/corefile2.exp: kernel core: print/x mbuf_ro[-3]@6
+    FAIL: gdb.base/corefile2.exp: kernel core: print/x mbuf_rw[pagesize-3]@6
+    FAIL: gdb.base/corefile2.exp: kernel core: print/x mbuf_ro[pagesize-3]@6
+    FAIL: gdb.base/corefile2.exp: maint print core-file-backed-mappings
+    FAIL: gdb.base/corefile2.exp: gcore core: print/x mbuf_ro[-3]@6
+
+    The ones involving mbuf_ro will almost certainly fail when run on
+    non-Linux systems; I've used setup_xfail on those tests to prevent
+    them from outright FAILing when not run on Linux.  For a time, I
+    had considered skipping these tests altogether when not run on
+    Linux, but I changed my mind due to this failure...
+
+    FAIL: gdb.base/corefile2.exp: print/x mbuf_rw[pagesize-3]@6
+
+    I think it *should* pass without my recent corefile patches.  The fact
+    that it doesn't is likely due to a bug in GDB.  The following
+    interaction with GDB demonstrates the problem:
+
+    (gdb) print/x mbuf_rw[pagesize-3]@6
+    $1 = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+    (gdb) print/x mbuf_rw[pagesize]@3
+    $2 = {0x6b, 0x6b, 0x6b}
+
+    The last three values in display of $1 should be the same as those
+    shown by $2.  Like this...
+
+    (gdb) print/x mbuf_rw[pagesize-3]@6
+    $1 = {0x0, 0x0, 0x0, 0x6b, 0x6b, 0x6b}
+    (gdb) print/x mbuf_rw[pagesize]@3
+    $2 = {0x6b, 0x6b, 0x6b}
+
+    That latter output was obtained with the use of all of my current
+    corefile patches.  I see no failures on Linux when running this test
+    with my current set of corefile patches.  I tested 3 architectures:
+    x86_64, s390x, and aarch64.
+
+    I also tested on FreeBSD 12.1-RELEASE.  I see the following results
+    both with and without the current set of core file patches:
+
+        # of expected passes		26
+        # of expected failures		8
+
+    Of particular interest is that I did *not* see the problematic mbuf_rw
+    failure noted earlier (both with and without the core file patches).
+    I still don't have an explanation for why this failure occurred on
+    Linux.  Prior to running the tests, I had hypothesized that I'd see
+    this failure on FreeBSD too, but testing shows that this is not the
+    case.
+
+    Also of importance is that we see no FAILs with this test on FreeBSD
+    which indicates that I XFAILed the correct tests.
+
+    This version runs the interesting tests twice, once with a kernel
+    created core file and another time with a gcore created core file.
+
+    It also does a very minimal test of the new command "maint print
+    core-file-backed-mappings".
+
+    gdb/testsuite/ChangeLog:
+
+    	* gdb.base/corefile2.exp: New file.
+    	* gdb.base/coremaker2.exp: New file.
+
+diff --git a/gdb/testsuite/gdb.base/corefile2.exp b/gdb/testsuite/gdb.base/corefile2.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.base/corefile2.exp
+@@ -0,0 +1,185 @@
++# Copyright 2020 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++# Tests of core file memory accesses when mmap() has been used to
++# create a "hole" of zeroes over pre-existing memory regions.  See
++# coremaker2.c for details.
++
++# are we on a target board
++if ![isnative] then {
++    return
++}
++
++# Some of these tests will only work on GNU/Linux due to the
++# fact that Linux core files includes a section describing
++# memory address to file mappings.  We'll use set_up_xfail for the
++# affected tests.  As other targets become supported, the condition
++# can be changed accordingly.
++
++set xfail 0
++if { ![istarget *-linux*] } {
++    set xfail 1
++}
++
++standard_testfile coremaker2.c
++
++if {[build_executable $testfile.exp $testfile $srcfile debug] == -1} {
++    untested "failed to compile"
++    return -1
++}
++
++set corefile [core_find $binfile {}]
++if {$corefile == ""} {
++    return 0
++}
++
++gdb_start
++gdb_reinitialize_dir $srcdir/$subdir
++gdb_load ${binfile}
++
++# Attempt to load the core file.
++
++gdb_test_multiple "core-file $corefile" "core-file command" {
++    -re ".* program is being debugged already.*y or n. $" {
++	# gdb_load may connect us to a gdbserver.
++	send_gdb "y\n"
++	exp_continue
++    }
++    -re "Core was generated by .*corefile.*\r\n\#0  .*\(\).*\r\n$gdb_prompt $" {
++	pass "core-file command"
++    }
++    -re "Core was generated by .*\r\n\#0  .*\(\).*\r\n$gdb_prompt $" {
++	pass "core-file command (with bad program name)"
++    }
++    -re ".*registers from core file: File in wrong format.* $" {
++	fail "core-file command (could not read registers from core file)"
++    }
++}
++
++# Perform the "interesting" tests which check the contents of certain
++# memory regions.
++
++proc do_tests { } {
++    global xfail
++
++    # Check contents of beginning of buf_rw and buf_ro.
++
++    gdb_test {print/x buf_rw[0]@4} {\{0x6b, 0x6b, 0x6b, 0x6b\}}
++    gdb_test {print/x buf_ro[0]@4} {\{0xc5, 0xc5, 0xc5, 0xc5\}}
++
++    # Check for correct contents at beginning of mbuf_rw and mbuf_ro.
++
++    gdb_test {print/x mbuf_rw[0]@4} {\{0x0, 0x0, 0x0, 0x0\}}
++
++    if { $xfail } { setup_xfail "*-*-*" }
++    gdb_test {print/x mbuf_ro[0]@4} {\{0x0, 0x0, 0x0, 0x0\}}
++
++    # Check contents of mbuf_rw and mbuf_ro at the end of these regions.
++
++    gdb_test {print/x mbuf_rw[pagesize-4]@4} {\{0x0, 0x0, 0x0, 0x0\}}
++
++    if { $xfail } { setup_xfail "*-*-*" }
++    gdb_test {print/x mbuf_ro[pagesize-4]@4} {\{0x0, 0x0, 0x0, 0x0\}}
++
++    # Check contents of mbuf_rw and mbuf_ro, right before the hole,
++    # overlapping into the beginning of these mmap'd regions.
++
++    gdb_test {print/x mbuf_rw[-3]@6} {\{0x6b, 0x6b, 0x6b, 0x0, 0x0, 0x0\}}
++
++    if { $xfail } { setup_xfail "*-*-*" }
++    gdb_test {print/x mbuf_ro[-3]@6} {\{0xc5, 0xc5, 0xc5, 0x0, 0x0, 0x0\}}
++
++    # Likewise, at the end of the mbuf_rw and mbuf_ro, with overlap.
++
++    # If this test FAILs, it's probably a genuine bug unrelated to whether
++    # the core file includes a section describing memory address to file
++    # mappings or not.  (So don't xfail it!)
++    gdb_test {print/x mbuf_rw[pagesize-3]@6} {\{0x0, 0x0, 0x0, 0x6b, 0x6b, 0x6b\}}
++
++    if { $xfail } { setup_xfail "*-*-*" }
++    gdb_test {print/x mbuf_ro[pagesize-3]@6} {\{0x0, 0x0, 0x0, 0xc5, 0xc5, 0xc5\}}
++
++    # Check contents of (what should be) buf_rw and buf_ro immediately after
++    # mbuf_rw and mbuf_ro holes.
++
++    gdb_test {print/x mbuf_rw[pagesize]@4} {\{0x6b, 0x6b, 0x6b, 0x6b\}}
++    gdb_test {print/x mbuf_ro[pagesize]@4} {\{0xc5, 0xc5, 0xc5, 0xc5\}}
++
++    # Check contents at ends of buf_rw and buf_rw.
++
++    gdb_test {print/x buf_rw[sizeof(buf_rw)-4]@4} {\{0x6b, 0x6b, 0x6b, 0x6b\}}
++    gdb_test {print/x buf_ro[sizeof(buf_ro)-4]@4} {\{0xc5, 0xc5, 0xc5, 0xc5\}}
++}
++
++# Run tests with kernel-produced core file.
++
++with_test_prefix "kernel core" {
++    do_tests
++}
++
++# Verify that "maint print core-file-backed-mappings" exists and does
++# not crash GDB.  If it produces any output at all, make sure that
++# that output at least mentions binfile.
++
++set test "maint print core-file-backed-mappings"
++gdb_test_multiple $test "" {
++    -re ".*$binfile.*$gdb_prompt $" {
++	pass $test
++    }
++    -re "^$test\[\r\n\]*$gdb_prompt $" {
++	pass "$test (no output)"
++    }
++}
++
++# Restart and run to the abort call.
++
++clean_restart $binfile
++
++if ![runto_main] then {
++    fail "can't run to main"
++    return
++}
++
++gdb_breakpoint [gdb_get_line_number "abort"]
++gdb_continue_to_breakpoint "at abort"
++
++# Do not execute abort call; instead, invoke gcore command to make a
++# gdb-produced core file.
++
++set corefile [standard_output_file gcore.test]
++set core_supported [gdb_gcore_cmd "$corefile" "save a corefile"]
++if {!$core_supported} {
++  return
++}
++
++# maint print-core-file-backed-mappings shouldn't produce any output
++# when not debugging a core file.
++
++gdb_test_no_output "maint print core-file-backed-mappings" \
++    "maint print core-file-backed-mapping with no core file"
++
++clean_restart $binfile
++
++set core_loaded [gdb_core_cmd "$corefile" "re-load generated corefile"]
++if { $core_loaded == -1 } {
++    # No use proceeding from here.
++    return
++}
++
++# Run tests using gcore-produced core file.
++
++with_test_prefix "gcore core" {
++    do_tests
++}
+diff --git a/gdb/testsuite/gdb.base/coremaker2.c b/gdb/testsuite/gdb.base/coremaker2.c
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.base/coremaker2.c
+@@ -0,0 +1,150 @@
++/* Copyright 1992-2020 Free Software Foundation, Inc.
++
++   This file is part of GDB.
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
++
++/*  This test has two large memory areas buf_rw and buf_ro. 
++
++    buf_rw is written to by the program while buf_ro is initialized at
++    compile / load time.  Thus, when a core file is created, buf_rw's
++    memory should reside in the core file, but buf_ro probably won't be.
++    Instead, the contents of buf_ro are available from the executable.
++
++    Now, for the wrinkle:  We create a one page read-only mapping over
++    both of these areas.  This will create a one page "hole" of all
++    zeros in each area.
++
++    Will GDB be able to correctly read memory from each of the four
++    (or six, if you count the regions on the other side of each hole)
++    memory regions?  */
++
++#include <stdio.h>
++#include <sys/types.h>
++#include <fcntl.h>
++#include <sys/mman.h>
++#include <signal.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <string.h>
++#include <errno.h>
++
++/* These are globals so that we can find them easily when debugging
++   the core file.  */
++long pagesize;
++unsigned long long addr;
++char *mbuf_ro;
++char *mbuf_rw;
++
++/* 24 KiB buffer.  */
++char buf_rw[24 * 1024];
++
++/* 24 KiB worth of data.  For this test case, we can't allocate a
++   buffer and then fill it; we want GDB to have to read this data
++   from the executable; it should NOT find it in the core file.  */
++
++#define C5_16 \
++  0xc5, 0xc5, 0xc5, 0xc5, \
++  0xc5, 0xc5, 0xc5, 0xc5, \
++  0xc5, 0xc5, 0xc5, 0xc5, \
++  0xc5, 0xc5, 0xc5, 0xc5
++
++#define C5_256 \
++  C5_16, C5_16, C5_16, C5_16, \
++  C5_16, C5_16, C5_16, C5_16, \
++  C5_16, C5_16, C5_16, C5_16, \
++  C5_16, C5_16, C5_16, C5_16
++
++#define C5_1k \
++  C5_256, C5_256, C5_256, C5_256
++
++#define C5_24k \
++  C5_1k, C5_1k, C5_1k, C5_1k, \
++  C5_1k, C5_1k, C5_1k, C5_1k, \
++  C5_1k, C5_1k, C5_1k, C5_1k, \
++  C5_1k, C5_1k, C5_1k, C5_1k, \
++  C5_1k, C5_1k, C5_1k, C5_1k, \
++  C5_1k, C5_1k, C5_1k, C5_1k
++
++const char buf_ro[] = { C5_24k };
++
++int
++main (int argc, char **argv)
++{
++  int i, bitcount;
++
++#ifdef _SC_PAGESIZE
++  pagesize = sysconf (_SC_PAGESIZE);
++#else
++  pagesize = 8192;
++#endif
++
++  /* Verify that pagesize is a power of 2.  */
++  bitcount = 0;
++  for (i = 0; i < 4 * sizeof (pagesize); i++)
++    if (pagesize & (1 << i))
++      bitcount++;
++
++  if (bitcount != 1)
++    {
++      fprintf (stderr, "pagesize is not a power of 2.\n");
++      exit (1);
++    }
++
++  /* Compute an address that should be within buf_ro.  Complain if not.  */
++  addr = ((unsigned long long) buf_ro + pagesize) & ~(pagesize - 1);
++
++  if (addr <= (unsigned long long) buf_ro
++      || addr >= (unsigned long long) buf_ro + sizeof (buf_ro))
++    {
++      fprintf (stderr, "Unable to compute a suitable address within buf_ro.\n");
++      exit (1);
++    }
++
++  mbuf_ro = mmap ((void *) addr, pagesize, PROT_READ,
++               MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
++
++  if (mbuf_ro == MAP_FAILED)
++    {
++      fprintf (stderr, "mmap #1 failed: %s.\n", strerror (errno));
++      exit (1);
++    }
++
++  /* Write (and fill) the R/W region.  */
++  for (i = 0; i < sizeof (buf_rw); i++)
++    buf_rw[i] = 0x6b;
++
++  /* Compute an mmap address within buf_rw.  Complain if it's somewhere
++     else.  */
++  addr = ((unsigned long long) buf_rw + pagesize) & ~(pagesize - 1);
++
++  if (addr <= (unsigned long long) buf_rw
++      || addr >= (unsigned long long) buf_rw + sizeof (buf_rw))
++    {
++      fprintf (stderr, "Unable to compute a suitable address within buf_rw.\n");
++      exit (1);
++    }
++
++  mbuf_rw = mmap ((void *) addr, pagesize, PROT_READ,
++               MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
++
++  if (mbuf_rw == MAP_FAILED)
++    {
++      fprintf (stderr, "mmap #2 failed: %s.\n", strerror (errno));
++      exit (1);
++    }
++
++  /* With correct ulimit, etc. this should cause a core dump.  */
++  abort ();
++}

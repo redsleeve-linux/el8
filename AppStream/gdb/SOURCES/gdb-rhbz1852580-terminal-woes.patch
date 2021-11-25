@@ -1,0 +1,164 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Alan Hayward <alan.hayward@arm.com>
+Date: Tue, 28 May 2019 10:07:54 +0100
+Subject: gdb-rhbz1852580-terminal-woes.patch
+
+;; Fix terminal problems when error() is called
+;; Alan Hayward (RH BZ 1852580)
+
+Suppress SIGTTOU when handling errors
+
+Calls to error () can cause SIGTTOU to send gdb to the background.
+
+For example, on an Arm build:
+  (gdb) b main
+  Breakpoint 1 at 0x10774: file /build/gdb/testsuite/../../../src/binutils-gdb/gdb/testsuite/gdb.base/watchpoint.c, line 174.
+  (gdb) r
+  Starting program: /build/gdb/testsuite/outputs/gdb.base/watchpoint/watchpoint
+
+  [1]+  Stopped                 ../gdb ./outputs/gdb.base/watchpoint/watchpoint
+  localhost$ fg
+  ../gdb ./outputs/gdb.base/watchpoint/watchpoint
+  Cannot parse expression `.L1199 4@r4'.
+  warning: Probes-based dynamic linker interface failed.
+  Reverting to original interface.
+
+The SIGTTOU is raised whilst inside a syscall during the call to tcdrain.
+Fix is to use scoped_ignore_sigttou to ensure SIGTTOU is blocked.
+
+In addition fix include comments - job_control is not included via terminal.h
+
+gdb/ChangeLog:
+
+	* event-top.c: Remove include comment.
+	* inflow.c (class scoped_ignore_sigttou): Move from here...
+	* inflow.h (class scoped_ignore_sigttou): ...to here.
+	* ser-unix.c (hardwire_drain_output): Block SIGTTOU during drain.
+	* top.c:  Remove include comment.
+
+diff --git a/gdb/event-top.c b/gdb/event-top.c
+--- a/gdb/event-top.c
++++ b/gdb/event-top.c
+@@ -24,7 +24,7 @@
+ #include "inferior.h"
+ #include "infrun.h"
+ #include "target.h"
+-#include "terminal.h"		/* for job_control */
++#include "terminal.h"
+ #include "event-loop.h"
+ #include "event-top.h"
+ #include "interps.h"
+diff --git a/gdb/inflow.c b/gdb/inflow.c
+--- a/gdb/inflow.c
++++ b/gdb/inflow.c
+@@ -103,35 +103,6 @@ static serial_ttystate initial_gdb_ttystate;
+ 
+ static struct terminal_info *get_inflow_inferior_data (struct inferior *);
+ 
+-/* RAII class used to ignore SIGTTOU in a scope.  */
+-
+-class scoped_ignore_sigttou
+-{
+-public:
+-  scoped_ignore_sigttou ()
+-  {
+-#ifdef SIGTTOU
+-    if (job_control)
+-      m_osigttou = signal (SIGTTOU, SIG_IGN);
+-#endif
+-  }
+-
+-  ~scoped_ignore_sigttou ()
+-  {
+-#ifdef SIGTTOU
+-    if (job_control)
+-      signal (SIGTTOU, m_osigttou);
+-#endif
+-  }
+-
+-  DISABLE_COPY_AND_ASSIGN (scoped_ignore_sigttou);
+-
+-private:
+-#ifdef SIGTTOU
+-  sighandler_t m_osigttou = NULL;
+-#endif
+-};
+-
+ /* While the inferior is running, we want SIGINT and SIGQUIT to go to the
+    inferior only.  If we have job control, that takes care of it.  If not,
+    we save our handlers in these two variables and set SIGINT and SIGQUIT
+diff --git a/gdb/inflow.h b/gdb/inflow.h
+--- a/gdb/inflow.h
++++ b/gdb/inflow.h
+@@ -21,5 +21,36 @@
+ #define INFLOW_H
+ 
+ #include <unistd.h>
++#include <signal.h>
++#include "common/job-control.h"
++
++/* RAII class used to ignore SIGTTOU in a scope.  */
++
++class scoped_ignore_sigttou
++{
++public:
++  scoped_ignore_sigttou ()
++  {
++#ifdef SIGTTOU
++    if (job_control)
++      m_osigttou = signal (SIGTTOU, SIG_IGN);
++#endif
++  }
++
++  ~scoped_ignore_sigttou ()
++  {
++#ifdef SIGTTOU
++    if (job_control)
++      signal (SIGTTOU, m_osigttou);
++#endif
++  }
++
++  DISABLE_COPY_AND_ASSIGN (scoped_ignore_sigttou);
++
++private:
++#ifdef SIGTTOU
++  sighandler_t m_osigttou = NULL;
++#endif
++};
+ 
+ #endif /* inflow.h */
+diff --git a/gdb/ser-unix.c b/gdb/ser-unix.c
+--- a/gdb/ser-unix.c
++++ b/gdb/ser-unix.c
+@@ -32,6 +32,7 @@
+ #include "gdbcmd.h"
+ #include "filestuff.h"
+ #include <termios.h>
++#include "inflow.h"
+ 
+ struct hardwire_ttystate
+   {
+@@ -164,6 +165,9 @@ hardwire_print_tty_state (struct serial *scb,
+ static int
+ hardwire_drain_output (struct serial *scb)
+ {
++  /* Ignore SIGTTOU which may occur during the drain.  */
++  scoped_ignore_sigttou ignore_sigttou;
++
+   return tcdrain (scb->fd);
+ }
+ 
+diff --git a/gdb/top.c b/gdb/top.c
+--- a/gdb/top.c
++++ b/gdb/top.c
+@@ -34,8 +34,8 @@
+ #include "expression.h"
+ #include "value.h"
+ #include "language.h"
+-#include "terminal.h"		/* For job_control.  */
+-#include "job-control.h"
++#include "terminal.h"
++#include "common/job-control.h"
+ #include "annotate.h"
+ #include "completer.h"
+ #include "top.h"

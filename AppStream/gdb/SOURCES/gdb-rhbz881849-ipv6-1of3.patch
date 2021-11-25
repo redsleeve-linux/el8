@@ -1,0 +1,1934 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Sergio Durigan Junior <sergiodj@redhat.com>
+Date: Fri, 18 May 2018 01:29:24 -0400
+Subject: gdb-rhbz881849-ipv6-1of3.patch
+
+;; Implement IPv6 support for GDB/gdbserver (RH BZ 881849, Sergio Durigan Junior).
+
+Implement IPv6 support for GDB/gdbserver
+
+This patch implements IPv6 support for both GDB and gdbserver.  Based
+on my research, it is the fourth attempt to do that since 2006.  Since
+I used ideas from all of the previous patches, I also added their
+authors's names on the ChangeLogs as a way to recognize their
+efforts.  For reference sake, you can find the previous attempts at:
+
+  https://sourceware.org/ml/gdb-patches/2006-09/msg00192.html
+
+  https://sourceware.org/ml/gdb-patches/2014-02/msg00248.html
+
+  https://sourceware.org/ml/gdb-patches/2016-02/msg00226.html
+
+The basic idea behind the patch is to start using the new
+'getaddrinfo'/'getnameinfo' calls, which are responsible for
+translating names and addresses in a protocol-independent way.  This
+means that if we ever have a new version of the IP protocol, we won't
+need to change the code again (or, at least, won't have to change the
+majority of the code).
+
+The function 'getaddrinfo' returns a linked list of possible addresses
+to connect to.  Dealing with multiple addresses proved to be a hard
+task with the current TCP auto-retry mechanism implemented on
+ser-tcp:net_open.  For example, when gdbserver listened only on an
+IPv4 socket:
+
+  $ ./gdbserver --once 127.0.0.1:1234 ./a.out
+
+and GDB was instructed to try to connect to both IPv6 and IPv4
+sockets:
+
+  $ ./gdb -ex 'target extended-remote localhost:1234' ./a.out
+
+the user would notice a somewhat big delay before GDB was able to
+connect to the IPv4 socket.  This happened because GDB was trying to
+connect to the IPv6 socket first, and had to wait until the connection
+timed out before it tried to connect to the IPv4 socket.
+
+For that reason, I had to rewrite the main loop and implement a new
+method for handling multiple connections.  After some discussion,
+Pedro and I agreed on the following algorithm:
+
+  1) For each entry returned by 'getaddrinfo', we try to open a socket
+  and connect to it.
+
+  2.a) If we have a successful 'connect', we just use that connection.
+
+  2.b) If we don't have a successfull 'connect', but if we've got a
+  ECONNREFUSED (meaning the the connection was refused), we keep track
+  of this fact by using a flag.
+
+  2.c) If we don't have a successfull 'connect', but if we've got a
+  EINPROGRESS (meaning that the connection is in progress), we perform
+  a 'select' call on the socket until we have a result (either a
+  successful connection, or an error on the socket).
+
+  3) If tcp_auto_retry is true, and we haven't gotten a successful
+  connection, and at least one of our attempts failed with
+  ECONNREFUSED, then we wait a little bit (i.e., call
+  'wait_for_connect'), check to see if there was a
+  timeout/interruption (in which case we bail out), and then go back
+  to (1).
+
+After multiple tests, I was able to connect without delay on the
+scenario described above, and was also able to connect in all other
+types of scenarios.
+
+I also implemented some hostname parsing functions (along with their
+corresponding unit tests) which are used to help GDB and gdbserver to
+parse hostname strings provided by the user.  These new functions are
+living inside common/netstuff.[ch].  I've had to do that since IPv6
+introduces a new URL scheme, which defines that square brackets can be
+used to enclose the host part and differentiate it from the
+port (e.g., "[::1]:1234" means "host ::1, port 1234").  I spent some
+time thinking about a reasonable way to interpret what the user wants,
+and I came up with the following:
+
+  - If the user has provided a prefix that doesn't specify the protocol
+    version (i.e., "tcp:" or "udp:"), or if the user has not provided
+    any prefix, don't make any assumptions (i.e., assume AF_UNSPEC when
+    dealing with 'getaddrinfo') *unless* the host starts with "[" (in
+    which case, assume it's an IPv6 host).
+
+  - If the user has provided a prefix that does specify the protocol
+    version (i.e., "tcp4:", "tcp6:", "udp4:" or "udp6:"), then respect
+    that.
+
+This method doesn't follow strictly what RFC 2732 proposes (that
+literal IPv6 addresses should be provided enclosed in "[" and "]")
+because IPv6 addresses still can be provided without square brackets
+in our case, but since we have prefixes to specify protocol versions I
+think this is not an issue.
+
+Another thing worth mentioning is the new 'GDB_TEST_SOCKETHOST'
+testcase parameter, which makes it possible to specify the
+hostname (without the port) to be used when testing GDB and
+gdbserver.  For example, to run IPv6 tests:
+
+  $ make check-gdb RUNTESTFLAGS='GDB_TEST_SOCKETHOST=tcp6:[::1]'
+
+Or, to run IPv4 tests:
+
+  $ make check-gdb RUNTESTFLAGS='GDB_TEST_SOCKETHOST=tcp4:127.0.0.1'
+
+This required a few changes on the gdbserver-base.exp, and also a
+minimal adjustment on gdb.server/run-without-local-binary.exp.
+
+Finally, I've implemented a new testcase,
+gdb.server/server-connect.exp, which is supposed to run on the native
+host and perform various "smoke tests" using different connection
+methods.
+
+This patch has been regression-tested on BuildBot and locally, and
+also built using a x86_64-w64-mingw32 GCC, and no problems were found.
+
+gdb/ChangeLog:
+2018-07-11  Sergio Durigan Junior  <sergiodj@redhat.com>
+	    Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Paul Fertser  <fercerpav@gmail.com>
+	    Tsutomu Seki  <sekiriki@gmail.com>
+	    Pedro Alves  <palves@redhat.com>
+
+	* Makefile.in (SUBDIR_UNITTESTS_SRCS): Add
+	'unittests/parse-connection-spec-selftests.c'.
+	(COMMON_SFILES): Add 'common/netstuff.c'.
+	(HFILES_NO_SRCDIR): Add 'common/netstuff.h'.
+	* NEWS (Changes since GDB 8.2): Mention IPv6 support.
+	* common/netstuff.c: New file.
+	* common/netstuff.h: New file.
+	* ser-tcp.c: Include 'netstuff.h' and 'wspiapi.h'.
+	(wait_for_connect): Update comment.  New parameter
+	'gdb::optional<int> sock' instead of 'struct serial *scb'.
+	Use 'sock' directly instead of 'scb->fd'.
+	(try_connect): New function, with code from 'net_open'.
+	(net_open): Rewrite main loop to deal with multiple
+	sockets/addresses.  Handle IPv6-style hostnames; implement
+	support for IPv6 connections.
+	* unittests/parse-connection-spec-selftests.c: New file.
+
+gdb/gdbserver/ChangeLog:
+2018-07-11  Sergio Durigan Junior  <sergiodj@redhat.com>
+	    Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Paul Fertser  <fercerpav@gmail.com>
+	    Tsutomu Seki  <sekiriki@gmail.com>
+
+	* Makefile.in (SFILES): Add '$(srcdir)/common/netstuff.c'.
+	(OBS): Add 'common/netstuff.o'.
+	(GDBREPLAY_OBS): Likewise.
+	* gdbreplay.c: Include 'wspiapi.h' and 'netstuff.h'.
+	(remote_open): Implement support for IPv6
+	connections.
+	* remote-utils.c: Include 'netstuff.h', 'filestuff.h'
+	and 'wspiapi.h'.
+	(handle_accept_event): Accept connections from IPv6 sources.
+	(remote_prepare): Handle IPv6-style hostnames; implement
+	support for IPv6 connections.
+	(remote_open): Implement support for printing connections from
+	IPv6 sources.
+
+gdb/testsuite/ChangeLog:
+2018-07-11  Sergio Durigan Junior  <sergiodj@redhat.com>
+	    Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Paul Fertser  <fercerpav@gmail.com>
+	    Tsutomu Seki  <sekiriki@gmail.com>
+
+	* README (Testsuite Parameters): Mention new 'GDB_TEST_SOCKETHOST'
+	parameter.
+	* boards/native-extended-gdbserver.exp: Do not set 'sockethost'
+	by default.
+	* boards/native-gdbserver.exp: Likewise.
+	* gdb.server/run-without-local-binary.exp: Improve regexp used
+	for detecting when a remote debugging connection succeeds.
+	* gdb.server/server-connect.exp: New file.
+	* lib/gdbserver-support.exp (gdbserver_default_get_comm_port):
+	Do not prefix the port number with ":".
+	(gdbserver_start): New global GDB_TEST_SOCKETHOST.  Implement
+	support for detecting and using it.  Add '$debughost_gdbserver'
+	to the list of arguments used to start gdbserver.  Handle case
+	when gdbserver cannot resolve a network name.
+
+gdb/doc/ChangeLog:
+2018-07-11  Sergio Durigan Junior  <sergiodj@redhat.com>
+	    Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Paul Fertser  <fercerpav@gmail.com>
+	    Tsutomu Seki  <sekiriki@gmail.com>
+
+	* gdb.texinfo (Remote Connection Commands): Add explanation
+	about new IPv6 support.  Add new connection prefixes.
+
+diff --git a/gdb/Makefile.in b/gdb/Makefile.in
+--- a/gdb/Makefile.in
++++ b/gdb/Makefile.in
+@@ -430,6 +430,7 @@ SUBDIR_UNITTESTS_SRCS = \
+ 	unittests/offset-type-selftests.c \
+ 	unittests/observable-selftests.c \
+ 	unittests/optional-selftests.c \
++	unittests/parse-connection-spec-selftests.c \
+ 	unittests/ptid-selftests.c \
+ 	unittests/rsp-low-selftests.c \
+ 	unittests/scoped_fd-selftests.c \
+@@ -967,6 +968,7 @@ COMMON_SFILES = \
+ 	common/job-control.c \
+ 	common/gdb_tilde_expand.c \
+ 	common/gdb_vecs.c \
++	common/netstuff.c \
+ 	common/new-op.c \
+ 	common/pathstuff.c \
+ 	common/print-utils.c \
+@@ -1448,6 +1450,7 @@ HFILES_NO_SRCDIR = \
+ 	common/gdb_vecs.h \
+ 	common/gdb_wait.h \
+ 	common/common-inferior.h \
++	common/netstuff.h \
+ 	common/host-defs.h \
+ 	common/pathstuff.h \
+ 	common/print-utils.h \
+diff --git a/gdb/NEWS b/gdb/NEWS
+--- a/gdb/NEWS
++++ b/gdb/NEWS
+@@ -1,6 +1,12 @@
+ 		What has changed in GDB?
+ 	     (Organized release by release)
+ 
++*** Changes since GDB 8.2
++
++* GDB and GDBserver now support IPv6 connections.  IPv6 addresses
++  can be passed using the '[ADDRESS]:PORT' notation, or the regular
++  'ADDRESS:PORT' method.
++
+ *** Changes in GDB 8.2
+ 
+ * The 'set disassembler-options' command now supports specifying options
+diff --git a/gdb/common/netstuff.c b/gdb/common/netstuff.c
+new file mode 100644
+--- /dev/null
++++ b/gdb/common/netstuff.c
+@@ -0,0 +1,155 @@
++/* Operations on network stuff.
++   Copyright (C) 2018 Free Software Foundation, Inc.
++
++   This file is part of GDB.
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
++
++#include "common-defs.h"
++#include "netstuff.h"
++#include <algorithm>
++
++#ifdef USE_WIN32API
++#include <winsock2.h>
++#include <wspiapi.h>
++#else
++#include <netinet/in.h>
++#include <arpa/inet.h>
++#include <netdb.h>
++#include <sys/socket.h>
++#include <netinet/tcp.h>
++#endif
++
++/* See common/netstuff.h.  */
++
++scoped_free_addrinfo::~scoped_free_addrinfo ()
++{
++  freeaddrinfo (m_res);
++}
++
++/* See common/netstuff.h.  */
++
++parsed_connection_spec
++parse_connection_spec_without_prefix (std::string spec, struct addrinfo *hint)
++{
++  parsed_connection_spec ret;
++  size_t last_colon_pos = 0;
++  /* We're dealing with IPv6 if:
++
++     - ai_family is AF_INET6, or
++     - ai_family is not AF_INET, and
++       - spec[0] is '[', or
++       - the number of ':' on spec is greater than 1.  */
++  bool is_ipv6 = (hint->ai_family == AF_INET6
++		  || (hint->ai_family != AF_INET
++		      && (spec[0] == '['
++			  || std::count (spec.begin (),
++					 spec.end (), ':') > 1)));
++
++  if (is_ipv6)
++    {
++      if (spec[0] == '[')
++	{
++	  /* IPv6 addresses can be written as '[ADDR]:PORT', and we
++	     support this notation.  */
++	  size_t close_bracket_pos = spec.find_first_of (']');
++
++	  if (close_bracket_pos == std::string::npos)
++	    error (_("Missing close bracket in hostname '%s'"),
++		   spec.c_str ());
++
++	  hint->ai_family = AF_INET6;
++
++	  const char c = spec[close_bracket_pos + 1];
++
++	  if (c == '\0')
++	    last_colon_pos = std::string::npos;
++	  else if (c != ':')
++	    error (_("Invalid cruft after close bracket in '%s'"),
++		   spec.c_str ());
++
++	  /* Erase both '[' and ']'.  */
++	  spec.erase (0, 1);
++	  spec.erase (close_bracket_pos - 1, 1);
++	}
++      else if (spec.find_first_of (']') != std::string::npos)
++	error (_("Missing open bracket in hostname '%s'"),
++	       spec.c_str ());
++    }
++
++  if (last_colon_pos == 0)
++    last_colon_pos = spec.find_last_of (':');
++
++  /* The length of the hostname part.  */
++  size_t host_len;
++
++  if (last_colon_pos != std::string::npos)
++    {
++      /* The user has provided a port.  */
++      host_len = last_colon_pos;
++      ret.port_str = spec.substr (last_colon_pos + 1);
++    }
++  else
++    host_len = spec.size ();
++
++  ret.host_str = spec.substr (0, host_len);
++
++  /* Default hostname is localhost.  */
++  if (ret.host_str.empty ())
++    ret.host_str = "localhost";
++
++  return ret;
++}
++
++/* See common/netstuff.h.  */
++
++parsed_connection_spec
++parse_connection_spec (const char *spec, struct addrinfo *hint)
++{
++  /* Struct to hold the association between valid prefixes, their
++     family and socktype.  */
++  struct host_prefix
++    {
++      /* The prefix.  */
++      const char *prefix;
++
++      /* The 'ai_family'.  */
++      int family;
++
++      /* The 'ai_socktype'.  */
++      int socktype;
++    };
++  static const struct host_prefix prefixes[] =
++    {
++      { "udp:",  AF_UNSPEC, SOCK_DGRAM },
++      { "tcp:",  AF_UNSPEC, SOCK_STREAM },
++      { "udp4:", AF_INET,   SOCK_DGRAM },
++      { "tcp4:", AF_INET,   SOCK_STREAM },
++      { "udp6:", AF_INET6,  SOCK_DGRAM },
++      { "tcp6:", AF_INET6,  SOCK_STREAM },
++    };
++
++  for (const host_prefix prefix : prefixes)
++    if (startswith (spec, prefix.prefix))
++      {
++	spec += strlen (prefix.prefix);
++	hint->ai_family = prefix.family;
++	hint->ai_socktype = prefix.socktype;
++	hint->ai_protocol
++	  = hint->ai_socktype == SOCK_DGRAM ? IPPROTO_UDP : IPPROTO_TCP;
++	break;
++      }
++
++  return parse_connection_spec_without_prefix (spec, hint);
++}
+diff --git a/gdb/common/netstuff.h b/gdb/common/netstuff.h
+new file mode 100644
+--- /dev/null
++++ b/gdb/common/netstuff.h
+@@ -0,0 +1,76 @@
++/* Operations on network stuff.
++   Copyright (C) 2018 Free Software Foundation, Inc.
++
++   This file is part of GDB.
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
++
++#ifndef NETSTUFF_H
++#define NETSTUFF_H
++
++#include <string>
++
++/* Like NI_MAXHOST/NI_MAXSERV, but enough for numeric forms.  */
++#define GDB_NI_MAX_ADDR 64
++#define GDB_NI_MAX_PORT 16
++
++/* Helper class to guarantee that we always call 'freeaddrinfo'.  */
++
++class scoped_free_addrinfo
++{
++public:
++  /* Default constructor.  */
++  explicit scoped_free_addrinfo (struct addrinfo *ainfo)
++    : m_res (ainfo)
++  {
++  }
++
++  /* Destructor responsible for free'ing M_RES by calling
++     'freeaddrinfo'.  */
++  ~scoped_free_addrinfo ();
++
++  DISABLE_COPY_AND_ASSIGN (scoped_free_addrinfo);
++
++private:
++  /* The addrinfo resource.  */
++  struct addrinfo *m_res;
++};
++
++/* The struct we return after parsing the connection spec.  */
++
++struct parsed_connection_spec
++{
++  /* The hostname.  */
++  std::string host_str;
++
++  /* The port, if any.  */
++  std::string port_str;
++};
++
++
++/* Parse SPEC (which is a string in the form of "ADDR:PORT") and
++   return a 'parsed_connection_spec' structure with the proper fields
++   filled in.  Also adjust HINT accordingly.  */
++extern parsed_connection_spec
++  parse_connection_spec_without_prefix (std::string spec,
++					struct addrinfo *hint);
++
++/* Parse SPEC (which is a string in the form of
++   "[tcp[6]:|udp[6]:]ADDR:PORT") and return a 'parsed_connection_spec'
++   structure with the proper fields filled in.  Also adjust HINT
++   accordingly.  */
++extern parsed_connection_spec parse_connection_spec (const char *spec,
++						     struct addrinfo *hint);
++
++#endif /* ! NETSTUFF_H */
+diff --git a/gdb/doc/ChangeLog b/gdb/doc/ChangeLog
+--- a/gdb/doc/ChangeLog
++++ b/gdb/doc/ChangeLog
+@@ -1,3 +1,11 @@
++2018-07-11  Sergio Durigan Junior  <sergiodj@redhat.com>
++	    Jan Kratochvil  <jan.kratochvil@redhat.com>
++	    Paul Fertser  <fercerpav@gmail.com>
++	    Tsutomu Seki  <sekiriki@gmail.com>
++
++	* gdb.texinfo (Remote Connection Commands): Add explanation
++	about new IPv6 support.  Add new connection prefixes.
++
+ 2018-08-21  Alan Hayward  <alan.hayward@arm.com>
+ 
+ 	* gdb.texinfo (AArch64 SVE): New subsubsection.
+diff --git a/gdb/doc/gdb.texinfo b/gdb/doc/gdb.texinfo
+--- a/gdb/doc/gdb.texinfo
++++ b/gdb/doc/gdb.texinfo
+@@ -20548,16 +20548,27 @@ If you're using a serial line, you may want to give @value{GDBN} the
+ @code{target} command.
+ 
+ @item target remote @code{@var{host}:@var{port}}
++@itemx target remote @code{@var{[host]}:@var{port}}
+ @itemx target remote @code{tcp:@var{host}:@var{port}}
++@itemx target remote @code{tcp:@var{[host]}:@var{port}}
++@itemx target remote @code{tcp4:@var{host}:@var{port}}
++@itemx target remote @code{tcp6:@var{host}:@var{port}}
++@itemx target remote @code{tcp6:@var{[host]}:@var{port}}
+ @itemx target extended-remote @code{@var{host}:@var{port}}
++@itemx target extended-remote @code{@var{[host]}:@var{port}}
+ @itemx target extended-remote @code{tcp:@var{host}:@var{port}}
++@itemx target extended-remote @code{tcp:@var{[host]}:@var{port}}
++@itemx target extended-remote @code{tcp4:@var{host}:@var{port}}
++@itemx target extended-remote @code{tcp6:@var{host}:@var{port}}
++@itemx target extended-remote @code{tcp6:@var{[host]}:@var{port}}
+ @cindex @acronym{TCP} port, @code{target remote}
+ Debug using a @acronym{TCP} connection to @var{port} on @var{host}.
+-The @var{host} may be either a host name or a numeric @acronym{IP}
+-address; @var{port} must be a decimal number.  The @var{host} could be
+-the target machine itself, if it is directly connected to the net, or
+-it might be a terminal server which in turn has a serial line to the
+-target.
++The @var{host} may be either a host name, a numeric @acronym{IPv4}
++address, or a numeric @acronym{IPv6} address (with or without the
++square brackets to separate the address from the port); @var{port}
++must be a decimal number.  The @var{host} could be the target machine
++itself, if it is directly connected to the net, or it might be a
++terminal server which in turn has a serial line to the target.
+ 
+ For example, to connect to port 2828 on a terminal server named
+ @code{manyfarms}:
+@@ -20566,6 +20577,28 @@ For example, to connect to port 2828 on a terminal server named
+ target remote manyfarms:2828
+ @end smallexample
+ 
++To connect to port 2828 on a terminal server whose address is
++@code{2001:0db8:85a3:0000:0000:8a2e:0370:7334}, you can either use the
++square bracket syntax:
++
++@smallexample
++target remote [2001:0db8:85a3:0000:0000:8a2e:0370:7334]:2828
++@end smallexample
++
++@noindent
++or explicitly specify the @acronym{IPv6} protocol:
++
++@smallexample
++target remote tcp6:2001:0db8:85a3:0000:0000:8a2e:0370:7334:2828
++@end smallexample
++
++This last example may be confusing to the reader, because there is no
++visible separation between the hostname and the port number.
++Therefore, we recommend the user to provide @acronym{IPv6} addresses
++using square brackets for clarity.  However, it is important to
++mention that for @value{GDBN} there is no ambiguity: the number after
++the last colon is considered to be the port number.
++
+ If your remote target is actually running on the same machine as your
+ debugger session (e.g.@: a simulator for your target running on the
+ same host), you can omit the hostname.  For example, to connect to
+@@ -20579,7 +20612,15 @@ target remote :1234
+ Note that the colon is still required here.
+ 
+ @item target remote @code{udp:@var{host}:@var{port}}
++@itemx target remote @code{udp:@var{[host]}:@var{port}}
++@itemx target remote @code{udp4:@var{host}:@var{port}}
++@itemx target remote @code{udp6:@var{[host]}:@var{port}}
++@itemx target extended-remote @code{udp:@var{host}:@var{port}}
+ @itemx target extended-remote @code{udp:@var{host}:@var{port}}
++@itemx target extended-remote @code{udp:@var{[host]}:@var{port}}
++@itemx target extended-remote @code{udp4:@var{host}:@var{port}}
++@itemx target extended-remote @code{udp6:@var{host}:@var{port}}
++@itemx target extended-remote @code{udp6:@var{[host]}:@var{port}}
+ @cindex @acronym{UDP} port, @code{target remote}
+ Debug using @acronym{UDP} packets to @var{port} on @var{host}.  For example, to
+ connect to @acronym{UDP} port 2828 on a terminal server named @code{manyfarms}:
+diff --git a/gdb/gdbserver/ChangeLog b/gdb/gdbserver/ChangeLog
+--- a/gdb/gdbserver/ChangeLog
++++ b/gdb/gdbserver/ChangeLog
+@@ -1,3 +1,22 @@
++2018-07-11  Sergio Durigan Junior  <sergiodj@redhat.com>
++	    Jan Kratochvil  <jan.kratochvil@redhat.com>
++	    Paul Fertser  <fercerpav@gmail.com>
++	    Tsutomu Seki  <sekiriki@gmail.com>
++
++	* Makefile.in (SFILES): Add '$(srcdir)/common/netstuff.c'.
++	(OBS): Add 'common/netstuff.o'.
++	(GDBREPLAY_OBS): Likewise.
++	* gdbreplay.c: Include 'wspiapi.h' and 'netstuff.h'.
++	(remote_open): Implement support for IPv6
++	connections.
++	* remote-utils.c: Include 'netstuff.h', 'filestuff.h'
++	and 'wspiapi.h'.
++	(handle_accept_event): Accept connections from IPv6 sources.
++	(remote_prepare): Handle IPv6-style hostnames; implement
++	support for IPv6 connections.
++	(remote_open): Implement support for printing connections from
++	IPv6 sources.
++
+ 2018-08-26  Simon Marchi  <simon.marchi@ericsson.com>
+ 
+ 	PR gdb/23374
+diff --git a/gdb/gdbserver/Makefile.in b/gdb/gdbserver/Makefile.in
+--- a/gdb/gdbserver/Makefile.in
++++ b/gdb/gdbserver/Makefile.in
+@@ -211,6 +211,7 @@ SFILES = \
+ 	$(srcdir)/common/job-control.c \
+ 	$(srcdir)/common/gdb_tilde_expand.c \
+ 	$(srcdir)/common/gdb_vecs.c \
++	$(srcdir)/common/netstuff.c \
+ 	$(srcdir)/common/new-op.c \
+ 	$(srcdir)/common/pathstuff.c \
+ 	$(srcdir)/common/print-utils.c \
+@@ -254,6 +255,7 @@ OBS = \
+ 	common/format.o \
+ 	common/gdb_tilde_expand.o \
+ 	common/gdb_vecs.o \
++	common/netstuff.o \
+ 	common/new-op.o \
+ 	common/pathstuff.o \
+ 	common/print-utils.o \
+@@ -290,6 +292,7 @@ GDBREPLAY_OBS = \
+ 	common/common-exceptions.o \
+ 	common/common-utils.o \
+ 	common/errors.o \
++	common/netstuff.o \
+ 	common/print-utils.o \
+ 	gdbreplay.o \
+ 	utils.o \
+diff --git a/gdb/gdbserver/gdbreplay.c b/gdb/gdbserver/gdbreplay.c
+--- a/gdb/gdbserver/gdbreplay.c
++++ b/gdb/gdbserver/gdbreplay.c
+@@ -46,8 +46,11 @@
+ 
+ #if USE_WIN32API
+ #include <winsock2.h>
++#include <wspiapi.h>
+ #endif
+ 
++#include "netstuff.h"
++
+ #ifndef HAVE_SOCKLEN_T
+ typedef int socklen_t;
+ #endif
+@@ -142,56 +145,108 @@ remote_close (void)
+ static void
+ remote_open (char *name)
+ {
+-  if (!strchr (name, ':'))
++  char *last_colon = strrchr (name, ':');
++
++  if (last_colon == NULL)
+     {
+       fprintf (stderr, "%s: Must specify tcp connection as host:addr\n", name);
+       fflush (stderr);
+       exit (1);
+     }
+-  else
+-    {
++
+ #ifdef USE_WIN32API
+-      static int winsock_initialized;
++  static int winsock_initialized;
+ #endif
+-      char *port_str;
+-      int port;
+-      struct sockaddr_in sockaddr;
+-      socklen_t tmp;
+-      int tmp_desc;
++  char *port_str;
++  int tmp;
++  int tmp_desc;
++  struct addrinfo hint;
++  struct addrinfo *ainfo;
+ 
+-      port_str = strchr (name, ':');
++  memset (&hint, 0, sizeof (hint));
++  /* Assume no prefix will be passed, therefore we should use
++     AF_UNSPEC.  */
++  hint.ai_family = AF_UNSPEC;
++  hint.ai_socktype = SOCK_STREAM;
++  hint.ai_protocol = IPPROTO_TCP;
+ 
+-      port = atoi (port_str + 1);
++  parsed_connection_spec parsed = parse_connection_spec (name, &hint);
++
++  if (parsed.port_str.empty ())
++    error (_("Missing port on hostname '%s'"), name);
+ 
+ #ifdef USE_WIN32API
+-      if (!winsock_initialized)
+-	{
+-	  WSADATA wsad;
++  if (!winsock_initialized)
++    {
++      WSADATA wsad;
+ 
+-	  WSAStartup (MAKEWORD (1, 0), &wsad);
+-	  winsock_initialized = 1;
+-	}
++      WSAStartup (MAKEWORD (1, 0), &wsad);
++      winsock_initialized = 1;
++    }
+ #endif
+ 
+-      tmp_desc = socket (PF_INET, SOCK_STREAM, 0);
+-      if (tmp_desc == -1)
+-	perror_with_name ("Can't open socket");
++  int r = getaddrinfo (parsed.host_str.c_str (), parsed.port_str.c_str (),
++		       &hint, &ainfo);
+ 
+-      /* Allow rapid reuse of this port. */
+-      tmp = 1;
+-      setsockopt (tmp_desc, SOL_SOCKET, SO_REUSEADDR, (char *) &tmp,
+-		  sizeof (tmp));
++  if (r != 0)
++    {
++      fprintf (stderr, "%s:%s: cannot resolve name: %s\n",
++	       parsed.host_str.c_str (), parsed.port_str.c_str (),
++	       gai_strerror (r));
++      fflush (stderr);
++      exit (1);
++    }
++
++  scoped_free_addrinfo free_ainfo (ainfo);
++
++  struct addrinfo *p;
++
++  for (p = ainfo; p != NULL; p = p->ai_next)
++    {
++      tmp_desc = socket (p->ai_family, p->ai_socktype, p->ai_protocol);
+ 
+-      sockaddr.sin_family = PF_INET;
+-      sockaddr.sin_port = htons (port);
+-      sockaddr.sin_addr.s_addr = INADDR_ANY;
++      if (tmp_desc >= 0)
++	break;
++    }
++
++  if (p == NULL)
++    perror_with_name ("Cannot open socket");
+ 
+-      if (bind (tmp_desc, (struct sockaddr *) &sockaddr, sizeof (sockaddr))
+-	  || listen (tmp_desc, 1))
+-	perror_with_name ("Can't bind address");
++  /* Allow rapid reuse of this port. */
++  tmp = 1;
++  setsockopt (tmp_desc, SOL_SOCKET, SO_REUSEADDR, (char *) &tmp,
++	      sizeof (tmp));
++
++  switch (p->ai_family)
++    {
++    case AF_INET:
++      ((struct sockaddr_in *) p->ai_addr)->sin_addr.s_addr = INADDR_ANY;
++      break;
++    case AF_INET6:
++      ((struct sockaddr_in6 *) p->ai_addr)->sin6_addr = in6addr_any;
++      break;
++    default:
++      fprintf (stderr, "Invalid 'ai_family' %d\n", p->ai_family);
++      exit (1);
++    }
++
++  if (bind (tmp_desc, p->ai_addr, p->ai_addrlen) != 0)
++    perror_with_name ("Can't bind address");
++
++  if (p->ai_socktype == SOCK_DGRAM)
++    remote_desc = tmp_desc;
++  else
++    {
++      struct sockaddr_storage sockaddr;
++      socklen_t sockaddrsize = sizeof (sockaddr);
++      char orig_host[GDB_NI_MAX_ADDR], orig_port[GDB_NI_MAX_PORT];
++
++      if (listen (tmp_desc, 1) != 0)
++	perror_with_name ("Can't listen on socket");
++
++      remote_desc = accept (tmp_desc, (struct sockaddr *) &sockaddr,
++			    &sockaddrsize);
+ 
+-      tmp = sizeof (sockaddr);
+-      remote_desc = accept (tmp_desc, (struct sockaddr *) &sockaddr, &tmp);
+       if (remote_desc == -1)
+ 	perror_with_name ("Accept failed");
+ 
+@@ -206,6 +261,16 @@ remote_open (char *name)
+       setsockopt (remote_desc, IPPROTO_TCP, TCP_NODELAY,
+ 		  (char *) &tmp, sizeof (tmp));
+ 
++      if (getnameinfo ((struct sockaddr *) &sockaddr, sockaddrsize,
++		       orig_host, sizeof (orig_host),
++		       orig_port, sizeof (orig_port),
++		       NI_NUMERICHOST | NI_NUMERICSERV) == 0)
++	{
++	  fprintf (stderr, "Remote debugging from host %s, port %s\n",
++		   orig_host, orig_port);
++	  fflush (stderr);
++	}
++
+ #ifndef USE_WIN32API
+       close (tmp_desc);		/* No longer need this */
+ 
+diff --git a/gdb/gdbserver/remote-utils.c b/gdb/gdbserver/remote-utils.c
+--- a/gdb/gdbserver/remote-utils.c
++++ b/gdb/gdbserver/remote-utils.c
+@@ -26,6 +26,8 @@
+ #include "dll.h"
+ #include "rsp-low.h"
+ #include "gdbthread.h"
++#include "netstuff.h"
++#include "filestuff.h"
+ #include <ctype.h>
+ #if HAVE_SYS_IOCTL_H
+ #include <sys/ioctl.h>
+@@ -63,6 +65,7 @@
+ 
+ #if USE_WIN32API
+ #include <winsock2.h>
++#include <wspiapi.h>
+ #endif
+ 
+ #if __QNX__
+@@ -151,19 +154,18 @@ enable_async_notification (int fd)
+ static int
+ handle_accept_event (int err, gdb_client_data client_data)
+ {
+-  struct sockaddr_in sockaddr;
+-  socklen_t tmp;
++  struct sockaddr_storage sockaddr;
++  socklen_t len = sizeof (sockaddr);
+ 
+   if (debug_threads)
+     debug_printf ("handling possible accept event\n");
+ 
+-  tmp = sizeof (sockaddr);
+-  remote_desc = accept (listen_desc, (struct sockaddr *) &sockaddr, &tmp);
++  remote_desc = accept (listen_desc, (struct sockaddr *) &sockaddr, &len);
+   if (remote_desc == -1)
+     perror_with_name ("Accept failed");
+ 
+   /* Enable TCP keep alive process. */
+-  tmp = 1;
++  socklen_t tmp = 1;
+   setsockopt (remote_desc, SOL_SOCKET, SO_KEEPALIVE,
+ 	      (char *) &tmp, sizeof (tmp));
+ 
+@@ -192,8 +194,19 @@ handle_accept_event (int err, gdb_client_data client_data)
+   delete_file_handler (listen_desc);
+ 
+   /* Convert IP address to string.  */
+-  fprintf (stderr, "Remote debugging from host %s\n",
+-	   inet_ntoa (sockaddr.sin_addr));
++  char orig_host[GDB_NI_MAX_ADDR], orig_port[GDB_NI_MAX_PORT];
++
++  int r = getnameinfo ((struct sockaddr *) &sockaddr, len,
++		       orig_host, sizeof (orig_host),
++		       orig_port, sizeof (orig_port),
++		       NI_NUMERICHOST | NI_NUMERICSERV);
++
++  if (r != 0)
++    fprintf (stderr, _("Could not obtain remote address: %s\n"),
++	     gai_strerror (r));
++  else
++    fprintf (stderr, _("Remote debugging from host %s, port %s\n"),
++	     orig_host, orig_port);
+ 
+   enable_async_notification (remote_desc);
+ 
+@@ -222,10 +235,7 @@ remote_prepare (const char *name)
+ #ifdef USE_WIN32API
+   static int winsock_initialized;
+ #endif
+-  int port;
+-  struct sockaddr_in sockaddr;
+   socklen_t tmp;
+-  char *port_end;
+ 
+   remote_is_stdio = 0;
+   if (strcmp (name, STDIO_CONNECTION_NAME) == 0)
+@@ -238,17 +248,25 @@ remote_prepare (const char *name)
+       return;
+     }
+ 
+-  port_str = strchr (name, ':');
+-  if (port_str == NULL)
++  struct addrinfo hint;
++  struct addrinfo *ainfo;
++
++  memset (&hint, 0, sizeof (hint));
++  /* Assume no prefix will be passed, therefore we should use
++     AF_UNSPEC.  */
++  hint.ai_family = AF_UNSPEC;
++  hint.ai_socktype = SOCK_STREAM;
++  hint.ai_protocol = IPPROTO_TCP;
++
++  parsed_connection_spec parsed
++    = parse_connection_spec_without_prefix (name, &hint);
++
++  if (parsed.port_str.empty ())
+     {
+       cs.transport_is_reliable = 0;
+       return;
+     }
+ 
+-  port = strtoul (port_str + 1, &port_end, 10);
+-  if (port_str[1] == '\0' || *port_end != '\0')
+-    error ("Bad port argument: %s", name);
+-
+ #ifdef USE_WIN32API
+   if (!winsock_initialized)
+     {
+@@ -259,8 +277,26 @@ remote_prepare (const char *name)
+     }
+ #endif
+ 
+-  listen_desc = socket (PF_INET, SOCK_STREAM, IPPROTO_TCP);
+-  if (listen_desc == -1)
++  int r = getaddrinfo (parsed.host_str.c_str (), parsed.port_str.c_str (),
++		       &hint, &ainfo);
++
++  if (r != 0)
++    error (_("%s: cannot resolve name: %s"), name, gai_strerror (r));
++
++  scoped_free_addrinfo freeaddrinfo (ainfo);
++
++  struct addrinfo *iter;
++
++  for (iter = ainfo; iter != NULL; iter = iter->ai_next)
++    {
++      listen_desc = gdb_socket_cloexec (iter->ai_family, iter->ai_socktype,
++					iter->ai_protocol);
++
++      if (listen_desc >= 0)
++	break;
++    }
++
++  if (iter == NULL)
+     perror_with_name ("Can't open socket");
+ 
+   /* Allow rapid reuse of this port. */
+@@ -268,14 +304,25 @@ remote_prepare (const char *name)
+   setsockopt (listen_desc, SOL_SOCKET, SO_REUSEADDR, (char *) &tmp,
+ 	      sizeof (tmp));
+ 
+-  sockaddr.sin_family = PF_INET;
+-  sockaddr.sin_port = htons (port);
+-  sockaddr.sin_addr.s_addr = INADDR_ANY;
++  switch (iter->ai_family)
++    {
++    case AF_INET:
++      ((struct sockaddr_in *) iter->ai_addr)->sin_addr.s_addr = INADDR_ANY;
++      break;
++    case AF_INET6:
++      ((struct sockaddr_in6 *) iter->ai_addr)->sin6_addr = in6addr_any;
++      break;
++    default:
++      internal_error (__FILE__, __LINE__,
++		      _("Invalid 'ai_family' %d\n"), iter->ai_family);
++    }
+ 
+-  if (bind (listen_desc, (struct sockaddr *) &sockaddr, sizeof (sockaddr))
+-      || listen (listen_desc, 1))
++  if (bind (listen_desc, iter->ai_addr, iter->ai_addrlen) != 0)
+     perror_with_name ("Can't bind address");
+ 
++  if (listen (listen_desc, 1) != 0)
++    perror_with_name ("Can't listen on socket");
++
+   cs.transport_is_reliable = 1;
+ }
+ 
+@@ -350,18 +397,24 @@ remote_open (const char *name)
+ #endif /* USE_WIN32API */
+   else
+     {
+-      int port;
+-      socklen_t len;
+-      struct sockaddr_in sockaddr;
+-
+-      len = sizeof (sockaddr);
+-      if (getsockname (listen_desc,
+-		       (struct sockaddr *) &sockaddr, &len) < 0
+-	  || len < sizeof (sockaddr))
++      char listen_port[GDB_NI_MAX_PORT];
++      struct sockaddr_storage sockaddr;
++      socklen_t len = sizeof (sockaddr);
++
++      if (getsockname (listen_desc, (struct sockaddr *) &sockaddr, &len) < 0)
+ 	perror_with_name ("Can't determine port");
+-      port = ntohs (sockaddr.sin_port);
+ 
+-      fprintf (stderr, "Listening on port %d\n", port);
++      int r = getnameinfo ((struct sockaddr *) &sockaddr, len,
++			   NULL, 0,
++			   listen_port, sizeof (listen_port),
++			   NI_NUMERICSERV);
++
++      if (r != 0)
++	fprintf (stderr, _("Can't obtain port where we are listening: %s"),
++		 gai_strerror (r));
++      else
++	fprintf (stderr, _("Listening on port %s\n"), listen_port);
++
+       fflush (stderr);
+ 
+       /* Register the event loop handler.  */
+diff --git a/gdb/ser-tcp.c b/gdb/ser-tcp.c
+--- a/gdb/ser-tcp.c
++++ b/gdb/ser-tcp.c
+@@ -25,6 +25,7 @@
+ #include "cli/cli-decode.h"
+ #include "cli/cli-setshow.h"
+ #include "filestuff.h"
++#include "netstuff.h"
+ 
+ #include <sys/types.h>
+ 
+@@ -39,6 +40,7 @@
+ 
+ #ifdef USE_WIN32API
+ #include <winsock2.h>
++#include <wspiapi.h>
+ #ifndef ETIMEDOUT
+ #define ETIMEDOUT WSAETIMEDOUT
+ #endif
+@@ -81,12 +83,13 @@ static unsigned int tcp_retry_limit = 15;
+ 
+ #define POLL_INTERVAL 5
+ 
+-/* Helper function to wait a while.  If SCB is non-null, wait on its
+-   file descriptor.  Otherwise just wait on a timeout, updating *POLLS.
+-   Returns -1 on timeout or interrupt, otherwise the value of select.  */
++/* Helper function to wait a while.  If SOCK is not -1, wait on its
++   file descriptor.  Otherwise just wait on a timeout, updating
++   *POLLS.  Returns -1 on timeout or interrupt, otherwise the value of
++   select.  */
+ 
+ static int
+-wait_for_connect (struct serial *scb, unsigned int *polls)
++wait_for_connect (int sock, unsigned int *polls)
+ {
+   struct timeval t;
+   int n;
+@@ -120,24 +123,24 @@ wait_for_connect (struct serial *scb, unsigned int *polls)
+       t.tv_usec = 0;
+     }
+ 
+-  if (scb)
++  if (sock >= 0)
+     {
+       fd_set rset, wset, eset;
+ 
+       FD_ZERO (&rset);
+-      FD_SET (scb->fd, &rset);
++      FD_SET (sock, &rset);
+       wset = rset;
+       eset = rset;
+-	  
++
+       /* POSIX systems return connection success or failure by signalling
+ 	 wset.  Windows systems return success in wset and failure in
+ 	 eset.
+-     
++
+ 	 We must call select here, rather than gdb_select, because
+ 	 the serial structure has not yet been initialized - the
+ 	 MinGW select wrapper will not know that this FD refers
+ 	 to a socket.  */
+-      n = select (scb->fd + 1, &rset, &wset, &eset, &t);
++      n = select (sock + 1, &rset, &wset, &eset, &t);
+     }
+   else
+     /* Use gdb_select here, since we have no file descriptors, and on
+@@ -153,80 +156,28 @@ wait_for_connect (struct serial *scb, unsigned int *polls)
+   return n;
+ }
+ 
+-/* Open a tcp socket.  */
++/* Try to connect to the host represented by AINFO.  If the connection
++   succeeds, return its socket.  Otherwise, return -1 and set ERRNO
++   accordingly.  POLLS is used when 'connect' returns EINPROGRESS, and
++   we need to invoke 'wait_for_connect' to obtain the status.  */
+ 
+-int
+-net_open (struct serial *scb, const char *name)
++static int
++try_connect (const struct addrinfo *ainfo, unsigned int *polls)
+ {
+-  char hostname[100];
+-  const char *port_str;
+-  int n, port, tmp;
+-  int use_udp;
+-  struct hostent *hostent;
+-  struct sockaddr_in sockaddr;
+-#ifdef USE_WIN32API
+-  u_long ioarg;
+-#else
+-  int ioarg;
+-#endif
+-  unsigned int polls = 0;
+-
+-  use_udp = 0;
+-  if (startswith (name, "udp:"))
+-    {
+-      use_udp = 1;
+-      name = name + 4;
+-    }
+-  else if (startswith (name, "tcp:"))
+-    name = name + 4;
+-
+-  port_str = strchr (name, ':');
+-
+-  if (!port_str)
+-    error (_("net_open: No colon in host name!"));  /* Shouldn't ever
+-						       happen.  */
+-
+-  tmp = std::min (port_str - name, (ptrdiff_t) sizeof hostname - 1);
+-  strncpy (hostname, name, tmp);	/* Don't want colon.  */
+-  hostname[tmp] = '\000';	/* Tie off host name.  */
+-  port = atoi (port_str + 1);
+-
+-  /* Default hostname is localhost.  */
+-  if (!hostname[0])
+-    strcpy (hostname, "localhost");
+-
+-  hostent = gethostbyname (hostname);
+-  if (!hostent)
+-    {
+-      fprintf_unfiltered (gdb_stderr, "%s: unknown host\n", hostname);
+-      errno = ENOENT;
+-      return -1;
+-    }
++  int sock = gdb_socket_cloexec (ainfo->ai_family, ainfo->ai_socktype,
++				 ainfo->ai_protocol);
+ 
+-  sockaddr.sin_family = PF_INET;
+-  sockaddr.sin_port = htons (port);
+-  memcpy (&sockaddr.sin_addr.s_addr, hostent->h_addr,
+-	  sizeof (struct in_addr));
+-
+- retry:
+-
+-  if (use_udp)
+-    scb->fd = gdb_socket_cloexec (PF_INET, SOCK_DGRAM, 0);
+-  else
+-    scb->fd = gdb_socket_cloexec (PF_INET, SOCK_STREAM, 0);
+-
+-  if (scb->fd == -1)
++  if (sock < 0)
+     return -1;
+-  
++
+   /* Set socket nonblocking.  */
+-  ioarg = 1;
+-  ioctl (scb->fd, FIONBIO, &ioarg);
++  int ioarg = 1;
++
++  ioctl (sock, FIONBIO, &ioarg);
+ 
+   /* Use Non-blocking connect.  connect() will return 0 if connected
+      already.  */
+-  n = connect (scb->fd, (struct sockaddr *) &sockaddr, sizeof (sockaddr));
+-
+-  if (n < 0)
++  if (connect (sock, ainfo->ai_addr, ainfo->ai_addrlen) < 0)
+     {
+ #ifdef USE_WIN32API
+       int err = WSAGetLastError();
+@@ -234,21 +185,26 @@ net_open (struct serial *scb, const char *name)
+       int err = errno;
+ #endif
+ 
+-      /* Maybe we're waiting for the remote target to become ready to
+-	 accept connections.  */
+-      if (tcp_auto_retry
++      /* If we've got a "connection refused" error, just return
++	 -1.  The caller will know what to do.  */
++      if (
+ #ifdef USE_WIN32API
+-	  && err == WSAECONNREFUSED
++	  err == WSAECONNREFUSED
+ #else
+-	  && err == ECONNREFUSED
++	  err == ECONNREFUSED
+ #endif
+-	  && wait_for_connect (NULL, &polls) >= 0)
++	  )
+ 	{
+-	  close (scb->fd);
+-	  goto retry;
++	  close (sock);
++	  errno = err;
++	  return -1;
+ 	}
+ 
+       if (
++	  /* Any other error (except EINPROGRESS) will be "swallowed"
++	     here.  We return without specifying a return value, and
++	     set errno if the caller wants to inspect what
++	     happened.  */
+ #ifdef USE_WIN32API
+ 	  /* Under Windows, calling "connect" with a non-blocking socket
+ 	     results in WSAEWOULDBLOCK, not WSAEINPROGRESS.  */
+@@ -258,66 +214,166 @@ net_open (struct serial *scb, const char *name)
+ #endif
+ 	  )
+ 	{
++	  close (sock);
+ 	  errno = err;
+-	  net_close (scb);
+ 	  return -1;
+ 	}
+ 
+       /* Looks like we need to wait for the connect.  */
+-      do 
+-	{
+-	  n = wait_for_connect (scb, &polls);
+-	} 
++      int n;
++
++      do
++	n = wait_for_connect (sock, polls);
+       while (n == 0);
++
+       if (n < 0)
+ 	{
+-	  net_close (scb);
++	  int saved_errno = errno;
++
++	  /* A negative value here means that we either timed out or
++	     got interrupted by the user.  Just return.  */
++	  close (sock);
++	  errno = saved_errno;
+ 	  return -1;
+ 	}
+     }
+ 
+   /* Got something.  Is it an error?  */
+-  {
+-    int res, err;
+-    socklen_t len;
+-
+-    len = sizeof (err);
+-    /* On Windows, the fourth parameter to getsockopt is a "char *";
+-       on UNIX systems it is generally "void *".  The cast to "char *"
+-       is OK everywhere, since in C++ any data pointer type can be
+-       implicitly converted to "void *".  */
+-    res = getsockopt (scb->fd, SOL_SOCKET, SO_ERROR, (char *) &err, &len);
+-    if (res < 0 || err)
+-      {
+-	/* Maybe the target still isn't ready to accept the connection.  */
+-	if (tcp_auto_retry
++  int err;
++  socklen_t len = sizeof (err);
++
++  /* On Windows, the fourth parameter to getsockopt is a "char *";
++     on UNIX systems it is generally "void *".  The cast to "char *"
++     is OK everywhere, since in C++ any data pointer type can be
++     implicitly converted to "void *".  */
++  int ret = getsockopt (sock, SOL_SOCKET, SO_ERROR, (char *) &err, &len);
++
++  if (ret < 0)
++    {
++      int saved_errno = errno;
++
++      close (sock);
++      errno = saved_errno;
++      return -1;
++    }
++  else if (ret == 0 && err != 0)
++    {
++      close (sock);
++      errno = err;
++      return -1;
++    }
++
++  /* The connection succeeded.  Return the socket.  */
++  return sock;
++}
++
++/* Open a tcp socket.  */
++
++int
++net_open (struct serial *scb, const char *name)
++{
++  struct addrinfo hint;
++  struct addrinfo *ainfo;
++
++  memset (&hint, 0, sizeof (hint));
++  /* Assume no prefix will be passed, therefore we should use
++     AF_UNSPEC.  */
++  hint.ai_family = AF_UNSPEC;
++  hint.ai_socktype = SOCK_STREAM;
++  hint.ai_protocol = IPPROTO_TCP;
++
++  parsed_connection_spec parsed = parse_connection_spec (name, &hint);
++
++  if (parsed.port_str.empty ())
++    error (_("Missing port on hostname '%s'"), name);
++
++  int r = getaddrinfo (parsed.host_str.c_str (),
++		       parsed.port_str.c_str (),
++		       &hint, &ainfo);
++
++  if (r != 0)
++    {
++      fprintf_unfiltered (gdb_stderr, _("%s: cannot resolve name: %s\n"),
++			  name, gai_strerror (r));
++      errno = ENOENT;
++      return -1;
++    }
++
++  scoped_free_addrinfo free_ainfo (ainfo);
++
++  /* Flag to indicate whether we've got a connection refused.  It will
++     be true if any of the connections tried was refused.  */
++  bool got_connrefused;
++  /* If a connection succeeeds, SUCCESS_AINFO will point to the
++     'struct addrinfo' that succeed.  */
++  struct addrinfo *success_ainfo = NULL;
++  unsigned int polls = 0;
++
++  /* Assume the worst.  */
++  scb->fd = -1;
++
++  do
++    {
++      got_connrefused = false;
++
++      for (struct addrinfo *iter = ainfo; iter != NULL; iter = iter->ai_next)
++	{
++	  /* Iterate over the list of possible addresses to connect
++	     to.  For each, we'll try to connect and see if it
++	     succeeds.  */
++	  int sock = try_connect (iter, &polls);
++
++	  if (sock >= 0)
++	    {
++	      /* We've gotten a successful connection.  Save its
++		 'struct addrinfo', the socket, and break.  */
++	      success_ainfo = iter;
++	      scb->fd = sock;
++	      break;
++	    }
++	  else if (
+ #ifdef USE_WIN32API
+-	    && err == WSAECONNREFUSED
++	  errno == WSAECONNREFUSED
+ #else
+-	    && err == ECONNREFUSED
++	  errno == ECONNREFUSED
+ #endif
+-	    && wait_for_connect (NULL, &polls) >= 0)
+-	  {
+-	    close (scb->fd);
+-	    goto retry;
+-	  }
+-	if (err)
+-	  errno = err;
+-	net_close (scb);
+-	return -1;
+-      }
+-  } 
++		   )
++	    got_connrefused = true;
++	}
++    }
++  /* Just retry if:
++
++     - tcp_auto_retry is true, and
++     - We haven't gotten a connection yet, and
++     - Any of our connection attempts returned with ECONNREFUSED, and
++     - wait_for_connect signals that we can keep going.  */
++  while (tcp_auto_retry
++	 && success_ainfo == NULL
++	 && got_connrefused
++	 && wait_for_connect (-1, &polls) >= 0);
++
++  if (success_ainfo == NULL)
++    {
++      net_close (scb);
++      return -1;
++    }
+ 
+   /* Turn off nonblocking.  */
+-  ioarg = 0;
++#ifdef USE_WIN32API
++  u_long ioarg = 0;
++#else
++  int ioarg = 0;
++#endif
++
+   ioctl (scb->fd, FIONBIO, &ioarg);
+ 
+-  if (use_udp == 0)
++  if (success_ainfo->ai_socktype == IPPROTO_TCP)
+     {
+       /* Disable Nagle algorithm.  Needed in some cases.  */
+-      tmp = 1;
++      int tmp = 1;
++
+       setsockopt (scb->fd, IPPROTO_TCP, TCP_NODELAY,
+-		  (char *)&tmp, sizeof (tmp));
++		  (char *) &tmp, sizeof (tmp));
+     }
+ 
+ #ifdef SIGPIPE
+diff --git a/gdb/testsuite/ChangeLog b/gdb/testsuite/ChangeLog
+--- a/gdb/testsuite/ChangeLog
++++ b/gdb/testsuite/ChangeLog
+@@ -1,3 +1,23 @@
++2018-07-11  Sergio Durigan Junior  <sergiodj@redhat.com>
++	    Jan Kratochvil  <jan.kratochvil@redhat.com>
++	    Paul Fertser  <fercerpav@gmail.com>
++	    Tsutomu Seki  <sekiriki@gmail.com>
++
++	* README (Testsuite Parameters): Mention new 'GDB_TEST_SOCKETHOST'
++	parameter.
++	* boards/native-extended-gdbserver.exp: Do not set 'sockethost'
++	by default.
++	* boards/native-gdbserver.exp: Likewise.
++	* gdb.server/run-without-local-binary.exp: Improve regexp used
++	for detecting when a remote debugging connection succeeds.
++	* gdb.server/server-connect.exp: New file.
++	* lib/gdbserver-support.exp (gdbserver_default_get_comm_port):
++	Do not prefix the port number with ":".
++	(gdbserver_start): New global GDB_TEST_SOCKETHOST.  Implement
++	support for detecting and using it.  Add '$debughost_gdbserver'
++	to the list of arguments used to start gdbserver.  Handle case
++	when gdbserver cannot resolve a network name.
++
+ 2018-08-31  Tom Tromey  <tom@tromey.com>
+ 
+ 	* gdb.rust/simple.rs: Rename second variable "v".
+diff --git a/gdb/testsuite/README b/gdb/testsuite/README
+--- a/gdb/testsuite/README
++++ b/gdb/testsuite/README
+@@ -259,6 +259,20 @@ This make (not runtest) variable is used to specify whether the
+ testsuite preloads the read1.so library into expect.  Any non-empty
+ value means true.  See "Race detection" below.
+ 
++GDB_TEST_SOCKETHOST
++
++This variable can provide the hostname/address that should be used
++when performing GDBserver-related tests.  This is useful in some
++situations, e.g., when you want to test the IPv6 connectivity of GDB
++and GDBserver, or when using a different hostname/address is needed.
++For example, to make GDB and GDBserver use IPv6-only connections, you
++can do:
++
++	make check TESTS="gdb.server/*.exp" RUNTESTFLAGS='GDB_TEST_SOCKETHOST=tcp6:[::1]'
++
++Note that only a hostname/address can be provided, without a port
++number.
++
+ Race detection
+ **************
+ 
+diff --git a/gdb/testsuite/boards/native-extended-gdbserver.exp b/gdb/testsuite/boards/native-extended-gdbserver.exp
+--- a/gdb/testsuite/boards/native-extended-gdbserver.exp
++++ b/gdb/testsuite/boards/native-extended-gdbserver.exp
+@@ -24,8 +24,6 @@ load_generic_config "extended-gdbserver"
+ load_board_description "gdbserver-base"
+ load_board_description "local-board"
+ 
+-set_board_info sockethost "localhost:"
+-
+ # We will be using the extended GDB remote protocol.
+ set_board_info gdb_protocol "extended-remote"
+ 
+diff --git a/gdb/testsuite/boards/native-gdbserver.exp b/gdb/testsuite/boards/native-gdbserver.exp
+--- a/gdb/testsuite/boards/native-gdbserver.exp
++++ b/gdb/testsuite/boards/native-gdbserver.exp
+@@ -30,7 +30,6 @@ set_board_info gdb,do_reload_on_run 1
+ # There's no support for argument-passing (yet).
+ set_board_info noargs 1
+ 
+-set_board_info sockethost "localhost:"
+ set_board_info use_gdb_stub 1
+ set_board_info exit_is_reliable 1
+ 
+diff --git a/gdb/testsuite/gdb.server/run-without-local-binary.exp b/gdb/testsuite/gdb.server/run-without-local-binary.exp
+--- a/gdb/testsuite/gdb.server/run-without-local-binary.exp
++++ b/gdb/testsuite/gdb.server/run-without-local-binary.exp
+@@ -53,7 +53,7 @@ save_vars { GDBFLAGS } {
+     set use_gdb_stub 0
+ 
+     gdb_test "target ${gdbserver_protocol} ${gdbserver_gdbport}" \
+-	"Remote debugging using $gdbserver_gdbport" \
++	"Remote debugging using [string_to_regexp $gdbserver_gdbport]" \
+ 	"connect to gdbserver"
+ 
+     gdb_test "run" \
+diff --git a/gdb/testsuite/gdb.server/server-connect.exp b/gdb/testsuite/gdb.server/server-connect.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.server/server-connect.exp
+@@ -0,0 +1,111 @@
++# This testcase is part of GDB, the GNU debugger.
++#
++# Copyright 2018 Free Software Foundation, Inc.
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++# Test multiple types of connection (IPv4, IPv6, TCP, UDP) and make
++# sure both gdbserver and GDB work.
++
++load_lib gdbserver-support.exp
++
++standard_testfile normal.c
++
++if {[skip_gdbserver_tests]} {
++    return 0
++}
++
++# We want to have control over where we start gdbserver.
++if { [is_remote target] } {
++    return 0
++}
++
++if { [prepare_for_testing "failed to prepare" $testfile $srcfile debug] } {
++    return -1
++}
++
++# Make sure we're disconnected, in case we're testing with an
++# extended-remote board, therefore already connected.
++gdb_test "disconnect" ".*"
++
++set target_exec [gdbserver_download_current_prog]
++
++# An array containing the test instructions for each scenario.  The
++# description of each field is as follows:
++#
++# - The connection specification to be used when starting
++#   gdbserver/GDB.  This string will be used to set the
++#   GDB_TEST_SOCKETHOST when calling gdbserver_start.
++#
++# - A flag indicating whether gdbserver should fail when we attempt to
++#   start it.  Useful when testing erroneous connection specs such as
++#   "tcp8:".
++#
++# - The prefix that should be prepended to the test messages.
++set test_params \
++    { \
++	  { "tcp4:127.0.0.1" 0 "tcp4" } \
++	  { "tcp6:::1"       0 "tcp6" } \
++	  { "tcp6:[::1]"     0 "tcp6-with-brackets" } \
++	  { "tcp:localhost"  0 "tcp" } \
++	  { "udp4:127.0.0.1" 0 "udp4" } \
++	  { "udp6:::1"       0 "udp6" } \
++	  { "udp6:[::1]"     0 "udp6-with-brackets" } \
++	  { "tcp8:123"       1 "tcp8" } \
++	  { "udp123:::"      1 "udp123" } \
++	  { "garbage:1234"   1 "garbage:1234" } \
++    }
++
++# The best way to test different types of connections is to set the
++# GDB_TEST_SOCKETHOST variable accordingly.
++save_vars { GDB_TEST_SOCKETHOST } {
++    foreach line $test_params {
++	set sockhost [lindex $line 0]
++	set gdbserver_should_fail [lindex $line 1]
++	set prefix [lindex $line 2]
++
++	with_test_prefix $prefix {
++	    set GDB_TEST_SOCKETHOST $sockhost
++	    set test "start gdbserver"
++
++	    # Try to start gdbserver.
++	    set catchres [catch {set res [gdbserver_start "" $target_exec]} errmsg]
++
++	    if { $catchres != 0 } {
++		if { $gdbserver_should_fail } {
++		    pass "$test: gdbserver failed as expected"
++		} else {
++		    fail "$test: $errmsg"
++		}
++		continue
++	    } else {
++		if { $gdbserver_should_fail } {
++		    fail "$test: gdbserver should fail but did not"
++		} else {
++		    pass "$test"
++		}
++	    }
++
++	    set gdbserver_protocol [lindex $res 0]
++	    set gdbserver_gdbport [lindex $res 1]
++	    set test "connect to gdbserver using $sockhost"
++
++	    if { [gdb_target_cmd $gdbserver_protocol $gdbserver_gdbport] == 0 } {
++		pass $test
++	    } else {
++		fail $test
++	    }
++	}
++    }
++}
+diff --git a/gdb/testsuite/lib/gdbserver-support.exp b/gdb/testsuite/lib/gdbserver-support.exp
+--- a/gdb/testsuite/lib/gdbserver-support.exp
++++ b/gdb/testsuite/lib/gdbserver-support.exp
+@@ -211,7 +211,7 @@ proc gdbserver_default_get_remote_address { host port } {
+ # Default routine to compute the "comm" argument for gdbserver.
+ 
+ proc gdbserver_default_get_comm_port { port } {
+-    return ":$port"
++    return "$port"
+ }
+ 
+ # Start a gdbserver process with initial OPTIONS and trailing ARGUMENTS.
+@@ -221,6 +221,7 @@ proc gdbserver_default_get_comm_port { port } {
+ 
+ proc gdbserver_start { options arguments } {
+     global portnum
++    global GDB_TEST_SOCKETHOST
+ 
+     # Port id -- either specified in baseboard file, or managed here.
+     if [target_info exists gdb,socketport] {
+@@ -231,10 +232,22 @@ proc gdbserver_start { options arguments } {
+     }
+ 
+     # Extract the local and remote host ids from the target board struct.
+-    if [target_info exists sockethost] {
++    if { [info exists GDB_TEST_SOCKETHOST] } {
++	# The user is not supposed to provide a port number, just a
++	# hostname/address, therefore we add the trailing ":" here.
++	set debughost "${GDB_TEST_SOCKETHOST}:"
++	# Escape open and close square brackets.
++	set debughost_tmp [string map { [ \\[ ] \\] } $debughost]
++	# We need a "gdbserver" version of the debughost, which will
++	# have the possible connection prefix stripped.  This is
++	# because gdbserver currently doesn't recognize the prefixes.
++	regsub -all "^\(tcp:|udp:|tcp4:|udp4:|tcp6:|udp6:\)" $debughost_tmp "" debughost_gdbserver
++    } elseif [target_info exists sockethost] {
+ 	set debughost [target_info sockethost]
++	set debughost_gdbserver $debughost
+     } else {
+ 	set debughost "localhost:"
++	set debughost_gdbserver $debughost
+     }
+ 
+     # Some boards use a different value for the port that is passed to
+@@ -277,8 +290,14 @@ proc gdbserver_start { options arguments } {
+ 	if { $options != "" } {
+ 	    append gdbserver_command " $options"
+ 	}
++	if { $debughost_gdbserver != "" } {
++	    append gdbserver_command " $debughost_gdbserver"
++	}
+ 	if { $portnum != "" } {
+-	    append gdbserver_command " [$get_comm_port $portnum]"
++	    if { $debughost_gdbserver == "" } {
++		append gdbserver_command " "
++	    }
++	    append gdbserver_command "[$get_comm_port $portnum]"
+ 	}
+ 	if { $arguments != "" } {
+ 	    append gdbserver_command " $arguments"
+@@ -307,6 +326,9 @@ proc gdbserver_start { options arguments } {
+ 		    continue
+ 		}
+ 	    }
++	    -re ".*: cannot resolve name: Name or service not known\r\n" {
++		error "gdbserver cannot resolve name."
++	    }
+ 	    timeout {
+ 		error "Timeout waiting for gdbserver response."
+ 	    }
+diff --git a/gdb/unittests/parse-connection-spec-selftests.c b/gdb/unittests/parse-connection-spec-selftests.c
+new file mode 100644
+--- /dev/null
++++ b/gdb/unittests/parse-connection-spec-selftests.c
+@@ -0,0 +1,249 @@
++/* Self tests for parsing connection specs for GDB, the GNU debugger.
++
++   Copyright (C) 2018 Free Software Foundation, Inc.
++
++   This file is part of GDB.
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
++
++#include "defs.h"
++#include "selftest.h"
++#include "common/netstuff.h"
++#include "diagnostics.h"
++#ifdef USE_WIN32API
++#include <winsock2.h>
++#include <wspiapi.h>
++#else
++#include <netinet/in.h>
++#include <arpa/inet.h>
++#include <netdb.h>
++#include <sys/socket.h>
++#include <netinet/tcp.h>
++#endif
++
++namespace selftests {
++namespace parse_connection_spec_tests {
++
++/* Auxiliary struct that holds info about a specific test for a
++   connection spec.  */
++
++struct parse_conn_test
++{
++  /* The connection spec.  */
++  const char *connspec;
++
++  /* Expected result from 'parse_connection_spec'.  */
++  parsed_connection_spec expected_result;
++
++  /* True if this test should fail, false otherwise.  If true, only
++     the CONNSPEC field should be considered as valid.  */
++  bool should_fail;
++
++  /* The expected AI_FAMILY to be found on the 'struct addrinfo'
++     HINT.  */
++  int exp_ai_family;
++
++  /* The expected AI_SOCKTYPE to be found on the 'struct addrinfo'
++     HINT.  */
++  int exp_ai_socktype;
++
++  /* The expected AI_PROTOCOL to be found on the 'struct addrinfo'
++     HINT.  */
++  int exp_ai_protocol;
++};
++
++/* Some defines to help us fill a 'struct parse_conn_test'.  */
++
++/* Initialize a full entry.  */
++#define INIT_ENTRY(ADDR, EXP_HOST, EXP_PORT, SHOULD_FAIL, EXP_AI_FAMILY, \
++		   EXP_AI_SOCKTYPE, EXP_AI_PROTOCOL)			\
++  { ADDR, { EXP_HOST, EXP_PORT }, SHOULD_FAIL, EXP_AI_FAMILY, \
++    EXP_AI_SOCKTYPE, EXP_AI_PROTOCOL }
++
++/* Initialize an unprefixed entry.  In this case, we don't expect
++   anything on the 'struct addrinfo' HINT.  */
++#define INIT_UNPREFIXED_ENTRY(ADDR, EXP_HOST, EXP_PORT) \
++  INIT_ENTRY (ADDR, EXP_HOST, EXP_PORT, false, 0, 0, 0)
++
++/* Initialized an unprefixed IPv6 entry.  In this case, we don't
++   expect anything on the 'struct addrinfo' HINT.  */
++#define INIT_UNPREFIXED_IPV6_ENTRY(ADDR, EXP_HOST, EXP_PORT) \
++  INIT_ENTRY (ADDR, EXP_HOST, EXP_PORT, false, AF_INET6, 0, 0)
++
++/* Initialize a prefixed entry.  */
++#define INIT_PREFIXED_ENTRY(ADDR, EXP_HOST, EXP_PORT, EXP_AI_FAMILY, \
++			    EXP_AI_SOCKTYPE, EXP_AI_PROTOCOL) \
++  INIT_ENTRY (ADDR, EXP_HOST, EXP_PORT, false, EXP_AI_FAMILY, \
++	      EXP_AI_SOCKTYPE, EXP_AI_PROTOCOL)
++
++/* Initialize an entry prefixed with "tcp4:".  */
++#define INIT_PREFIXED_IPV4_TCP(ADDR, EXP_HOST, EXP_PORT) \
++  INIT_PREFIXED_ENTRY (ADDR, EXP_HOST, EXP_PORT, AF_INET, SOCK_STREAM, \
++		       IPPROTO_TCP)
++
++/* Initialize an entry prefixed with "tcp6:".  */
++#define INIT_PREFIXED_IPV6_TCP(ADDR, EXP_HOST, EXP_PORT) \
++  INIT_PREFIXED_ENTRY (ADDR, EXP_HOST, EXP_PORT, AF_INET6, SOCK_STREAM, \
++		       IPPROTO_TCP)
++
++/* Initialize an entry prefixed with "udp4:".  */
++#define INIT_PREFIXED_IPV4_UDP(ADDR, EXP_HOST, EXP_PORT) \
++  INIT_PREFIXED_ENTRY (ADDR, EXP_HOST, EXP_PORT, AF_INET, SOCK_DGRAM, \
++		       IPPROTO_UDP)
++
++/* Initialize an entry prefixed with "udp6:".  */
++#define INIT_PREFIXED_IPV6_UDP(ADDR, EXP_HOST, EXP_PORT) \
++  INIT_PREFIXED_ENTRY (ADDR, EXP_HOST, EXP_PORT, AF_INET6, SOCK_DGRAM, \
++		       IPPROTO_UDP)
++
++/* Initialize a bogus entry, i.e., a connection spec that should
++   fail.  */
++#define INIT_BOGUS_ENTRY(ADDR) \
++  INIT_ENTRY (ADDR, "", "", true, 0, 0, 0)
++
++/* The variable which holds all of our tests.  */
++
++static const parse_conn_test conn_test[] =
++  {
++    /* Unprefixed addresses.  */
++
++    /* IPv4, host and port present.  */
++    INIT_UNPREFIXED_ENTRY ("127.0.0.1:1234", "127.0.0.1", "1234"),
++    /* IPv4, only host.  */
++    INIT_UNPREFIXED_ENTRY ("127.0.0.1", "127.0.0.1", ""),
++    /* IPv4, missing port.  */
++    INIT_UNPREFIXED_ENTRY ("127.0.0.1:", "127.0.0.1", ""),
++
++    /* IPv6, host and port present, no brackets.  */
++    INIT_UNPREFIXED_ENTRY ("::1:1234", "::1", "1234"),
++    /* IPv6, missing port, no brackets.  */
++    INIT_UNPREFIXED_ENTRY ("::1:", "::1", ""),
++    /* IPv6, host and port present, with brackets.  */
++    INIT_UNPREFIXED_IPV6_ENTRY ("[::1]:1234", "::1", "1234"),
++    /* IPv6, only host, with brackets.  */
++    INIT_UNPREFIXED_IPV6_ENTRY ("[::1]", "::1", ""),
++    /* IPv6, missing port, with brackets.  */
++    INIT_UNPREFIXED_IPV6_ENTRY ("[::1]:", "::1", ""),
++
++    /* Unspecified, only port.  */
++    INIT_UNPREFIXED_ENTRY (":1234", "localhost", "1234"),
++
++    /* Prefixed addresses.  */
++
++    /* Prefixed "tcp4:" IPv4, host and port presents.  */
++    INIT_PREFIXED_IPV4_TCP ("tcp4:127.0.0.1:1234", "127.0.0.1", "1234"),
++    /* Prefixed "tcp4:" IPv4, only port.  */
++    INIT_PREFIXED_IPV4_TCP ("tcp4::1234", "localhost", "1234"),
++    /* Prefixed "tcp4:" IPv4, only host.  */
++    INIT_PREFIXED_IPV4_TCP ("tcp4:127.0.0.1", "127.0.0.1", ""),
++    /* Prefixed "tcp4:" IPv4, missing port.  */
++    INIT_PREFIXED_IPV4_TCP ("tcp4:127.0.0.1:", "127.0.0.1", ""),
++
++    /* Prefixed "udp4:" IPv4, host and port present.  */
++    INIT_PREFIXED_IPV4_UDP ("udp4:127.0.0.1:1234", "127.0.0.1", "1234"),
++    /* Prefixed "udp4:" IPv4, only port.  */
++    INIT_PREFIXED_IPV4_UDP ("udp4::1234", "localhost", "1234"),
++    /* Prefixed "udp4:" IPv4, only host.  */
++    INIT_PREFIXED_IPV4_UDP ("udp4:127.0.0.1", "127.0.0.1", ""),
++    /* Prefixed "udp4:" IPv4, missing port.  */
++    INIT_PREFIXED_IPV4_UDP ("udp4:127.0.0.1:", "127.0.0.1", ""),
++
++
++    /* Prefixed "tcp6:" IPv6, host and port present.  */
++    INIT_PREFIXED_IPV6_TCP ("tcp6:::1:1234", "::1", "1234"),
++    /* Prefixed "tcp6:" IPv6, only port.  */
++    INIT_PREFIXED_IPV6_TCP ("tcp6::1234", "localhost", "1234"),
++    /* Prefixed "tcp6:" IPv6, only host.  */
++    //INIT_PREFIXED_IPV6_TCP ("tcp6:::1", "::1", ""),
++    /* Prefixed "tcp6:" IPv6, missing port.  */
++    INIT_PREFIXED_IPV6_TCP ("tcp6:::1:", "::1", ""),
++
++    /* Prefixed "udp6:" IPv6, host and port present.  */
++    INIT_PREFIXED_IPV6_UDP ("udp6:::1:1234", "::1", "1234"),
++    /* Prefixed "udp6:" IPv6, only port.  */
++    INIT_PREFIXED_IPV6_UDP ("udp6::1234", "localhost", "1234"),
++    /* Prefixed "udp6:" IPv6, only host.  */
++    //INIT_PREFIXED_IPV6_UDP ("udp6:::1", "::1", ""),
++    /* Prefixed "udp6:" IPv6, missing port.  */
++    INIT_PREFIXED_IPV6_UDP ("udp6:::1:", "::1", ""),
++
++    /* Prefixed "tcp6:" IPv6 with brackets, host and port present.  */
++    INIT_PREFIXED_IPV6_TCP ("tcp6:[::1]:1234", "::1", "1234"),
++    /* Prefixed "tcp6:" IPv6 with brackets, only host.  */
++    INIT_PREFIXED_IPV6_TCP ("tcp6:[::1]", "::1", ""),
++    /* Prefixed "tcp6:" IPv6 with brackets, missing port.  */
++    INIT_PREFIXED_IPV6_TCP ("tcp6:[::1]:", "::1", ""),
++
++    /* Prefixed "udp6:" IPv6 with brackets, host and port present.  */
++    INIT_PREFIXED_IPV6_UDP ("udp6:[::1]:1234", "::1", "1234"),
++    /* Prefixed "udp6:" IPv6 with brackets, only host.  */
++    INIT_PREFIXED_IPV6_UDP ("udp6:[::1]", "::1", ""),
++    /* Prefixed "udp6:" IPv6 with brackets, missing port.  */
++    INIT_PREFIXED_IPV6_UDP ("udp6:[::1]:", "::1", ""),
++
++
++    /* Bogus addresses.  */
++    INIT_BOGUS_ENTRY ("tcp6:[::1]123:44"),
++    INIT_BOGUS_ENTRY ("[::1"),
++    INIT_BOGUS_ENTRY ("tcp6:::1]:"),
++  };
++
++/* Test a connection spec C.  */
++
++static void
++test_conn (const parse_conn_test &c)
++{
++  struct addrinfo hint;
++  parsed_connection_spec ret;
++
++  memset (&hint, 0, sizeof (hint));
++
++  TRY
++    {
++      ret = parse_connection_spec (c.connspec, &hint);
++    }
++  CATCH (ex, RETURN_MASK_ERROR)
++    {
++      /* If we caught an error, we should check if this connection
++	 spec was supposed to fail.  */
++      SELF_CHECK (c.should_fail);
++      return;
++    }
++  END_CATCH
++
++  SELF_CHECK (!c.should_fail);
++  SELF_CHECK (ret.host_str == c.expected_result.host_str);
++  SELF_CHECK (ret.port_str == c.expected_result.port_str);
++  SELF_CHECK (hint.ai_family == c.exp_ai_family);
++  SELF_CHECK (hint.ai_socktype == c.exp_ai_socktype);
++  SELF_CHECK (hint.ai_protocol == c.exp_ai_protocol);
++}
++
++/* Run the tests associated with parsing connection specs.  */
++
++static void
++run_tests ()
++{
++  for (const parse_conn_test &c : conn_test)
++    test_conn (c);
++}
++} /* namespace parse_connection_spec_tests */
++} /* namespace selftests */
++
++void
++_initialize_parse_connection_spec_selftests ()
++{
++  selftests::register_test ("parse_connection_spec",
++			    selftests::parse_connection_spec_tests::run_tests);
++}

@@ -1,0 +1,41 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 11 Jan 2019 17:02:15 -0500
+Subject: gdb-rhbz1187581-power8-regs-not-in-8.2-07of15.patch
+
+;; [PowerPC] Fix two if statements in gdb/ppc-linux-nat.c
+;; Pedro Franco de Carvalho, RH BZ 1187581
+
+[PowerPC] Fix two if statements in gdb/ppc-linux-nat.c
+
+This patch changes two if statements to else if statements in
+ppc-linux-nat.c:fetch_register for clarity.
+
+gdb/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * ppc-linux-nat.c (fetch_register): Change if statement to else
+    if.
+    (store_register): Likewise.
+
+diff --git a/gdb/ppc-linux-nat.c b/gdb/ppc-linux-nat.c
+--- a/gdb/ppc-linux-nat.c
++++ b/gdb/ppc-linux-nat.c
+@@ -554,7 +554,7 @@ fetch_register (struct regcache *regcache, int tid, int regno)
+         AltiVec registers, fall through and return zeroes, because
+         regaddr will be -1 in this case.  */
+     }
+-  if (vsx_register_p (gdbarch, regno))
++  else if (vsx_register_p (gdbarch, regno))
+     {
+       if (have_ptrace_getsetvsxregs)
+ 	{
+@@ -933,7 +933,7 @@ store_register (const struct regcache *regcache, int tid, int regno)
+       store_altivec_registers (regcache, tid, regno);
+       return;
+     }
+-  if (vsx_register_p (gdbarch, regno))
++  else if (vsx_register_p (gdbarch, regno))
+     {
+       store_vsx_registers (regcache, tid, regno);
+       return;

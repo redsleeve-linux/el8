@@ -1,0 +1,65 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Gary Benson <gbenson@redhat.com>
+Date: Mon, 3 Sep 2018 16:14:55 +0100
+Subject: gdb-rhbz1491128-batch-mode-exit-status-2of2.patch
+
+;; Fix for 'gdb in batch mode always exit with status 0' (Gary Benson)
+;; RHBZ #1491128
+
+Fix batch exit status test failure on Fedora 28
+
+This commit adds calls to remote_close and clear_gdb_spawn_id to
+gdb.base/batch-exit-status.exp, fixing failures reported by buildbot
+on Fedora 28 where gdb_spawn_id not being reset by the previous test
+caused default_gdb_spawn to return without spawning.
+
+This commit also changes the test to use detect GDB's exit using
+gdb_test_multiple expecting 'eof', rather than using 'wait -i' alone.
+This means the testcase won't hang forever on failure as fixed in
+gdb.base/quit.exp by commit 15763a09d4ae ("Fix 'gdb.base/quit.exp
+hangs forever' if the test fails").
+
+gdb/testsuite/ChangeLog:
+
+	* gdb.base/batch-exit-status.exp: Use gdb_test_multiple and expect
+	'eof' before 'wait -i'.  Use remote_close and clear_gdb_spawn_id.
+
+diff --git a/gdb/testsuite/ChangeLog b/gdb/testsuite/ChangeLog
+--- a/gdb/testsuite/ChangeLog
++++ b/gdb/testsuite/ChangeLog
+@@ -1,3 +1,8 @@
++2018-09-04  Gary Benson <gbenson@redhat.com>
++
++	* gdb.base/batch-exit-status.exp: Use gdb_test_multiple and expect
++	'eof' before 'wait -i'.  Use remote_close and clear_gdb_spawn_id.
++
+ 2018-08-16  Gary Benson <gbenson@redhat.com>
+ 
+ 	PR gdb/13000:
+diff --git a/gdb/testsuite/gdb.base/batch-exit-status.exp b/gdb/testsuite/gdb.base/batch-exit-status.exp
+--- a/gdb/testsuite/gdb.base/batch-exit-status.exp
++++ b/gdb/testsuite/gdb.base/batch-exit-status.exp
+@@ -29,11 +29,18 @@ proc _test_exit_status {expect_status cmdline_opts} {
+ 	return
+     }
+ 
+-    set result [wait -i $gdb_spawn_id]
+-    verbose $result
+-    gdb_assert { [lindex $result 2] == 0 }
+-    set actual_status [lindex $result 3]
+-    gdb_assert { $actual_status == $expect_status }
++    gdb_test_multiple "" "run til exit" {
++	eof {
++	    set result [wait -i $gdb_spawn_id]
++	    verbose $result
++
++	    gdb_assert { [lindex $result 2] == 0 }
++	    gdb_assert { [lindex $result 3] == $expect_status }
++
++	    remote_close host
++	    clear_gdb_spawn_id
++	}
++    }
+ }
+ 
+ proc test_exit_status {expect_status cmdline_opts} {

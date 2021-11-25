@@ -1,0 +1,41 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Tue, 28 Jul 2020 09:44:04 -0400
+Subject: gdb-rhbz1842691-corefile-mem-access-13of15.patch
+
+;; Add documentation for "maint print core-file-backed-mappings"
+;; Kevin Buettner, RH BZ 1842961
+
+   Author: Kevin Buettner <kevinb@redhat.com>
+   Date:   Fri Jul 3 22:09:20 2020 -0700
+
+    Add documentation for "maint print core-file-backed-mappings"
+
+    gdb/ChangeLog:
+
+    	* NEWS (New commands): Mention new command
+    	"maintenance print core-file-backed-mappings".
+
+    gdb/doc/ChangeLog:
+
+    	* gdb.texinfo (Maintenance Commands): Add documentation for
+    	new command "maintenance print core-file-backed-mappings".
+
+diff --git a/gdb/doc/gdb.texinfo b/gdb/doc/gdb.texinfo
+--- a/gdb/doc/gdb.texinfo
++++ b/gdb/doc/gdb.texinfo
+@@ -35633,6 +35633,14 @@ library.  This exercises all @code{libthread_db} functionality used by
+ @code{libthread_db} uses.  Note that parts of the test may be skipped
+ on some platforms when debugging core files.
+ 
++@kindex maint print core-file-backed-mappings
++@cindex memory address space mappings
++@item maint print core-file-backed-mappings
++Print the file-backed mappings which were loaded from a core file note.
++This output represents state internal to @value{GDBN} and should be
++similar to the mappings displayed by the @code{info proc mappings}
++command.
++
+ @kindex maint print dummy-frames
+ @item maint print dummy-frames
+ Prints the contents of @value{GDBN}'s internal dummy-frame stack.

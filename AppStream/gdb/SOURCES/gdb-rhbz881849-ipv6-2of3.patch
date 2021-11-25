@@ -1,0 +1,54 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Sergio Durigan Junior <sergiodj@redhat.com>
+Date: Mon, 30 Jul 2018 15:23:27 -0400
+Subject: gdb-rhbz881849-ipv6-2of3.patch
+
+Match any kind of error after "cannot resolve name" on lib/gdbserver-support.exp:gdbserver_start
+
+On commit:
+
+commit 7f1f7e23939adc7d71036a17fc6081e3af7ca585
+Author: Sergio Durigan Junior <sergiodj@redhat.com>
+Date:   Fri Jul 13 16:20:34 2018 -0400
+
+    Expect for another variant of error message when gdbserver cannot resolve hostname
+
+I extended the regular expression being used to identify whether
+gdbserver could not resolve a (host)name.  This was needed because the
+error message being printed had a different variation across some
+systems.  However, as it turns out, I've just noticed that the message
+has yet another variation:
+
+  target remote tcp8:123:2353
+  tcp8:123:2353: cannot resolve name: System error
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  tcp8:123:2353: No such file or directory.
+  (gdb) FAIL: gdb.server/server-connect.exp: tcp8: connect to gdbserver using tcp8:123
+
+which is causing FAILs on some systems (namely, Fedora-i686 on
+BuildBot).
+
+So instead of trying to predict everything that can be printed, I
+decided to just match anything after the "cannot resolve name: " part.
+This patch implements that.
+
+Regression tested on the BuildBot.
+
+gdb/testsuite/ChangeLog:
+2018-07-30  Sergio Durigan Junior  <sergiodj@redhat.com>
+
+	* lib/gdbserver-support.exp (gdbserver_start): Match any kind of
+	error after "cannot resolve name" string.
+
+diff --git a/gdb/testsuite/lib/gdbserver-support.exp b/gdb/testsuite/lib/gdbserver-support.exp
+--- a/gdb/testsuite/lib/gdbserver-support.exp
++++ b/gdb/testsuite/lib/gdbserver-support.exp
+@@ -326,7 +326,7 @@ proc gdbserver_start { options arguments } {
+ 		    continue
+ 		}
+ 	    }
+-	    -re ".*: cannot resolve name: Name or service not known\r\n" {
++	    -re ".*: cannot resolve name: .*\r\n" {
+ 		error "gdbserver cannot resolve name."
+ 	    }
+ 	    timeout {

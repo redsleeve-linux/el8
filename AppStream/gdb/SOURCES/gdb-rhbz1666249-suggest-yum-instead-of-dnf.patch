@@ -1,0 +1,20 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 8 Mar 2019 11:39:10 -0800
+Subject: gdb-rhbz1666249-suggest-yum-instead-of-dnf.patch
+
+;; Fix 'gdb suggests using "dnf debuginfo-install'
+;; Keith Seitz, RHBZ 1666249
+
+diff --git a/gdb/build-id.c b/gdb/build-id.c
+--- a/gdb/build-id.c
++++ b/gdb/build-id.c
+@@ -1013,6 +1013,8 @@ missing_rpm_list_print (void)
+   printf_unfiltered (_("Missing separate debuginfos, use: %s"),
+ #ifdef DNF_DEBUGINFO_INSTALL
+ 		     "dnf "
++#else
++		     "yum "
+ #endif
+ 		     "debuginfo-install");
+   for (array_iter = array; array_iter < array + missing_rpm_list_entries;

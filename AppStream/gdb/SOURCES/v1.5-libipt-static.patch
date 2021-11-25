@@ -1,0 +1,26 @@
+Index: processor-trace-2.0/libipt/CMakeLists.txt
+===================================================================
+--- processor-trace-2.0.orig/libipt/CMakeLists.txt
++++ processor-trace-2.0/libipt/CMakeLists.txt
+@@ -85,7 +85,7 @@ endif (CMAKE_HOST_WIN32)
+ 
+ set(LIBIPT_FILES ${LIBIPT_FILES} ${LIBIPT_SECTION_FILES})
+ 
+-add_library(libipt SHARED
++add_library(libipt STATIC
+   ${LIBIPT_FILES}
+ )
+ 
+Index: processor-trace-2.0/libipt/src/posix/init.c
+===================================================================
+--- processor-trace-2.0.orig/libipt/src/posix/init.c
++++ processor-trace-2.0/libipt/src/posix/init.c
+@@ -29,7 +29,7 @@
+ #include "pt_ild.h"
+ 
+ 
+-static void __attribute__((constructor)) init(void)
++void __libipt_init(void)
+ {
+ 	/* Initialize the Intel(R) Processor Trace instruction decoder. */
+ 	pt_ild_init();

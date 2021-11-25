@@ -1,0 +1,49 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Pedro Franco de Carvalho <pedromfc@linux.ibm.com>
+Date: Wed, 7 Jul 2021 15:44:29 -0400
+Subject: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-1of7.patch
+
+;; Backport "Add low_new_clone method to linux_nat_target."
+;; (Pedro Franco de Carvalho, RH BZ 1854784)
+
+This patch adds a low_new_clone method to linux_nat_target, called after
+a PTRACE_EVENT_CLONE is detected, similar to how low_new_fork is called
+after PTRACE_EVENT_(V)FORK.
+
+This is useful for targets that need to copy state associated with a
+thread that is inherited across clones.
+
+gdb/ChangeLog:
+2020-03-30  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+	* linux-nat.h (low_new_clone): New method.
+	* linux-nat.c (linux_handle_extended_wait): Call low_new_clone.
+
+diff --git a/gdb/linux-nat.c b/gdb/linux-nat.c
+--- a/gdb/linux-nat.c
++++ b/gdb/linux-nat.c
+@@ -2020,6 +2020,10 @@ linux_handle_extended_wait (struct lwp_info *lp, int status)
+ 	     inferior.  */
+ 	  linux_target->low_new_fork (lp, new_pid);
+ 	}
++      else if (event == PTRACE_EVENT_CLONE)
++	{
++	  linux_target->low_new_clone (lp, new_pid);
++	}
+ 
+       if (event == PTRACE_EVENT_FORK
+ 	  && linux_fork_checkpointing_p (lp->ptid.pid ()))
+diff --git a/gdb/linux-nat.h b/gdb/linux-nat.h
+--- a/gdb/linux-nat.h
++++ b/gdb/linux-nat.h
+@@ -160,6 +160,10 @@ public:
+   virtual void low_new_fork (struct lwp_info *parent, pid_t child_pid)
+   {}
+ 
++  /* The method to call, if any, when a new clone event is detected.  */
++  virtual void low_new_clone (struct lwp_info *parent, pid_t child_lwp)
++  {}
++
+   /* The method to call, if any, when a process is no longer
+      attached.  */
+   virtual void low_forget_process (pid_t pid)

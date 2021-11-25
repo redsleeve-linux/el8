@@ -1,0 +1,72 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Sergio Durigan Junior <sergiodj@redhat.com>
+Date: Fri, 3 Aug 2018 18:04:38 -0400
+Subject: gdb-rhbz881849-ipv6-3of3.patch
+
+Fix thinko when deciding whether to disable TCP's Nagle algorithm
+
+This patch fixes a thinko that happened when I was implementing the
+IPv6 support on GDB/gdbserver.  On certain situations, it is necessary
+to disable TCP's Nagle algorithm (NODELAY).  For obvious reasons, this
+only applies when we are dealing with a TCP connection.
+
+While implementing the IPv6 patch, I noticed that the net_open
+function (on gdb/ser-tcp.c) kept a flag indicating whether the
+connection type was UDP or TCP.  I eliminated that flag, and started
+using the 'struct addrinfo *' related to the successful connection
+directly.  However, I made a mistake:
+
+  if (success_ainfo->ai_socktype == IPPROTO_TCP)
+                     ^^^^^^^^^^^
+    {
+      /* Disable Nagle algorithm.  Needed in some cases.  */
+      int tmp = 1;
+
+      setsockopt (scb->fd, IPPROTO_TCP, TCP_NODELAY,
+		  (char *) &tmp, sizeof (tmp));
+    }
+
+The 'ai_socktype' field specifies the socket type (SOCK_STREAM or
+SOCK_DGRAM), and not the protocol.  This test was always failing, and
+the Nagle algorithm was never being disabled.
+
+The obvious fix is to use the 'ai_protocol' field.  This is what this
+patch does.
+
+Huge "thank you" to Joel Brobecker who reported the regression (he was
+experiencing an unusual delay while debugging a bare-metal program
+running under QEMU) and helped me set up a proper reproducer for the
+bug.
+
+gdb/ChangeLog:
+2018-08-03  Sergio Durigan Junior  <sergiodj@redhat.com>
+
+	* ser-tcp.c (net_open): Fix thinko when deciding whether to
+	disable TCP's Nagle algorithm (use "ai_protocol" instead of
+	"ai_socktype").
+
+diff --git a/gdb/ChangeLog b/gdb/ChangeLog
+--- a/gdb/ChangeLog
++++ b/gdb/ChangeLog
+@@ -1,3 +1,9 @@
++2018-08-03  Sergio Durigan Junior  <sergiodj@redhat.com>
++
++	* ser-tcp.c (net_open): Fix thinko when deciding whether to
++	disable TCP's Nagle algorithm (use "ai_protocol" instead of
++	"ai_socktype").
++
+ 2018-09-05  Joel Brobecker  <brobecker@adacore.com>
+ 
+ 	* version.in: Set GDB version number to 8.2.
+diff --git a/gdb/ser-tcp.c b/gdb/ser-tcp.c
+--- a/gdb/ser-tcp.c
++++ b/gdb/ser-tcp.c
+@@ -367,7 +367,7 @@ net_open (struct serial *scb, const char *name)
+ 
+   ioctl (scb->fd, FIONBIO, &ioarg);
+ 
+-  if (success_ainfo->ai_socktype == IPPROTO_TCP)
++  if (success_ainfo->ai_protocol == IPPROTO_TCP)
+     {
+       /* Disable Nagle algorithm.  Needed in some cases.  */
+       int tmp = 1;

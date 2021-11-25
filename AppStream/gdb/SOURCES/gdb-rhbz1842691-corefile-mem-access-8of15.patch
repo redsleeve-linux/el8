@@ -1,0 +1,532 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Mon, 27 Jul 2020 18:51:07 -0400
+Subject: gdb-rhbz1842691-corefile-mem-access-8of15.patch
+
+;; Use NT_FILE note section for reading core target memory
+;; Kevin Buettner, RH BZ 1842961
+
+   Author: Kevin Buettner <kevinb@redhat.com>
+   Date:   Thu Jun 11 19:20:03 2020 -0700
+
+    Use NT_FILE note section for reading core target memory
+
+    In his reviews of my v1 and v2 corefile related patches, Pedro
+    identified two cases which weren't handled by those patches.
+
+    In https://sourceware.org/pipermail/gdb-patches/2020-May/168826.html,
+    Pedro showed that debugging a core file in which mmap() is used to
+    create a new mapping over an existing file-backed mapping will
+    produce incorrect results.  I.e, for his example, GDB would
+    show:
+
+    (gdb) disassemble main
+    Dump of assembler code for function main:
+       0x00000000004004e6 <+0>:	push   %rbp
+       0x00000000004004e7 <+1>:	mov    %rsp,%rbp
+    => 0x00000000004004ea <+4>:	callq  0x4003f0 <abort@plt>
+    End of assembler dump.
+
+    This sort of looks like it might be correct, but is not due to the
+    fact that mmap(...MAP_FIXED...) was used to create a mapping (of all
+    zeros) on top of the .text section.  So, the correct result should be:
+
+    (gdb) disassemble main
+    Dump of assembler code for function main:
+       0x00000000004004e6 <+0>:	add    %al,(%rax)
+       0x00000000004004e8 <+2>:	add    %al,(%rax)
+    => 0x00000000004004ea <+4>:	add    %al,(%rax)
+       0x00000000004004ec <+6>:	add    %al,(%rax)
+       0x00000000004004ee <+8>:	add    %al,(%rax)
+    End of assembler dump.
+
+    The other case that Pedro found involved an attempted examination of a
+    particular section in the test case from gdb.base/corefile.exp.  On
+    Fedora 27 or 28, the following behavior may be observed:
+
+    (gdb) info proc mappings
+    Mapped address spaces:
+
+              Start Addr           End Addr       Size     Offset objfile
+    ...
+          0x7ffff7839000     0x7ffff7a38000   0x1ff000   0x1b5000 /usr/lib64/libc-2.27.so
+    ...
+    (gdb) x/4x 0x7ffff7839000
+    0x7ffff7839000:	Cannot access memory at address 0x7ffff7839000
+
+    FYI, this section appears to be unrelocated vtable data.  See
+    https://sourceware.org/pipermail/gdb-patches/2020-May/168331.html for
+    a detailed analysis.
+
+    The important thing here is that GDB should be able to access this
+    address since it should be backed by the shared library.  I.e. it
+    should do this:
+
+    (gdb) x/4x 0x7ffff7839000
+    0x7ffff7839000:	0x0007ddf0	0x00000000	0x0007dba0	0x00000000
+
+    Both of these cases are fixed with this commit.
+
+    In a nutshell, this commit opens a "binary" target BFD for each of the
+    files that are mentioned in an NT_FILE / .note.linuxcore.file note
+    section.  It then uses these mappings instead of the file stratum
+    mappings that GDB has used in the past.
+
+    If this note section doesn't exist or is mangled for some reason, then
+    GDB will use the file stratum as before.  Should this happen, then
+    we can expect both of the above problems to again be present.
+
+    See the code comments in the commit for other details.
+
+    gdb/ChangeLog:
+
+    	* corelow.c (solist.h, unordered_map): Include.
+    	(class core_target): Add field m_core_file_mappings and
+    	method build_file_mappings.
+    	(core_target::core_target): Call build_file_mappings.
+    	(core_target::~core_target): Free memory associated with
+    	m_core_file_mappings.
+    	(core_target::build_file_mappings): New method.
+    	(core_target::xfer_partial): Use m_core_file_mappings
+    	for memory transfers.
+    	* linux-tdep.c (linux_read_core_file_mappings): New
+    	function.
+    	(linux_core_info_proc_mappings): Rewrite to use
+    	linux_read_core_file_mappings.
+    	(linux_init_abi): Register linux_read_core_file_mappings.
+
+diff --git a/gdb/corelow.c b/gdb/corelow.c
+--- a/gdb/corelow.c
++++ b/gdb/corelow.c
+@@ -39,6 +39,7 @@
+ #include "exec.h"
+ #include "readline/readline.h"
+ #include "solib.h"
++#include "solist.h"
+ #include "filenames.h"
+ #include "progspace.h"
+ #include "objfiles.h"
+@@ -49,6 +50,8 @@
+ #include "elf/common.h"
+ #include "gdbcmd.h"
+ #include "build-id.h"
++#include "common/pathstuff.h"
++#include <unordered_map>
+ 
+ #ifndef O_LARGEFILE
+ #define O_LARGEFILE 0
+@@ -129,6 +132,13 @@ private: /* per-core data */
+      core file currently open on core_bfd.  */
+   core_fns *m_core_vec = NULL;
+ 
++  /* File-backed address space mappings: some core files include
++     information about memory mapped files.  */
++  target_section_table m_core_file_mappings {};
++
++  /* Build m_core_file_mappings.  Called from the constructor.  */
++  void build_file_mappings ();
++
+   /* FIXME: kettenis/20031023: Eventually this field should
+      disappear.  */
+   struct gdbarch *m_core_gdbarch = NULL;
+@@ -149,11 +159,120 @@ core_target::core_target ()
+ 			   &m_core_section_table.sections_end))
+     error (_("\"%s\": Can't find sections: %s"),
+ 	   bfd_get_filename (core_bfd), bfd_errmsg (bfd_get_error ()));
++
++  build_file_mappings ();
+ }
+ 
+ core_target::~core_target ()
+ {
+   xfree (m_core_section_table.sections);
++  xfree (m_core_file_mappings.sections);
++}
++
++/* Construct the target_section_table for file-backed mappings if
++   they exist.
++
++   For each unique path in the note, we'll open a BFD with a bfd
++   target of "binary".  This is an unstructured bfd target upon which
++   we'll impose a structure from the mappings in the architecture-specific
++   mappings note.  A BFD section is allocated and initialized for each
++   file-backed mapping.
++
++   We take care to not share already open bfds with other parts of
++   GDB; in particular, we don't want to add new sections to existing
++   BFDs.  We do, however, ensure that the BFDs that we allocate here
++   will go away (be deallocated) when the core target is detached.  */
++
++void
++core_target::build_file_mappings ()
++{
++  std::unordered_map<std::string, struct bfd *> bfd_map;
++
++  /* See linux_read_core_file_mappings() in linux-tdep.c for an example
++     read_core_file_mappings method.  */
++  gdbarch_read_core_file_mappings (m_core_gdbarch, core_bfd,
++
++    /* After determining the number of mappings, read_core_file_mappings
++       will invoke this lambda which allocates target_section storage for
++       the mappings.  */
++    [&] (ULONGEST count)
++      {
++	m_core_file_mappings.sections = XNEWVEC (struct target_section, count);
++	m_core_file_mappings.sections_end = m_core_file_mappings.sections;
++      },
++
++    /* read_core_file_mappings will invoke this lambda for each mapping
++       that it finds.  */
++    [&] (int num, ULONGEST start, ULONGEST end, ULONGEST file_ofs,
++         const char *filename, const void *other)
++      {
++	/* Architecture-specific read_core_mapping methods are expected to
++	   weed out non-file-backed mappings.  */
++	gdb_assert (filename != nullptr);
++
++	struct bfd *bfd = bfd_map[filename];
++	if (bfd == nullptr)
++	  {
++	    /* Use exec_file_find() to do sysroot expansion.  It'll
++	       also strip the potential sysroot "target:" prefix.  If
++	       there is no sysroot, an equivalent (possibly more
++	       canonical) pathname will be provided.  */
++	    gdb::unique_xmalloc_ptr<char> expanded_fname
++	      = exec_file_find (filename, NULL);
++	    if (expanded_fname == nullptr)
++	      {
++		warning (_("Can't open file %s during file-backed mapping "
++			   "note processing"),
++			 expanded_fname.get ());
++		return;
++	      }
++
++	    bfd = bfd_map[filename] = bfd_openr (expanded_fname.get (),
++	                                         "binary");
++
++	    if (bfd == nullptr || !bfd_check_format (bfd, bfd_object))
++	      {
++		/* If we get here, there's a good chance that it's due to
++		   an internal error.  We issue a warning instead of an
++		   internal error because of the possibility that the
++		   file was removed in between checking for its
++		   existence during the expansion in exec_file_find()
++		   and the calls to bfd_openr() / bfd_check_format(). 
++		   Output both the path from the core file note along
++		   with its expansion to make debugging this problem
++		   easier.  */
++		warning (_("Can't open file %s which was expanded to %s "
++			   "during file-backed mapping note processing"),
++			 filename, expanded_fname.get ());
++		if (bfd != nullptr)
++		  bfd_close (bfd);
++		return;
++	      }
++	    /* Ensure that the bfd will be closed when core_bfd is closed. 
++	       This can be checked before/after a core file detach via
++	       "maint info bfds".  */
++	    gdb_bfd_record_inclusion (core_bfd, bfd);
++	  }
++
++	/* Make new BFD section.  All sections have the same name,
++	   which is permitted by bfd_make_section_anyway().  */
++	asection *sec = bfd_make_section_anyway (bfd, "load");
++	if (sec == nullptr)
++	  error (_("Can't make section"));
++	sec->filepos = file_ofs;
++	bfd_set_section_flags (sec->owner, sec, SEC_READONLY | SEC_HAS_CONTENTS);
++	bfd_set_section_size (sec->owner, sec, end - start);
++	bfd_set_section_vma (sec->owner, sec, start);
++	sec->lma = start;
++	bfd_set_section_alignment (sec->owner, sec, 2);
++
++	/* Set target_section fields.  */
++	struct target_section *ts = m_core_file_mappings.sections_end++;
++	ts->addr = start;
++	ts->endaddr = end;
++	ts->owner = nullptr;
++	ts->the_bfd_section = sec;
++      });
+ }
+ 
+ /* List of all available core_fns.  On gdb startup, each core file
+@@ -835,10 +954,21 @@ core_target::xfer_partial (enum target_object object, const char *annex,
+ 	if (xfer_status == TARGET_XFER_OK)
+ 	  return TARGET_XFER_OK;
+ 
+-	/* Now check the stratum beneath us; this should be file_stratum.  */
+-	xfer_status = this->beneath ()->xfer_partial (object, annex, readbuf,
+-						      writebuf, offset, len,
+-						      xfered_len);
++	/* Check file backed mappings.  If they're available, use
++	   core file provided mappings (e.g. from .note.linuxcore.file
++	   or the like) as this should provide a more accurate
++	   result.  If not, check the stratum beneath us, which should
++	   be the file stratum.  */
++	if (m_core_file_mappings.sections != nullptr)
++	  xfer_status = section_table_xfer_memory_partial
++			  (readbuf, writebuf,
++			   offset, len, xfered_len,
++			   m_core_file_mappings.sections,
++			   m_core_file_mappings.sections_end);
++	else
++	  xfer_status = this->beneath ()->xfer_partial (object, annex, readbuf,
++							writebuf, offset, len,
++							xfered_len);
+ 	if (xfer_status == TARGET_XFER_OK)
+ 	  return TARGET_XFER_OK;
+ 
+diff --git a/gdb/linux-tdep.c b/gdb/linux-tdep.c
+--- a/gdb/linux-tdep.c
++++ b/gdb/linux-tdep.c
+@@ -1002,106 +1002,174 @@ linux_info_proc (struct gdbarch *gdbarch, const char *args,
+     }
+ }
+ 
+-/* Implement "info proc mappings" for a corefile.  */
++/* Implementation of `gdbarch_read_core_file_mappings', as defined in
++   gdbarch.h.
++   
++   This function reads the NT_FILE note (which BFD turns into the
++   section ".note.linuxcore.file").  The format of this note / section
++   is described as follows in the Linux kernel sources in
++   fs/binfmt_elf.c:
++   
++      long count     -- how many files are mapped
++      long page_size -- units for file_ofs
++      array of [COUNT] elements of
++        long start
++        long end
++        long file_ofs
++      followed by COUNT filenames in ASCII: "FILE1" NUL "FILE2" NUL...
++      
++   CBFD is the BFD of the core file.
++
++   PRE_LOOP_CB is the callback function to invoke prior to starting
++   the loop which processes individual entries.  This callback will
++   only be executed after the note has been examined in enough
++   detail to verify that it's not malformed in some way.
++   
++   LOOP_CB is the callback function that will be executed once
++   for each mapping.  */
+ 
+ static void
+-linux_core_info_proc_mappings (struct gdbarch *gdbarch, const char *args)
++linux_read_core_file_mappings (struct gdbarch *gdbarch,
++                               struct bfd *cbfd,
++                               gdb::function_view<void (ULONGEST count)>
++                                 pre_loop_cb,
++                               gdb::function_view<void (int num,
++                                                        ULONGEST start,
++                                                        ULONGEST end,
++                                                        ULONGEST file_ofs,
++                                                        const char *filename,
++                                                        const void *other)>
++                                 loop_cb)
+ {
+-  asection *section;
+-  ULONGEST count, page_size;
+-  unsigned char *descdata, *filenames, *descend;
+-  size_t note_size;
+-  unsigned int addr_size_bits, addr_size;
+-  struct gdbarch *core_gdbarch = gdbarch_from_bfd (core_bfd);
+-  /* We assume this for reading 64-bit core files.  */
++  /* Ensure that ULONGEST is big enough for reading 64-bit core files.  */
+   gdb_static_assert (sizeof (ULONGEST) >= 8);
+ 
+-  section = bfd_get_section_by_name (core_bfd, ".note.linuxcore.file");
+-  if (section == NULL)
+-    {
+-      warning (_("unable to find mappings in core file"));
+-      return;
+-    }
++  /* It's not required that the NT_FILE note exists, so return silently
++     if it's not found.  Beyond this point though, we'll complain
++     if problems are found.  */
++  asection *section = bfd_get_section_by_name (cbfd, ".note.linuxcore.file");
++  if (section == nullptr)
++    return;
+ 
+-  addr_size_bits = gdbarch_addr_bit (core_gdbarch);
+-  addr_size = addr_size_bits / 8;
+-  note_size = bfd_get_section_size (section);
++  unsigned int addr_size_bits = gdbarch_addr_bit (gdbarch);
++  unsigned int addr_size = addr_size_bits / 8;
++  size_t note_size = bfd_section_size (section->abfd, section);
+ 
+   if (note_size < 2 * addr_size)
+-    error (_("malformed core note - too short for header"));
++    {
++      warning (_("malformed core note - too short for header"));
++      return;
++    }
+ 
+-  gdb::def_vector<unsigned char> contents (note_size);
++  gdb::def_vector<gdb_byte> contents (note_size);
+   if (!bfd_get_section_contents (core_bfd, section, contents.data (),
+-				 0, note_size))
+-    error (_("could not get core note contents"));
++                                 0, note_size))
++    {
++      warning (_("could not get core note contents"));
++      return;
++    }
+ 
+-  descdata = contents.data ();
+-  descend = descdata + note_size;
++  gdb_byte *descdata = contents.data ();
++  char *descend = (char *) descdata + note_size;
+ 
+   if (descdata[note_size - 1] != '\0')
+-    error (_("malformed note - does not end with \\0"));
++    {
++      warning (_("malformed note - does not end with \\0"));
++      return;
++    }
+ 
+-  count = bfd_get (addr_size_bits, core_bfd, descdata);
++  ULONGEST count = bfd_get (addr_size_bits, core_bfd, descdata);
+   descdata += addr_size;
+ 
+-  page_size = bfd_get (addr_size_bits, core_bfd, descdata);
++  ULONGEST page_size = bfd_get (addr_size_bits, core_bfd, descdata);
+   descdata += addr_size;
+ 
+   if (note_size < 2 * addr_size + count * 3 * addr_size)
+-    error (_("malformed note - too short for supplied file count"));
+-
+-  printf_filtered (_("Mapped address spaces:\n\n"));
+-  if (gdbarch_addr_bit (gdbarch) == 32)
+     {
+-      printf_filtered ("\t%10s %10s %10s %10s %s\n",
+-		       "Start Addr",
+-		       "  End Addr",
+-		       "      Size", "    Offset", "objfile");
+-    }
+-  else
+-    {
+-      printf_filtered ("  %18s %18s %10s %10s %s\n",
+-		       "Start Addr",
+-		       "  End Addr",
+-		       "      Size", "    Offset", "objfile");
++      warning (_("malformed note - too short for supplied file count"));
++      return;
+     }
+ 
+-  filenames = descdata + count * 3 * addr_size;
+-  while (--count > 0)
++  char *filenames = (char *) descdata + count * 3 * addr_size;
++
++  /* Make sure that the correct number of filenames exist.  Complain
++     if there aren't enough or are too many.  */
++  char *f = filenames;
++  for (int i = 0; i < count; i++)
+     {
+-      ULONGEST start, end, file_ofs;
++      if (f >= descend)
++        {
++          warning (_("malformed note - filename area is too small"));
++          return;
++        }
++      f += strnlen (f, descend - f) + 1;
++    }
++  /* Complain, but don't return early if the filename area is too big.  */
++  if (f != descend)
++    warning (_("malformed note - filename area is too big"));
+ 
+-      if (filenames == descend)
+-	error (_("malformed note - filenames end too early"));
++  pre_loop_cb (count);
+ 
+-      start = bfd_get (addr_size_bits, core_bfd, descdata);
++  for (int i = 0; i < count; i++)
++    {
++      ULONGEST start = bfd_get (addr_size_bits, core_bfd, descdata);
+       descdata += addr_size;
+-      end = bfd_get (addr_size_bits, core_bfd, descdata);
++      ULONGEST end = bfd_get (addr_size_bits, core_bfd, descdata);
+       descdata += addr_size;
+-      file_ofs = bfd_get (addr_size_bits, core_bfd, descdata);
++      ULONGEST file_ofs
++        = bfd_get (addr_size_bits, core_bfd, descdata) * page_size;
+       descdata += addr_size;
++      char * filename = filenames;
++      filenames += strlen ((char *) filenames) + 1;
+ 
+-      file_ofs *= page_size;
+-
+-      if (gdbarch_addr_bit (gdbarch) == 32)
+-	printf_filtered ("\t%10s %10s %10s %10s %s\n",
+-			 paddress (gdbarch, start),
+-			 paddress (gdbarch, end),
+-			 hex_string (end - start),
+-			 hex_string (file_ofs),
+-			 filenames);
+-      else
+-	printf_filtered ("  %18s %18s %10s %10s %s\n",
+-			 paddress (gdbarch, start),
+-			 paddress (gdbarch, end),
+-			 hex_string (end - start),
+-			 hex_string (file_ofs),
+-			 filenames);
+-
+-      filenames += 1 + strlen ((char *) filenames);
++      loop_cb (i, start, end, file_ofs, filename, nullptr);
+     }
+ }
+ 
++/* Implement "info proc mappings" for a corefile.  */
++
++static void
++linux_core_info_proc_mappings (struct gdbarch *gdbarch, const char *args)
++{
++  linux_read_core_file_mappings (gdbarch, core_bfd,
++    [=] (ULONGEST count)
++      {
++        printf_filtered (_("Mapped address spaces:\n\n"));
++        if (gdbarch_addr_bit (gdbarch) == 32)
++          {
++            printf_filtered ("\t%10s %10s %10s %10s %s\n",
++                             "Start Addr",
++                             "  End Addr",
++                             "      Size", "    Offset", "objfile");
++          }
++        else
++          {
++            printf_filtered ("  %18s %18s %10s %10s %s\n",
++                             "Start Addr",
++                             "  End Addr",
++                             "      Size", "    Offset", "objfile");
++          }
++      },
++    [=] (int num, ULONGEST start, ULONGEST end, ULONGEST file_ofs,
++         const char *filename, const void *other)
++      {
++        if (gdbarch_addr_bit (gdbarch) == 32)
++          printf_filtered ("\t%10s %10s %10s %10s %s\n",
++                           paddress (gdbarch, start),
++                           paddress (gdbarch, end),
++                           hex_string (end - start),
++                           hex_string (file_ofs),
++                           filename);
++        else
++          printf_filtered ("  %18s %18s %10s %10s %s\n",
++                           paddress (gdbarch, start),
++                           paddress (gdbarch, end),
++                           hex_string (end - start),
++                           hex_string (file_ofs),
++                           filename);
++      });
++}
++
+ /* Implement "info proc" for a corefile.  */
+ 
+ static void
+@@ -2501,6 +2569,7 @@ linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
+   set_gdbarch_info_proc (gdbarch, linux_info_proc);
+   set_gdbarch_core_info_proc (gdbarch, linux_core_info_proc);
+   set_gdbarch_core_xfer_siginfo (gdbarch, linux_core_xfer_siginfo);
++  set_gdbarch_read_core_file_mappings (gdbarch, linux_read_core_file_mappings);
+   set_gdbarch_find_memory_regions (gdbarch, linux_find_memory_regions);
+   set_gdbarch_make_corefile_notes (gdbarch, linux_make_corefile_notes);
+   set_gdbarch_has_shared_address_space (gdbarch,

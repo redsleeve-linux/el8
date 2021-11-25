@@ -1,0 +1,45 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Jan Kratochvil <jan.kratochvil@redhat.com>
+Date: Thu, 9 Aug 2018 17:10:46 +0200
+Subject: gdb-rhbz1187581-power8-regs-2of7.patch
+
+;; Add GDB support to access/display POWER8 registers (IBM, RH BZ 1187581).
+
+commit aa6f3694ce867884e43d1c0406c64df08ea24bd3
+Author: Pedro Franco de Carvalho <pedromfc@linux.ibm.com>
+Date:   Mon Aug 6 16:24:55 2018 -0300
+
+    Remove trailing '-' from the last QTDP action packet
+
+    The has_more predicate in remote_target::download_tracepoint always
+    evaluates to true, so the last action packet will be sent with a
+    trailing '-'.  This patch changes the predicate to remove the last
+    trailing '-'.
+
+    gdb/ChangeLog:
+    2018-08-06  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+            * remote.c (remote_target::download_tracepoint): Fix the has_more
+            predicate in the QTDP action list iteration.
+
+diff --git a/gdb/remote.c b/gdb/remote.c
+--- a/gdb/remote.c
++++ b/gdb/remote.c
+@@ -12899,7 +12899,7 @@ remote_target::download_tracepoint (struct bp_location *loc)
+     {
+       QUIT;	/* Allow user to bail out with ^C.  */
+ 
+-      bool has_more = (action_it != tdp_actions.end ()
++      bool has_more = ((action_it + 1) != tdp_actions.end ()
+ 		       || !stepping_actions.empty ());
+ 
+       xsnprintf (buf, BUF_SIZE, "QTDP:-%x:%s:%s%c",
+@@ -12918,7 +12918,7 @@ remote_target::download_tracepoint (struct bp_location *loc)
+       QUIT;	/* Allow user to bail out with ^C.  */
+ 
+       bool is_first = action_it == stepping_actions.begin ();
+-      bool has_more = action_it != stepping_actions.end ();
++      bool has_more = (action_it + 1) != stepping_actions.end ();
+ 
+       xsnprintf (buf, BUF_SIZE, "QTDP:-%x:%s:%s%s%s",
+ 		 b->number, addrbuf, /* address */

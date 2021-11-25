@@ -1,0 +1,174 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Mon, 27 Jul 2020 16:52:18 -0400
+Subject: gdb-rhbz1842691-corefile-mem-access-3of15.patch
+
+;; section_table_xfer_memory: Replace section name with callback predicate
+;; Kevin Buettner, RH BZ 1842691
+
+   Author: Kevin Buettner <kevinb@redhat.com>
+   Date:   Wed Mar 4 17:42:41 2020 -0700
+
+    section_table_xfer_memory: Replace section name with callback predicate
+
+    This patch is motivated by the need to be able to select sections
+    that section_table_xfer_memory_partial should consider for memory
+    transfers.  I'll use this facility in the next patch in this series.
+
+    section_table_xfer_memory_partial() can currently be passed a section
+    name which may be used to make name-based selections.  This is similar
+    to what I want to do, except that I want to be able to consider
+    section flags instead of the name.
+
+    I'm replacing the section name parameter with a predicate that,
+    when passed a pointer to a target_section struct, will return
+    true if that section should be further considered, or false which
+    indicates that it shouldn't.
+
+    I've converted the one existing use where a non-NULL section
+    name is passed to section_table_xfer_memory_partial().   Instead
+    of passing the section name, it now looks like this:
+
+    	  auto match_cb = [=] (const struct target_section *s)
+    	    {
+    	      return (strcmp (section_name, s->the_bfd_section->name) == 0);
+    	    };
+
+    	  return section_table_xfer_memory_partial (readbuf, writebuf,
+    						    memaddr, len, xfered_len,
+    						    table->sections,
+    						    table->sections_end,
+    						    match_cb);
+
+    The other callers all passed NULL; they've been simplified somewhat
+    in that they no longer need to pass NULL.
+
+    gdb/ChangeLog:
+
+    	* exec.h (section_table_xfer_memory): Revise declaration,
+    	replacing section name parameter with an optional callback
+    	predicate.
+    	* exec.c (section_table_xfer_memory): Likewise.
+    	* bfd-target.c, exec.c, target.c, corelow.c: Adjust all callers
+    	of section_table_xfer_memory.
+
+diff --git a/gdb/bfd-target.c b/gdb/bfd-target.c
+--- a/gdb/bfd-target.c
++++ b/gdb/bfd-target.c
+@@ -75,8 +75,7 @@ target_bfd::xfer_partial (target_object object,
+ 	return section_table_xfer_memory_partial (readbuf, writebuf,
+ 						  offset, len, xfered_len,
+ 						  m_table.sections,
+-						  m_table.sections_end,
+-						  NULL);
++						  m_table.sections_end);
+       }
+     default:
+       return TARGET_XFER_E_IO;
+diff --git a/gdb/corelow.c b/gdb/corelow.c
+--- a/gdb/corelow.c
++++ b/gdb/corelow.c
+@@ -820,8 +820,7 @@ core_target::xfer_partial (enum target_object object, const char *annex,
+ 	      (readbuf, writebuf,
+ 	       offset, len, xfered_len,
+ 	       m_core_section_table.sections,
+-	       m_core_section_table.sections_end,
+-	       NULL));
++	       m_core_section_table.sections_end));
+ 
+     case TARGET_OBJECT_AUXV:
+       if (readbuf)
+diff --git a/gdb/exec.c b/gdb/exec.c
+--- a/gdb/exec.c
++++ b/gdb/exec.c
+@@ -805,7 +805,8 @@ section_table_xfer_memory_partial (gdb_byte *readbuf, const gdb_byte *writebuf,
+ 				   ULONGEST *xfered_len,
+ 				   struct target_section *sections,
+ 				   struct target_section *sections_end,
+-				   const char *section_name)
++				   gdb::function_view<bool
++				     (const struct target_section *)> match_cb)
+ {
+   int res;
+   struct target_section *p;
+@@ -821,7 +822,7 @@ section_table_xfer_memory_partial (gdb_byte *readbuf, const gdb_byte *writebuf,
+       struct bfd_section *asect = p->the_bfd_section;
+       bfd *abfd = asect->owner;
+ 
+-      if (section_name && strcmp (section_name, asect->name) != 0)
++      if (match_cb != nullptr && !match_cb (p))
+ 	continue;		/* not the section we need.  */
+       if (memaddr >= p->addr)
+         {
+@@ -894,8 +895,7 @@ exec_target::xfer_partial (enum target_object object,
+     return section_table_xfer_memory_partial (readbuf, writebuf,
+ 					      offset, len, xfered_len,
+ 					      table->sections,
+-					      table->sections_end,
+-					      NULL);
++					      table->sections_end);
+   else
+     return TARGET_XFER_E_IO;
+ }
+diff --git a/gdb/exec.h b/gdb/exec.h
+--- a/gdb/exec.h
++++ b/gdb/exec.h
+@@ -58,8 +58,13 @@ extern enum target_xfer_status
+    Request to transfer up to LEN 8-bit bytes of the target sections
+    defined by SECTIONS and SECTIONS_END.  The OFFSET specifies the
+    starting address.
+-   If SECTION_NAME is not NULL, only access sections with that same
+-   name.
++
++   The MATCH_CB predicate is optional; when provided it will be called
++   for each section under consideration.  When MATCH_CB evaluates as
++   true, the section remains under consideration; a false result
++   removes it from consideration for performing the memory transfers
++   noted above.  See memory_xfer_partial_1() in target.c for an
++   example.
+ 
+    Return the number of bytes actually transfered, or zero when no
+    data is available for the requested range.
+@@ -76,7 +81,9 @@ extern enum target_xfer_status
+ 				     ULONGEST, ULONGEST, ULONGEST *,
+ 				     struct target_section *,
+ 				     struct target_section *,
+-				     const char *);
++				     gdb::function_view<bool
++				       (const struct target_section *)> match_cb
++				         = nullptr);
+ 
+ /* Read from mappable read-only sections of BFD executable files.
+    Similar to exec_read_partial_read_only, but return
+diff --git a/gdb/target.c b/gdb/target.c
+--- a/gdb/target.c
++++ b/gdb/target.c
+@@ -1098,11 +1098,17 @@ memory_xfer_partial_1 (struct target_ops *ops, enum target_object object,
+ 	  const char *section_name = section->the_bfd_section->name;
+ 
+ 	  memaddr = overlay_mapped_address (memaddr, section);
++
++	  auto match_cb = [=] (const struct target_section *s)
++	    {
++	      return (strcmp (section_name, s->the_bfd_section->name) == 0);
++	    };
++
+ 	  return section_table_xfer_memory_partial (readbuf, writebuf,
+ 						    memaddr, len, xfered_len,
+ 						    table->sections,
+ 						    table->sections_end,
+-						    section_name);
++						    match_cb);
+ 	}
+     }
+ 
+@@ -1122,8 +1128,7 @@ memory_xfer_partial_1 (struct target_ops *ops, enum target_object object,
+ 	  return section_table_xfer_memory_partial (readbuf, writebuf,
+ 						    memaddr, len, xfered_len,
+ 						    table->sections,
+-						    table->sections_end,
+-						    NULL);
++						    table->sections_end);
+ 	}
+     }
+ 

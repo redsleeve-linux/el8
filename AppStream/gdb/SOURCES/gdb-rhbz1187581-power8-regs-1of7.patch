@@ -1,0 +1,65 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Jan Kratochvil <jan.kratochvil@redhat.com>
+Date: Thu, 9 Aug 2018 17:09:48 +0200
+Subject: gdb-rhbz1187581-power8-regs-1of7.patch
+
+;; Add GDB support to access/display POWER8 registers (IBM, RH BZ 1187581).
+
+commit 05abfc39c719e740530000059bb963ad33462479
+Author: Pedro Franco de Carvalho <pedromfc@linux.ibm.com>
+Date:   Mon Aug 6 16:24:55 2018 -0300
+
+    Fix indentation in remote_target::download_tracepoint
+
+    gdb/ChangeLog:
+    2018-08-06  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+            * remote.c (remote_target::download_tracepoint): Fix indentation
+            in for block.
+
+diff --git a/gdb/remote.c b/gdb/remote.c
+--- a/gdb/remote.c
++++ b/gdb/remote.c
+@@ -12912,24 +12912,24 @@ remote_target::download_tracepoint (struct bp_location *loc)
+ 	error (_("Error on target while setting tracepoints."));
+     }
+ 
+-    for (auto action_it = stepping_actions.begin ();
+-	 action_it != stepping_actions.end (); action_it++)
+-      {
+-	QUIT;	/* Allow user to bail out with ^C.  */
+-
+-	bool is_first = action_it == stepping_actions.begin ();
+-	bool has_more = action_it != stepping_actions.end ();
+-
+-	xsnprintf (buf, BUF_SIZE, "QTDP:-%x:%s:%s%s%s",
+-		   b->number, addrbuf, /* address */
+-		   is_first ? "S" : "",
+-		   action_it->c_str (),
+-		   has_more ? "-" : "");
+-	putpkt (buf);
+-	remote_get_noisy_reply ();
+-	if (strcmp (rs->buf, "OK"))
+-	  error (_("Error on target while setting tracepoints."));
+-      }
++  for (auto action_it = stepping_actions.begin ();
++       action_it != stepping_actions.end (); action_it++)
++    {
++      QUIT;	/* Allow user to bail out with ^C.  */
++
++      bool is_first = action_it == stepping_actions.begin ();
++      bool has_more = action_it != stepping_actions.end ();
++
++      xsnprintf (buf, BUF_SIZE, "QTDP:-%x:%s:%s%s%s",
++		 b->number, addrbuf, /* address */
++		 is_first ? "S" : "",
++		 action_it->c_str (),
++		 has_more ? "-" : "");
++      putpkt (buf);
++      remote_get_noisy_reply ();
++      if (strcmp (rs->buf, "OK"))
++	error (_("Error on target while setting tracepoints."));
++    }
+ 
+   if (packet_support (PACKET_TracepointSource) == PACKET_ENABLE)
+     {

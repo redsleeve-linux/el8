@@ -1,0 +1,785 @@
+# Match the Fedora's version info.
+#=fedora
+Patch001: gdb-6.3-rh-testversion-20041202.patch
+
+# VLA (Fortran dynamic arrays) from Intel + archer-jankratochvil-vla tests.
+#=push
+Patch002: gdb-vla-intel-fortran-strides.patch
+
+#=push
+Patch003: gdb-vla-intel-fortran-vla-strings.patch
+
+#=push+jan
+Patch004: gdb-vla-intel-stringbt-fix.patch
+
+# Better parse 64-bit PPC system call prologues.
+#=push: Write new testcase.
+Patch005: gdb-6.3-ppc64syscall-20040622.patch
+
+# Include the pc's section when doing a symbol lookup so that the
+# correct symbol is found.
+#=push: Write new testcase.
+Patch006: gdb-6.3-ppc64displaysymbol-20041124.patch
+
+# Add a wrapper script to GDB that implements pstack using the
+# --readnever option.
+#=push
+Patch007: gdb-6.3-gstack-20050411.patch
+
+# VSYSCALL and PIE
+#=fedoratest
+Patch008: gdb-6.3-test-pie-20050107.patch
+
+# Get selftest working with sep-debug-info
+#=fedoratest
+Patch009: gdb-6.3-test-self-20050110.patch
+
+# Test support of multiple destructors just like multiple constructors
+#=fedoratest
+Patch010: gdb-6.3-test-dtorfix-20050121.patch
+
+# Fix to support executable moving
+#=fedoratest
+Patch011: gdb-6.3-test-movedir-20050125.patch
+
+# Test sibling threads to set threaded watchpoints for x86 and x86-64
+#=fedoratest
+Patch012: gdb-6.3-threaded-watchpoints2-20050225.patch
+
+# Notify observers that the inferior has been created
+#=fedoratest
+Patch013: gdb-6.3-inferior-notification-20050721.patch
+
+# Verify printing of inherited members test
+#=fedoratest
+Patch014: gdb-6.3-inheritancetest-20050726.patch
+
+# Add readnever option
+#=push
+Patch015: gdb-6.3-readnever-20050907.patch
+
+# Fix debuginfo addresses resolving for --emit-relocs Linux kernels (BZ 203661).
+#=push+jan: There was some mail thread about it, this patch may be a hack.
+Patch016: gdb-6.5-bz203661-emit-relocs.patch
+
+# Support TLS symbols (+`errno' suggestion if no pthread is found) (BZ 185337).
+#=push+jan: It should be replaced by Infinity project.
+Patch017: gdb-6.5-bz185337-resolve-tls-without-debuginfo-v2.patch
+
+# Fix TLS symbols resolving for shared libraries with a relative pathname.
+# The testsuite needs `gdb-6.5-tls-of-separate-debuginfo.patch'.
+#=fedoratest: One should recheck if it is really fixed upstream.
+Patch018: gdb-6.5-sharedlibrary-path.patch
+
+# Improved testsuite results by the testsuite provided by the courtesy of BEA.
+#=fedoratest: For upstream it should be rewritten as a dejagnu test, the test of no "??" was useful.
+Patch019: gdb-6.5-BEA-testsuite.patch
+
+# Testcase for deadlocking on last address space byte; for corrupted backtraces.
+#=fedoratest
+Patch020: gdb-6.5-last-address-space-byte-test.patch
+
+# Fix readline segfault on excessively long hand-typed lines.
+#=fedoratest
+Patch021: gdb-6.5-readline-long-line-crash-test.patch
+
+# Fix bogus 0x0 unwind of the thread's topmost function clone(3) (BZ 216711).
+#=fedora
+Patch022: gdb-6.5-bz216711-clone-is-outermost.patch
+
+# Test sideeffects of skipping ppc .so libs trampolines (BZ 218379).
+#=fedoratest
+Patch023: gdb-6.5-bz218379-ppc-solib-trampoline-test.patch
+
+# Fix lockup on trampoline vs. its function lookup; unreproducible (BZ 218379).
+#=fedora
+Patch024: gdb-6.5-bz218379-solib-trampoline-lookup-lock-fix.patch
+
+# Find symbols properly at their original (included) file (BZ 109921).
+#=fedoratest
+Patch025: gdb-6.5-bz109921-DW_AT_decl_file-test.patch
+
+# Update PPC unwinding patches to their upstream variants (BZ 140532).
+#=fedoratest
+Patch026: gdb-6.3-bz140532-ppc-unwinding-test.patch
+
+# Testcase for exec() from threaded program (BZ 202689).
+#=fedoratest
+Patch027: gdb-6.3-bz202689-exec-from-pthread-test.patch
+
+# Testcase for PPC Power6/DFP instructions disassembly (BZ 230000).
+#=fedoratest
+Patch028: gdb-6.6-bz230000-power6-disassembly-test.patch
+
+# Allow running `/usr/bin/gcore' with provided but inaccessible tty (BZ 229517).
+#=fedoratest
+Patch029: gdb-6.6-bz229517-gcore-without-terminal.patch
+
+# Avoid too long timeouts on failing cases of "annota1.exp annota3.exp".
+#=fedoratest
+Patch030: gdb-6.6-testsuite-timeouts.patch
+
+# Support for stepping over PPC atomic instruction sequences (BZ 237572).
+#=fedoratest
+Patch031: gdb-6.6-bz237572-ppc-atomic-sequence-test.patch
+
+# Make upstream `set scheduler-locking step' as default.
+#=push+jan: How much is scheduler-locking relevant after non-stop?
+Patch032: gdb-6.6-scheduler_locking-step-is-default.patch
+
+# Test kernel VDSO decoding while attaching to an i386 process.
+#=fedoratest
+Patch033: gdb-6.3-attach-see-vdso-test.patch
+
+# Test leftover zombie process (BZ 243845).
+#=fedoratest
+Patch034: gdb-6.5-bz243845-stale-testing-zombie-test.patch
+
+# New locating of the matching binaries from the pure core file (build-id).
+#=push+jan
+Patch035: gdb-6.6-buildid-locate.patch
+
+# Fix loading of core files without build-ids but with build-ids in executables.
+# Load strictly build-id-checked core files only if no executable is specified
+# (Jan Kratochvil, RH BZ 1339862).
+#=push+jan
+Patch036: gdb-6.6-buildid-locate-solib-missing-ids.patch
+
+#=push+jan
+Patch037: gdb-6.6-buildid-locate-rpm.patch
+
+# Fix displaying of numeric char arrays as strings (BZ 224128).
+#=fedoratest: But it is failing anyway, one should check the behavior more.
+Patch038: gdb-6.7-charsign-test.patch
+
+# Test PPC hiding of call-volatile parameter register.
+#=fedoratest
+Patch039: gdb-6.7-ppc-clobbered-registers-O2-test.patch
+
+# Testsuite fixes for more stable/comparable results.
+#=fedoratest
+Patch040: gdb-6.7-testsuite-stable-results.patch
+
+# Test ia64 memory leaks of the code using libunwind.
+#=fedoratest
+Patch041: gdb-6.5-ia64-libunwind-leak-test.patch
+
+# Test hiding unexpected breakpoints on intentional step commands.
+#=fedoratest
+Patch042: gdb-6.5-missed-trap-on-step-test.patch
+
+# Test gcore memory and time requirements for large inferiors.
+#=fedoratest
+Patch043: gdb-6.5-gcore-buffer-limit-test.patch
+
+# Test GCORE for shmid 0 shared memory mappings.
+#=fedoratest: But it is broken anyway, sometimes the case being tested is not reproducible.
+Patch044: gdb-6.3-mapping-zero-inode-test.patch
+
+# Test a crash on `focus cmd', `focus prev' commands.
+#=fedoratest
+Patch045: gdb-6.3-focus-cmd-prev-test.patch
+
+# Test various forms of threads tracking across exec() (BZ 442765).
+#=fedoratest
+Patch046: gdb-6.8-bz442765-threaded-exec-test.patch
+
+# Silence memcpy check which returns false positive (sparc64)
+#=push: But it is just a GCC workaround, look up the existing GCC PR for it.
+Patch047: gdb-6.8-sparc64-silence-memcpy-check.patch
+
+# Test a crash on libraries missing the .text section.
+#=fedoratest
+Patch048: gdb-6.5-section-num-fixup-test.patch
+
+# Fix register assignments with no GDB stack frames (BZ 436037).
+#=push+jan: This fix is incorrect.
+Patch049: gdb-6.8-bz436037-reg-no-longer-active.patch
+
+# Test the watchpoints conditionals works.
+#=fedoratest
+Patch050: gdb-6.8-watchpoint-conditionals-test.patch
+
+# Fix resolving of variables at locations lists in prelinked libs (BZ 466901).
+#=fedoratest
+Patch051: gdb-6.8-bz466901-backtrace-full-prelinked.patch
+
+# New test for step-resume breakpoint placed in multiple threads at once.
+#=fedoratest
+Patch052: gdb-simultaneous-step-resume-breakpoint-test.patch
+
+# Fix GNU/Linux core open: Can't read pathname for load map: Input/output error.
+# Fix regression of undisplayed missing shared libraries caused by a fix for.
+#=fedoratest: It should be in glibc: libc-alpha: <20091004161706.GA27450@.*>
+Patch053: gdb-core-open-vdso-warning.patch
+
+# Fix syscall restarts for amd64->i386 biarch.
+#=push+jan
+Patch054: gdb-x86_64-i386-syscall-restart.patch
+
+# Fix stepping with OMP parallel Fortran sections (BZ 533176).
+#=push+jan: It requires some better DWARF annotations.
+Patch055: gdb-bz533176-fortran-omp-step.patch
+
+# Fix regression by python on ia64 due to stale current frame.
+#=push+jan
+Patch056: gdb-follow-child-stale-parent.patch
+
+# Workaround ccache making lineno non-zero for command-line definitions.
+#=fedoratest: ccache is rarely used and it is even fixed now.
+Patch057: gdb-ccache-workaround.patch
+
+#=push+jan: May get obsoleted by Tom's unrelocated objfiles patch.
+Patch058: gdb-archer-pie-addons.patch
+
+#=push+jan: Breakpoints disabling matching should not be based on address.
+Patch059: gdb-archer-pie-addons-keep-disabled.patch
+
+# Testcase for "Do not make up line information" fix by Daniel Jacobowitz.
+#=fedoratest
+Patch060: gdb-lineno-makeup-test.patch
+
+# Test power7 ppc disassembly.
+#=fedoratest
+Patch061: gdb-ppc-power7-test.patch
+
+# Fix i386+x86_64 rwatch+awatch before run, regression against 6.8 (BZ 541866).
+# Fix i386 rwatch+awatch before run (BZ 688788, on top of BZ 541866).
+#=push+jan: It should be fixed properly instead.
+Patch062: gdb-bz541866-rwatch-before-run.patch
+
+# Workaround non-stop moribund locations exploited by kernel utrace (BZ 590623).
+#=push+jan: Currently it is still not fully safe.
+Patch063: gdb-moribund-utrace-workaround.patch
+
+# Fix follow-exec for C++ programs (bugreported by Martin Stransky).
+#=fedoratest
+Patch064: gdb-archer-next-over-throw-cxx-exec.patch
+
+# Backport DWARF-4 support (BZ 601887, Tom Tromey).
+#=fedoratest
+Patch065: gdb-bz601887-dwarf4-rh-test.patch
+
+#=push+jan
+Patch066: gdb-6.6-buildid-locate-core-as-arg.patch
+
+# Workaround librpm BZ 643031 due to its unexpected exit() calls (BZ 642879).
+#=push+jan
+Patch067: gdb-6.6-buildid-locate-rpm-librpm-workaround.patch
+
+# [delayed-symfile] Test a backtrace regression on CFIs without DIE (BZ 614604).
+#=fedoratest
+Patch068: gdb-test-bt-cfi-without-die.patch
+
+# Out of memory is just an error, not fatal (uninitialized VLS vars, BZ 568248).
+#=push+jan: Inferior objects should be read in parts, then this patch gets obsoleted.
+Patch069: gdb-bz568248-oom-is-error.patch
+
+# Verify GDB Python built-in function gdb.solib_address exists (BZ # 634108).
+#=fedoratest
+Patch070: gdb-bz634108-solib_address.patch
+
+# New test gdb.arch/x86_64-pid0-core.exp for kernel PID 0 cores (BZ 611435).
+#=fedoratest
+Patch071: gdb-test-pid0-core.patch
+
+# [archer-tromey-delayed-symfile] New test gdb.dwarf2/dw2-aranges.exp.
+#=fedoratest
+Patch072: gdb-test-dw2-aranges.patch
+
+# [archer-keiths-expr-cumulative+upstream] Import C++ testcases.
+#=fedoratest
+Patch073: gdb-test-expr-cumulative-archer.patch
+
+# Fix regressions on C++ names resolving (PR 11734, PR 12273, Keith Seitz).
+#=fedoratest
+Patch074: gdb-physname-pr11734-test.patch
+
+# Fix regressions on C++ names resolving (PR 11734, PR 12273, Keith Seitz).
+#=fedoratest
+Patch075: gdb-physname-pr12273-test.patch
+
+# Toolchain on sparc is slightly broken and debuginfo files are generated
+# with non 64bit aligned tables/offsets.
+# See for example readelf -S ../Xvnc.debug.
+#
+# As a consenquence calculation of sectp->filepos as used in
+# dwarf2_read_section (gdb/dwarf2read.c:1525) will return a non aligned buffer
+# that cannot be used directly as done with MMAP.
+# Usage will result in a BusError.
+#
+# While we figure out what's wrong in the toolchain and do a full archive
+# rebuild to fix it, we need to be able to use gdb :)
+#=push
+Patch076: gdb-7.2.50-sparc-add-workaround-to-broken-debug-files.patch
+
+# Test GDB opcodes/ disassembly of Intel Ivy Bridge instructions (BZ 696890).
+#=fedoratest
+Patch077: gdb-test-ivy-bridge.patch
+
+# Hack for proper PIE run of the testsuite.
+#=fedoratest
+Patch078: gdb-runtest-pie-override.patch
+
+# Print reasons for failed attach/spawn incl. SELinux deny_ptrace (BZ 786878).
+#=push+jan
+Patch079: gdb-attach-fail-reasons-5of5.patch
+
+# Workaround PR libc/14166 for inferior calls of strstr.
+#=fedora: Compatibility with RHELs (unchecked which ones).
+Patch080: gdb-glibc-strstr-workaround.patch
+
+# Include testcase for `Unable to see a variable inside a module (XLF)' (BZ 823789).
+#=fedoratest
+Patch081: gdb-rhel5.9-testcase-xlf-var-inside-mod.patch
+
+# Testcase for `Setting solib-absolute-prefix breaks vDSO' (BZ 818343).
+#=fedoratest
+Patch082: gdb-rhbz-818343-set-solib-absolute-prefix-testcase.patch
+
+# Fix `GDB cannot access struct member whose offset is larger than 256MB'
+# (RH BZ 795424).
+#=push
+Patch083: gdb-rhbz795424-bitpos-20of25.patch
+
+# Fix `GDB cannot access struct member whose offset is larger than 256MB'
+# (RH BZ 795424).
+#=push
+Patch084: gdb-rhbz795424-bitpos-21of25.patch
+
+# Fix `GDB cannot access struct member whose offset is larger than 256MB'
+# (RH BZ 795424).
+#=push
+Patch085: gdb-rhbz795424-bitpos-22of25.patch
+
+# Fix `GDB cannot access struct member whose offset is larger than 256MB'
+# (RH BZ 795424).
+#=push
+Patch086: gdb-rhbz795424-bitpos-23of25.patch
+
+# Fix `GDB cannot access struct member whose offset is larger than 256MB'
+# (RH BZ 795424).
+#=push
+Patch087: gdb-rhbz795424-bitpos-25of25.patch
+
+# Fix `GDB cannot access struct member whose offset is larger than 256MB'
+# (RH BZ 795424).
+#=push
+Patch088: gdb-rhbz795424-bitpos-25of25-test.patch
+
+# Fix `GDB cannot access struct member whose offset is larger than 256MB'
+# (RH BZ 795424).
+#=push
+Patch089: gdb-rhbz795424-bitpos-lazyvalue.patch
+
+# Import regression test for `gdb/findvar.c:417: internal-error:
+# read_var_value: Assertion `frame' failed.' (RH BZ 947564) from RHEL 6.5.
+#=fedoratest
+Patch090: gdb-rhbz947564-findvar-assertion-frame-failed-testcase.patch
+
+# Fix crash of -readnow /usr/lib/debug/usr/bin/gnatbind.debug (BZ 1069211).
+#=push+jan
+Patch091: gdb-gnat-dwarf-crash-3of3.patch
+
+# Fix 'memory leak in infpy_read_memory()' (RH BZ 1007614)
+#=fedoratest
+Patch092: gdb-rhbz1007614-memleak-infpy_read_memory-test.patch
+
+# Fix 'gdb gives highly misleading error when debuginfo pkg is present,
+# but not corresponding binary pkg' (RH BZ 981154).
+#=push+jan
+Patch093: gdb-6.6-buildid-locate-misleading-warning-missing-debuginfo-rhbz981154.patch
+
+#=fedoratest
+Patch094: gdb-archer-vla-tests.patch
+
+#=fedoratest
+Patch095: gdb-vla-intel-tests.patch
+
+# Continue backtrace even if a frame filter throws an exception (Phil Muldoon).
+#=push
+Patch096: gdb-btrobust.patch
+
+# Display Fortran strings in backtraces.
+#=fedoratest
+Patch097: gdb-fortran-frame-string.patch
+
+# Fix Python GIL with gdb.execute("continue") (Phil Muldoon, BZ 1116957).
+#=push
+Patch098: gdb-python-gil.patch
+
+# Testcase for '[SAP] Recursive dlopen causes SAP HANA installer to
+# crash.' (RH BZ 1156192).
+#=fedoratest
+Patch099: gdb-rhbz1156192-recursive-dlopen-test.patch
+
+# Fix jit-reader.h for multi-lib.
+#=push+jan
+Patch100: gdb-jit-reader-multilib.patch
+
+# Fix '`catch syscall' doesn't work for parent after `fork' is called'
+# (Philippe Waroquiers, RH BZ 1149205).
+#=fedoratest
+Patch101: gdb-rhbz1149205-catch-syscall-after-fork-test.patch
+
+# Fix 'backport GDB 7.4 fix to RHEL 6.6 GDB' [Original Sourceware bug
+# description: 'C++ (and objc): Internal error on unqualified name
+# re-set', PR 11657] (RH BZ 1186476).
+#=fedoratest
+Patch102: gdb-rhbz1186476-internal-error-unqualified-name-re-set-test.patch
+
+# Test 'info type-printers' Python error (RH BZ 1350436).
+#=fedoratest
+Patch103: gdb-rhbz1350436-type-printers-error.patch
+
+# Fix '[ppc64] and [s390x] wrong prologue skip on -O2 -g code' (Jan
+# Kratochvil, RH BZ 1084404).
+#=fedoratest
+Patch104: gdb-rhbz1084404-ppc64-s390x-wrong-prologue-skip-O2-g-3of3.patch
+
+# Never kill PID on: gdb exec PID (Jan Kratochvil, RH BZ 1219747).
+#=push+jan
+Patch105: gdb-bz1219747-attach-kills.patch
+
+# Force libncursesw over libncurses to match the includes (RH BZ 1270534).
+#=push+jan
+Patch106: gdb-fedora-libncursesw.patch
+
+# Test clflushopt instruction decode (for RH BZ 1262471).
+#=fedoratest
+Patch107: gdb-opcodes-clflushopt-test.patch
+
+# [rhel6] DTS backward Python compatibility API (BZ 1020004, Phil Muldoon).
+#=fedora
+Patch108: gdb-dts-rhel6-python-compat.patch
+
+# [SCL] Skip deprecated .gdb_index warning for Red Hat built files (BZ 953585).
+#=push+jan
+Patch109: gdb-6.6-buildid-locate-rpm-scl.patch
+
+# Work around readline-6.2 incompatibility not asking for --more-- (BZ 701131).
+#=fedora
+Patch110: gdb-readline62-ask-more-rh.patch
+
+# Make the GDB quit processing non-abortable to cleanup everything properly.
+#=fedora: It was useful only after gdb-6.8-attach-signalled-detach-stopped.patch .
+Patch111: gdb-6.8-quit-never-aborts.patch
+
+# [aarch64] Fix hardware watchpoints (RH BZ 1261564).
+#=fedoratest
+Patch112: gdb-rhbz1261564-aarch64-hw-watchpoint-test.patch
+
+# Add messages suggesting more recent RHEL gdbserver (RH BZ 1321114).
+#=fedora
+Patch113: gdb-container-rh-pkg.patch
+
+# New test for Python "Cannot locate object file for block" (for RH BZ 1325795).
+#=fedoratest
+Patch114: gdb-rhbz1325795-framefilters-test.patch
+
+# [dts+el7] [x86*] Bundle linux_perf.h for libipt (RH BZ 1256513).
+#=fedora
+Patch115: gdb-linux_perf-bundle.patch
+
+# Fix gdb-headless /usr/bin/ executables (BZ 1390251).
+#=fedora
+Patch116: gdb-libexec-add-index.patch
+
+# New testcase for: Fix <tab>-completion crash (Gary Benson, RH BZ 1398387).
+#=fedoratest
+Patch117: gdb-rhbz1398387-tab-crash-test.patch
+
+# [testsuite] Fix false selftest.exp FAIL from system readline-6.3+ (Patrick Palka).
+#=fedoratest
+Patch118: gdb-testsuite-readline63-sigint.patch
+
+# Python patches of: http://sourceware.org/gdb/wiki/ProjectArcher
+#=push
+Patch119: gdb-archer.patch
+
+# Revert upstream commit 469412dd9ccc4de5874fd3299b105833f36b34cd
+Patch120: gdb-vla-intel-fix-print-char-array.patch
+
+# [s390x] Backport arch12 instructions decoding (RH BZ 1553104).
+# =fedoratest
+Patch121: gdb-rhbz1553104-s390x-arch12-test.patch
+
+# Implement IPv6 support for GDB/gdbserver (RH BZ 881849, Sergio Durigan Junior).
+Patch122: gdb-rhbz881849-ipv6-1of3.patch
+
+
+Patch123: gdb-rhbz881849-ipv6-2of3.patch
+
+
+Patch124: gdb-rhbz881849-ipv6-3of3.patch
+
+# Add GDB support to access/display POWER8 registers (IBM, RH BZ 1187581).
+Patch125: gdb-rhbz1187581-power8-regs-1of7.patch
+
+# Add GDB support to access/display POWER8 registers (IBM, RH BZ 1187581).
+Patch126: gdb-rhbz1187581-power8-regs-2of7.patch
+
+# Add GDB support to access/display POWER8 registers (IBM, RH BZ 1187581).
+Patch127: gdb-rhbz1187581-power8-regs-3of7.patch
+
+# Add GDB support to access/display POWER8 registers (IBM, RH BZ 1187581).
+Patch128: gdb-rhbz1187581-power8-regs-4of7.patch
+
+# Add GDB support to access/display POWER8 registers (IBM, RH BZ 1187581).
+Patch129: gdb-rhbz1187581-power8-regs-5of7.patch
+
+# Add GDB support to access/display POWER8 registers (IBM, RH BZ 1187581).
+Patch130: gdb-rhbz1187581-power8-regs-6of7.patch
+
+# Add GDB support to access/display POWER8 registers (IBM, RH BZ 1187581).
+Patch131: gdb-rhbz1187581-power8-regs-7of7.patch
+
+# Fix for 'gdb in batch mode always exit with status 0' (Gary Benson)
+# RHBZ #1491128
+Patch132: gdb-rhbz1491128-batch-mode-exit-status-1of2.patch
+
+# Fix for 'gdb in batch mode always exit with status 0' (Gary Benson)
+# RHBZ #1491128
+Patch133: gdb-rhbz1491128-batch-mode-exit-status-2of2.patch
+
+# Use pulongest in aarch64-linux-tdep.c.
+# This patch was forgotten during the 8.2 release process, and is
+# needed to unbreak GDB when compiling on 32-bit arches.
+Patch134: gdb-use-pulongest-aarch64-linux-tdep.patch
+
+# Fix for 'GDB crashes when running from a deleted directory'
+# (Tom Tromey, RHBZ#1653410)
+Patch135: gdb-rhbz1653410-avoid-crash-when-calling-warning-too-early.patch
+
+# Fix for 'py-bt is broken, results in exception'.
+# RHBZ 1639242
+Patch136: gdb-rhbz1639242-fix-dwarf2_find_containing_comp_unit-binary-search.patch
+
+# Fix 'Assertion `SYMBOL_LANGUAGE (sym) == DICT_LANGUAGE (dict)->la_language' failed.'
+# Keith Seitz, RHBZ#1560010.
+Patch137: gdb-rhbz1560010-fix-assertion-symbol-language-dict-language-1of5.patch
+
+# Fix 'Assertion `SYMBOL_LANGUAGE (sym) == DICT_LANGUAGE (dict)->la_language' failed.'
+# Keith Seitz, RHBZ#1560010.
+Patch138: gdb-rhbz1560010-fix-assertion-symbol-language-dict-language-2of5.patch
+
+# Fix 'Assertion `SYMBOL_LANGUAGE (sym) == DICT_LANGUAGE (dict)->la_language' failed.'
+# Keith Seitz, RHBZ#1560010.
+Patch139: gdb-rhbz1560010-fix-assertion-symbol-language-dict-language-3of5.patch
+
+# Fix 'Assertion `SYMBOL_LANGUAGE (sym) == DICT_LANGUAGE (dict)->la_language' failed.'
+# Keith Seitz, RHBZ#1560010.
+Patch140: gdb-rhbz1560010-fix-assertion-symbol-language-dict-language-4of5.patch
+
+# Fix 'Assertion `SYMBOL_LANGUAGE (sym) == DICT_LANGUAGE (dict)->la_language' failed.'
+# Keith Seitz, RHBZ#1560010.
+Patch141: gdb-rhbz1560010-fix-assertion-symbol-language-dict-language-5of5.patch
+
+# Fix 'gdb suggests using "dnf debuginfo-install'
+# Keith Seitz, RHBZ 1666249
+Patch142: gdb-rhbz1666249-suggest-yum-instead-of-dnf.patch
+
+# Fix 'libiberty: Memory leak in demangle_template function resulting in a denial of service"
+# Simon Marchi, RH BZ 1668635
+Patch143: gdb-rhbz1668635-libiberty-demangle_template-memleak.patch
+
+# Fix 'gdb fails to read zN registers from corefile with aarch64 SVE'
+# Alan Hayward, RH BZ 1669953
+Patch144: gdb-rhbz1669953-aarch64-sve-binutils.patch
+
+# Fix remote.c build failure
+# Szabolcs Nagy, RH BZ 1187581
+Patch145: gdb-rhbz1187581-power8-regs-not-in-8.2-01of15.patch
+
+# Add grok/write functions for new ppc core note sections
+# Edjunior Barbosa Machado, RH BZ 1187581
+Patch146: gdb-rhbz1187581-power8-regs-not-in-8.2-02of15.patch
+
+# Zero-initialize linux note sections
+# Pedro Franco de Carvalho, RH BZ 1187581
+Patch147: gdb-rhbz1187581-power8-regs-not-in-8.2-03of15.patch
+
+# [PowerPC] Don't zero-initialize vector register buffers
+# Pedro Franco de Carvalho, RH BZ 1187581
+Patch148: gdb-rhbz1187581-power8-regs-not-in-8.2-04of15.patch
+
+# Add decfloat registers to float reggroup
+# Pedro Franco de Carvalho, RH BZ 1187581
+Patch149: gdb-rhbz1187581-power8-regs-not-in-8.2-05of15.patch
+
+# [PowerPC] Remove rs6000_pseudo_register_reggroup_p
+# Pedro Franco de Carvalho, RH BZ 1187581
+Patch150: gdb-rhbz1187581-power8-regs-not-in-8.2-06of15.patch
+
+# [PowerPC] Fix two if statements in gdb/ppc-linux-nat.c
+# Pedro Franco de Carvalho, RH BZ 1187581
+Patch151: gdb-rhbz1187581-power8-regs-not-in-8.2-07of15.patch
+
+# [PowerPC] Fix indentation in arch/ppc-linux-common.c
+# Pedro Franco de Carvalho, RH BZ 1187581
+Patch152: gdb-rhbz1187581-power8-regs-not-in-8.2-08of15.patch
+
+# [PowerPC] Refactor have_ initializers in rs6000-tdep.c
+# Pedro Franco de Carvalho, RH BZ 1187581
+Patch153: gdb-rhbz1187581-power8-regs-not-in-8.2-09of15.patch
+
+# [PowerPC] Add support for PPR and DSCR
+# Edjunior Barbosa Machado and Pedro Franco de Carvalho, RH BZ 1187581
+Patch154: gdb-rhbz1187581-power8-regs-not-in-8.2-10of15.patch
+
+# [PowerPC] Add support for TAR
+# Edjunior Barbosa Machado and Pedro Franco de Carvalho, RH BZ 1187581
+Patch155: gdb-rhbz1187581-power8-regs-not-in-8.2-11of15.patch
+
+# [PowerPC] Add support for EBB and PMU registers
+# Edjunior Barbosa Machado and Pedro Franco de Carvalho, RH BZ 1187581m
+Patch156: gdb-rhbz1187581-power8-regs-not-in-8.2-12of15.patch
+
+# [PowerPC] Reject tdescs with VSX and no FPU or Altivec
+# Pedro Franco de Carvalho, RH BZ 1187581
+Patch157: gdb-rhbz1187581-power8-regs-not-in-8.2-13of15.patch
+
+# [PowerPC] Add support for HTM registers
+# Edjunior Barbosa Machado and Pedro Franco de Carvalho, RH BZ 1187581
+Patch158: gdb-rhbz1187581-power8-regs-not-in-8.2-14of15.patch
+
+# [PowerPC] Document requirements for VSX feature
+# Pedro Franco de Carvalho, RH BZ 1187581
+Patch159: gdb-rhbz1187581-power8-regs-not-in-8.2-15of15.patch
+
+# "Fix" segfault that happens on parse_macro_definition because
+# debugedit corrupts the .debug_macro section.
+# Sergio Durigan Junior, RH BZ 1708192.
+Patch160: gdb-rhbz1708192-parse_macro_definition-crash.patch
+
+# Prevent buffer overflow with sections with invalid sizes.
+# Keith Seitz, RH BZ 1740299.
+Patch161: gdb-rhbz1742099-reject-sections-with-invalid-sizes.patch
+
+# Fix 'GDB needs s390x arch13 binutils patches'
+# RHBZ 1768593, Andreas Krebbel
+# This patch contains only the opcodes change.
+Patch162: gdb-rhbz1768593-s390x-arch13-01.patch
+
+# Fix 'GDB needs s390x arch13 binutils patches'
+# RHBZ 1768593, Andreas Krebbel
+# This patch contains only the opcodes and include changes.
+Patch163: gdb-rhbz1768593-s390x-arch13-02.patch
+
+# Fix 'GDB needs s390x arch13 binutils patches'
+# RHBZ 1768593, Andreas Krebbel
+Patch164: gdb-rhbz1768593-s390x-arch13-03.patch
+
+# Backport z15 record/replay
+# Andreas Arnaz, RH BZ 1659535
+Patch165: gdb-rhbz1659535-z15-record-replay.patch
+
+# Fix terminal problems when error() is called
+# Alan Hayward (RH BZ 1852580)
+Patch166: gdb-rhbz1852580-terminal-woes.patch
+
+# Remove hack for GDB which sets the section size to 0
+# Kevin Buettner, RH BZ 1842691
+Patch167: gdb-rhbz1842691-corefile-mem-access-1of15.patch
+
+# Adjust corefile.exp test to show regression after bfd hack removal
+# Kevin Buettner, RH BZ 1842691
+Patch168: gdb-rhbz1842691-corefile-mem-access-2of15.patch
+
+# section_table_xfer_memory: Replace section name with callback predicate
+# Kevin Buettner, RH BZ 1842691
+Patch169: gdb-rhbz1842691-corefile-mem-access-3of15.patch
+
+# Provide access to non SEC_HAS_CONTENTS core file sections
+# Kevin Buettner, RH BZ 1842961
+Patch170: gdb-rhbz1842691-corefile-mem-access-4of15.patch
+
+# Test ability to access unwritten-to mmap data in core file
+# Kevin Buettner, RH BZ 1842961
+Patch171: gdb-rhbz1842691-corefile-mem-access-5of15.patch
+
+# Update binary_get_section_contents to seek using section's file position
+# Kevin Buettner, RH BZ 1842961
+Patch172: gdb-rhbz1842691-corefile-mem-access-6of15.patch
+
+# Add new gdbarch method, read_core_file_mappings
+# Kevin Buettner, RH BZ 1842961
+Patch173: gdb-rhbz1842691-corefile-mem-access-7of15.patch
+
+# Use NT_FILE note section for reading core target memory
+# Kevin Buettner, RH BZ 1842961
+Patch174: gdb-rhbz1842691-corefile-mem-access-8of15.patch
+
+# Add test for accessing read-only mmapped data in a core file
+# Kevin Buettner, RH BZ 1842691
+Patch175: gdb-rhbz1842691-corefile-mem-access-9of15.patch
+
+# gcore command: Place all file-backed mappings in NT_FILE note
+# Kevin Buettner, RH BZ 1842961
+Patch176: gdb-rhbz1842691-corefile-mem-access-10of15.patch
+
+# Adjust coredump-filter.exp to account for NT_FILE note handling
+# Kevin Buettner, RH BZ 1842961
+Patch177: gdb-rhbz1842691-corefile-mem-access-11of15.patch
+
+# Add new command "maint print core-file-backed-mappings"
+# Kevin Buettner, RH BZ 1842961
+Patch178: gdb-rhbz1842691-corefile-mem-access-12of15.patch
+
+# Add documentation for "maint print core-file-backed-mappings"
+# Kevin Buettner, RH BZ 1842961
+Patch179: gdb-rhbz1842691-corefile-mem-access-13of15.patch
+
+# New core file tests with mappings over existing program memory
+# Kevin Buettner, RH BZ 1842961
+Patch180: gdb-rhbz1842691-corefile-mem-access-14of15.patch
+
+# Add period to help text for maint print core-file-backed-mappings
+# Kevin Buettner, RH BZ 1842961
+Patch181: gdb-rhbz1842691-corefile-mem-access-15of15.patch
+
+# Backport "Stop the BFD library from issuing a warning message when
+# processing allocated sections in debuginfo files that lie outside of
+# Nick Clifton and Keith Seitz, RH BZ 1878810
+Patch182: gdb-rhbz1878810-bfd-suppress-loadable-section-outside-ELF-sections.patch
+
+# Backport "fortran dynamic type related fixes"
+# Andrew Burgess (RH BZ 1905701)
+Patch183: gdb-rhbz1905701-DWARF-data_location.patch
+
+# Backport of "Correct recording of 'store on condition' insns"
+# Andreas Arnaz (RH BZ 1903374)
+Patch184: gdb-rhbz1903374-s390x-store-on-condition.patch
+
+# Fix segfault with nameless fortran modules.
+# Bernhard Heckel, RH BZ 1943673
+Patch185: gdb-rhbz1934673-fortran-nameless-modules.patch
+
+# Backport "Add low_new_clone method to linux_nat_target."
+# (Pedro Franco de Carvalho, RH BZ 1854784)
+Patch186: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-1of7.patch
+
+# Backport "Add linux_get_hwcap"
+# (Alan Hayward, RH BZ 1854784)
+Patch187: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-2of7.patch
+
+# Backport "[PowerPC] Move up some register access routines"
+# (Pedro Franco de Carvalho, RH BZ 1854784)
+Patch188: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-3of7.patch
+
+# Backport "[PowerPC] Fix debug register issues in ppc-linux-nat"
+# (Pedro Franco de Carvalho, RH BZ 1854784)
+Patch189: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-4of7.patch
+
+# Backport "[PowerPC] Use < 0 and >= 0 for watchpoint ptrace calls"
+# (Pedro Franco de Carvalho, RH BZ 1854784)
+Patch190: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-5of7.patch
+
+# Backport "[PowerPC] Always clear watchpoint with PTRACE_SET_DEBUGREG"
+# (Pedro Franco de Carvalho, RH BZ 1854784)
+Patch191: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-6of7.patch
+
+# Backport "PowerPC remove 512 bytes region limit if 2nd DAWR is available."
+# (Rogerio Alves, RH BZ 1854784)
+Patch192: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-7of7.patch
+

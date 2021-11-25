@@ -1,0 +1,35 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Andrew Cagney <cagney@gnu.org>
+Date: Fri, 27 Oct 2017 21:07:50 +0200
+Subject: gdb-6.3-readnever-20050907.patch
+
+;; Add readnever option
+;;=push
+
+2004-11-18  Andrew Cagney  <cagney@gnu.org>
+
+        * dwarf2read.c: Include "top.c".
+        (dwarf2_has_info): Check for readnever_symbol_files.
+        * symfile.c (readnever_symbol_files): Define.
+        * top.h (readnever_symbol_files): Declare.
+        * main.c (captured_main): Add --readnever option.
+        (print_gdb_help): Ditto.
+
+2004-11-18  Andrew Cagney  <cagney@gnu.org>
+
+        * gdb.texinfo (File Options): Document --readnever.
+
+Pushed upstream: https://sourceware.org/ml/gdb-cvs/2017-12/msg00007.html
+
+diff --git a/gdb/gcore.in b/gdb/gcore.in
+--- a/gdb/gcore.in
++++ b/gdb/gcore.in
+@@ -97,7 +97,7 @@ for pid in "$@"
+ do
+ 	# `</dev/null' to avoid touching interactive terminal if it is
+ 	# available but not accessible as GDB would get stopped on SIGTTIN.
+-	"$binary_path/@GDB_TRANSFORM_NAME@" </dev/null --nx --batch \
++	"$binary_path/@GDB_TRANSFORM_NAME@" </dev/null --nx --batch --readnever \
+ 	    -ex "set pagination off" -ex "set height 0" -ex "set width 0" \
+ 	    "${dump_all_cmds[@]}" \
+ 	    -ex "attach $pid" -ex "gcore $name.$pid" -ex detach -ex quit

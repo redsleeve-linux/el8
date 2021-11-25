@@ -1,0 +1,323 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Gary Benson <gbenson@redhat.com>
+Date: Wed, 29 Aug 2018 16:11:50 +0100
+Subject: gdb-rhbz1491128-batch-mode-exit-status-1of2.patch
+
+;; Fix for 'gdb in batch mode always exit with status 0' (Gary Benson)
+;; RHBZ #1491128
+
+Indicate batch mode failures by exiting with nonzero status
+
+This commit causes GDB in batch mode to exit with nonzero status
+if the last command to be executed fails.
+
+gdb/ChangeLog:
+
+	PR gdb/13000:
+	* gdb/main.c (captured_main_1): Exit with nonzero status
+	in batch mode if the last command to be executed failed.
+	* NEWS: Mention the above.
+
+gdb/testsuite/ChangeLog:
+
+	PR gdb/13000:
+	* gdb.base/batch-exit-status.exp: New file.
+	* gdb.base/batch-exit-status.good-commands: Likewise.
+	* gdb.base/batch-exit-status.bad-commands: Likewise.
+
+diff --git a/gdb/ChangeLog b/gdb/ChangeLog
+--- a/gdb/ChangeLog
++++ b/gdb/ChangeLog
+@@ -1,3 +1,10 @@
++2018-08-16  Gary Benson <gbenson@redhat.com>
++
++	PR gdb/13000:
++	* gdb/main.c (captured_main_1): Exit with nonzero status
++	in batch mode if the last command to be executed failed.
++	* NEWS: Mention the above.
++
+ 2018-08-03  Sergio Durigan Junior  <sergiodj@redhat.com>
+ 
+ 	* ser-tcp.c (net_open): Fix thinko when deciding whether to
+diff --git a/gdb/NEWS b/gdb/NEWS
+--- a/gdb/NEWS
++++ b/gdb/NEWS
+@@ -7,6 +7,9 @@
+   can be passed using the '[ADDRESS]:PORT' notation, or the regular
+   'ADDRESS:PORT' method.
+ 
++* GDB in batch mode now exits with status 1 if the last command to be
++  executed failed.
++
+ *** Changes in GDB 8.2
+ 
+ * The 'set disassembler-options' command now supports specifying options
+diff --git a/gdb/main.c b/gdb/main.c
+--- a/gdb/main.c
++++ b/gdb/main.c
+@@ -518,6 +518,7 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+   int i;
+   int save_auto_load;
+   struct objfile *objfile;
++  int ret = 1;
+ 
+ #ifdef HAVE_SBRK
+   /* Set this before constructing scoped_command_stats.  */
+@@ -1051,7 +1052,7 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+      processed; it sets global parameters, which are independent of
+      what file you are debugging or what directory you are in.  */
+   if (system_gdbinit && !inhibit_gdbinit)
+-    catch_command_errors (source_script, system_gdbinit, 0);
++    ret = catch_command_errors (source_script, system_gdbinit, 0);
+ 
+   /* Read and execute $HOME/.gdbinit file, if it exists.  This is done
+      *before* all the command line arguments are processed; it sets
+@@ -1059,7 +1060,7 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+      debugging or what directory you are in.  */
+ 
+   if (home_gdbinit && !inhibit_gdbinit && !inhibit_home_gdbinit)
+-    catch_command_errors (source_script, home_gdbinit, 0);
++    ret = catch_command_errors (source_script, home_gdbinit, 0);
+ 
+   /* Process '-ix' and '-iex' options early.  */
+   for (i = 0; i < cmdarg_vec.size (); i++)
+@@ -1069,12 +1070,12 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+       switch (cmdarg_p.type)
+ 	{
+ 	case CMDARG_INIT_FILE:
+-	  catch_command_errors (source_script, cmdarg_p.string,
+-				!batch_flag);
++	  ret = catch_command_errors (source_script, cmdarg_p.string,
++				      !batch_flag);
+ 	  break;
+ 	case CMDARG_INIT_COMMAND:
+-	  catch_command_errors (execute_command, cmdarg_p.string,
+-				!batch_flag);
++	  ret = catch_command_errors (execute_command, cmdarg_p.string,
++				      !batch_flag);
+ 	  break;
+ 	}
+     }
+@@ -1082,11 +1083,11 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+   /* Now perform all the actions indicated by the arguments.  */
+   if (cdarg != NULL)
+     {
+-      catch_command_errors (cd_command, cdarg, 0);
++      ret = catch_command_errors (cd_command, cdarg, 0);
+     }
+ 
+   for (i = 0; i < dirarg.size (); i++)
+-    catch_command_errors (directory_switch, dirarg[i], 0);
++    ret = catch_command_errors (directory_switch, dirarg[i], 0);
+ 
+   /* Skip auto-loading section-specified scripts until we've sourced
+      local_gdbinit (which is often used to augment the source search
+@@ -1115,19 +1116,19 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+          catch_command_errors returns non-zero on success!
+ 	 Do not load EXECARG as a symbol file if it has been already processed
+ 	 as a core file.  */
+-      if (catch_command_errors (func, execarg, !batch_flag)
+-	  && core_bfd == NULL)
+-	catch_command_errors (symbol_file_add_main_adapter, symarg,
+-			      !batch_flag);
++      ret = catch_command_errors (func, execarg, !batch_flag);
++      if (ret != 0 && core_bfd == NULL)
++	ret = catch_command_errors (symbol_file_add_main_adapter,
++				    symarg, !batch_flag);
+     }
+   else
+     {
+       if (execarg != NULL)
+-	catch_command_errors (exec_file_attach, execarg,
+-			      !batch_flag);
++	ret = catch_command_errors (exec_file_attach, execarg,
++				    !batch_flag);
+       if (symarg != NULL)
+-	catch_command_errors (symbol_file_add_main_adapter, symarg,
+-			      !batch_flag);
++	ret = catch_command_errors (symbol_file_add_main_adapter,
++				    symarg, !batch_flag);
+     }
+ 
+   if (corearg && pidarg)
+@@ -1135,9 +1136,14 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+ 	     "a core file at the same time."));
+ 
+   if (corearg != NULL)
+-    catch_command_errors (core_file_command, corearg, !batch_flag);
++    {
++      ret = catch_command_errors (core_file_command, corearg,
++				  !batch_flag);
++    }
+   else if (pidarg != NULL)
+-    catch_command_errors (attach_command, pidarg, !batch_flag);
++    {
++      ret = catch_command_errors (attach_command, pidarg, !batch_flag);
++    }
+   else if (pid_or_core_arg)
+     {
+       /* The user specified 'gdb program pid' or gdb program core'.
+@@ -1146,17 +1152,23 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+ 
+       if (isdigit (pid_or_core_arg[0]))
+ 	{
+-	  if (catch_command_errors (attach_command, pid_or_core_arg,
+-				    !batch_flag) == 0
++	  ret = catch_command_errors (attach_command, pid_or_core_arg,
++				      !batch_flag);
++	  if (ret == 0
+ 	      /* attach_command could succeed partially and core_file_command
+ 		 would try to kill it.  */
+ 	      && !have_inferiors ())
+-	    catch_command_errors (core_file_command, pid_or_core_arg,
+-				  !batch_flag);
++	    ret = catch_command_errors (core_file_command,
++					pid_or_core_arg,
++					!batch_flag);
++	}
++      else
++	{
++	  /* Can't be a pid, better be a corefile.  */
++	  ret = catch_command_errors (core_file_command,
++				      pid_or_core_arg,
++				      !batch_flag);
+ 	}
+-      else /* Can't be a pid, better be a corefile.  */
+-	catch_command_errors (core_file_command, pid_or_core_arg,
+-			      !batch_flag);
+     }
+ 
+   if (ttyarg != NULL)
+@@ -1180,7 +1192,7 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+ 	{
+ 	  auto_load_local_gdbinit_loaded = 1;
+ 
+-	  catch_command_errors (source_script, local_gdbinit, 0);
++	  ret = catch_command_errors (source_script, local_gdbinit, 0);
+ 	}
+     }
+ 
+@@ -1200,12 +1212,12 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+       switch (cmdarg_p.type)
+ 	{
+ 	case CMDARG_FILE:
+-	  catch_command_errors (source_script, cmdarg_p.string,
+-				!batch_flag);
++	  ret = catch_command_errors (source_script, cmdarg_p.string,
++				      !batch_flag);
+ 	  break;
+ 	case CMDARG_COMMAND:
+-	  catch_command_errors (execute_command, cmdarg_p.string,
+-				!batch_flag);
++	  ret = catch_command_errors (execute_command, cmdarg_p.string,
++				      !batch_flag);
+ 	  break;
+ 	}
+     }
+@@ -1217,8 +1229,11 @@ captured_main_1 (struct captured_main_args *context, int &python_script)
+ 
+   if (batch_flag)
+     {
++      int error_status = EXIT_FAILURE;
++      int *exit_arg = ret == 0 ? &error_status : NULL;
++
+       /* We have hit the end of the batch file.  */
+-      quit_force (NULL, 0);
++      quit_force (exit_arg, 0);
+     }
+ }
+ 
+diff --git a/gdb/testsuite/ChangeLog b/gdb/testsuite/ChangeLog
+--- a/gdb/testsuite/ChangeLog
++++ b/gdb/testsuite/ChangeLog
+@@ -1,3 +1,10 @@
++2018-08-16  Gary Benson <gbenson@redhat.com>
++
++	PR gdb/13000:
++	* gdb.base/batch-exit-status.exp: New file.
++	* gdb.base/batch-exit-status.good-commands: Likewise.
++	* gdb.base/batch-exit-status.bad-commands: Likewise.
++
+ 2018-07-11  Sergio Durigan Junior  <sergiodj@redhat.com>
+ 	    Jan Kratochvil  <jan.kratochvil@redhat.com>
+ 	    Paul Fertser  <fercerpav@gmail.com>
+diff --git a/gdb/testsuite/gdb.base/batch-exit-status.bad-commands b/gdb/testsuite/gdb.base/batch-exit-status.bad-commands
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.base/batch-exit-status.bad-commands
+@@ -0,0 +1 @@
++bork
+diff --git a/gdb/testsuite/gdb.base/batch-exit-status.exp b/gdb/testsuite/gdb.base/batch-exit-status.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.base/batch-exit-status.exp
+@@ -0,0 +1,63 @@
++# Copyright (C) 2018 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++# Check that "gdb -batch" exits with appropriate status.
++
++standard_testfile
++
++set good_commands "$srcdir/$subdir/batch-exit-status.good-commands"
++set bad_commands "$srcdir/$subdir/batch-exit-status.bad-commands"
++
++proc _test_exit_status {expect_status cmdline_opts} {
++    global gdb_spawn_id
++
++    gdb_exit
++    if {[gdb_spawn_with_cmdline_opts $cmdline_opts] != 0} {
++	fail "spawn"
++	return
++    }
++
++    set result [wait -i $gdb_spawn_id]
++    verbose $result
++    gdb_assert { [lindex $result 2] == 0 }
++    set actual_status [lindex $result 3]
++    gdb_assert { $actual_status == $expect_status }
++}
++
++proc test_exit_status {expect_status cmdline_opts} {
++    with_test_prefix $cmdline_opts {
++	_test_exit_status $expect_status $cmdline_opts
++    }
++}
++
++# gdb -batch with nothing to do should exit 0.
++test_exit_status 0 "-batch"
++
++# Bad command-line options should cause exit 1.
++test_exit_status 1 "-batch -jslkflsdjlkfjlksdjf"
++
++# gdb -batch with good commands should exit 0.
++test_exit_status 0 "-batch -ex \"info source\""
++test_exit_status 0 "-batch -x $good_commands"
++
++# gdb -batch with bad commands should exit 1.
++test_exit_status 1 "-batch -ex \"set not-a-thing 4\""
++test_exit_status 1 "-batch -x $bad_commands"
++
++# Success or failure of the last thing determines the exit code.
++test_exit_status 0 "-batch -ex \"set not-a-thing 4\" -x $good_commands"
++test_exit_status 0 "-batch -x $bad_commands -ex \"info source\""
++test_exit_status 1 "-batch -x $good_commands -x $bad_commands"
++test_exit_status 1 "-batch -x $good_commands -ex \"set not-a-thing 4\""
+diff --git a/gdb/testsuite/gdb.base/batch-exit-status.good-commands b/gdb/testsuite/gdb.base/batch-exit-status.good-commands
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.base/batch-exit-status.good-commands
+@@ -0,0 +1 @@
++info mem

@@ -1,0 +1,311 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Alan Hayward <alan.hayward@arm.com>
+Date: Wed, 7 Jul 2021 18:13:44 -0400
+Subject: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-2of7.patch
+
+;; Backport "Add linux_get_hwcap"
+;; (Alan Hayward, RH BZ 1854784)
+
+Tidy up calls to read HWCAP (and HWCAP2) by adding common functions,
+removing the PPC and AArch64 specific versions.
+
+The only function difference is in aarch64_linux_core_read_description - if
+the hwcap read fails it now return a valid description instead of nullptr.
+
+gdb/ChangeLog:
+
+2019-03-25  Alan Hayward  <alan.hayward@arm.com>
+
+	* aarch64-linux-nat.c (aarch64_linux_nat_target::read_description):
+	Call linux_get_hwcap.
+	* aarch64-linux-tdep.c (aarch64_linux_core_read_description):
+	Likewise.
+	(aarch64_linux_get_hwcap): Remove function.
+	* aarch64-linux-tdep.h (aarch64_linux_get_hwcap): Remove
+	declaration.
+	* arm-linux-nat.c (arm_linux_nat_target::read_description):Call
+	linux_get_hwcap.
+	* arm-linux-tdep.c (arm_linux_core_read_description): Likewise.
+	* linux-tdep.c (linux_get_hwcap): Add function.
+	(linux_get_hwcap2): Likewise.
+	* linux-tdep.h (linux_get_hwcap): Add declaration.
+	(linux_get_hwcap2): Likewise.
+	* ppc-linux-nat.c (ppc_linux_get_hwcap): Remove function.
+	(ppc_linux_get_hwcap2): Likewise.
+	(ppc_linux_nat_target::region_ok_for_hw_watchpoint): Call
+	linux_get_hwcap.
+	(ppc_linux_nat_target::insert_watchpoint): Likewise.
+	(ppc_linux_nat_target::watchpoint_addr_within_range): Likewise.
+	(ppc_linux_nat_target::read_description): Likewise.
+	* ppc-linux-tdep.c (ppc_linux_core_read_description): Likewise.
+	* s390-linux-nat.c: Likewise.
+	* s390-linux-tdep.c (s390_core_read_description): Likewise.
+
+diff --git a/gdb/aarch64-linux-nat.c b/gdb/aarch64-linux-nat.c
+--- a/gdb/aarch64-linux-nat.c
++++ b/gdb/aarch64-linux-nat.c
+@@ -42,6 +42,7 @@
+ #include <asm/ptrace.h>
+ 
+ #include "gregset.h"
++#include "linux-tdep.h"
+ 
+ /* Defines ps_err_e, struct ps_prochandle.  */
+ #include "gdb_proc_service.h"
+@@ -605,8 +606,7 @@ aarch64_linux_nat_target::read_description ()
+   ret = ptrace (PTRACE_GETREGSET, tid, NT_ARM_VFP, &iovec);
+   if (ret == 0)
+     return tdesc_arm_with_neon;
+-  else
+-    return aarch64_read_description (aarch64_sve_get_vq (tid));
++  else return aarch64_read_description (aarch64_sve_get_vq (tid));
+ }
+ 
+ /* Convert a native/host siginfo object, into/from the siginfo in the
+diff --git a/gdb/aarch64-linux-tdep.c b/gdb/aarch64-linux-tdep.c
+--- a/gdb/aarch64-linux-tdep.c
++++ b/gdb/aarch64-linux-tdep.c
+@@ -442,10 +442,7 @@ static const struct target_desc *
+ aarch64_linux_core_read_description (struct gdbarch *gdbarch,
+ 				     struct target_ops *target, bfd *abfd)
+ {
+-  CORE_ADDR aarch64_hwcap = 0;
+-
+-  if (target_auxv_search (target, AT_HWCAP, &aarch64_hwcap) != 1)
+-    return NULL;
++  CORE_ADDR hwcap = linux_get_hwcap (target);
+ 
+   return aarch64_read_description (aarch64_linux_core_read_vq (gdbarch, abfd));
+ }
+diff --git a/gdb/arm-linux-nat.c b/gdb/arm-linux-nat.c
+--- a/gdb/arm-linux-nat.c
++++ b/gdb/arm-linux-nat.c
+@@ -533,7 +533,7 @@ ps_get_thread_area (struct ps_prochandle *ph,
+ const struct target_desc *
+ arm_linux_nat_target::read_description ()
+ {
+-  CORE_ADDR arm_hwcap = 0;
++  CORE_ADDR arm_hwcap = linux_get_hwcap (this);
+ 
+   if (have_ptrace_getregset == TRIBOOL_UNKNOWN)
+     {
+@@ -551,11 +551,6 @@ arm_linux_nat_target::read_description ()
+ 	have_ptrace_getregset = TRIBOOL_TRUE;
+     }
+ 
+-  if (target_auxv_search (this, AT_HWCAP, &arm_hwcap) != 1)
+-    {
+-      return this->beneath ()->read_description ();
+-    }
+-
+   if (arm_hwcap & HWCAP_IWMMXT)
+     return tdesc_arm_with_iwmmxt;
+ 
+diff --git a/gdb/arm-linux-tdep.c b/gdb/arm-linux-tdep.c
+--- a/gdb/arm-linux-tdep.c
++++ b/gdb/arm-linux-tdep.c
+@@ -730,10 +730,7 @@ arm_linux_core_read_description (struct gdbarch *gdbarch,
+                                  struct target_ops *target,
+                                  bfd *abfd)
+ {
+-  CORE_ADDR arm_hwcap = 0;
+-
+-  if (target_auxv_search (target, AT_HWCAP, &arm_hwcap) != 1)
+-    return NULL;
++  CORE_ADDR arm_hwcap = linux_get_hwcap (target);
+ 
+   if (arm_hwcap & HWCAP_VFP)
+     {
+diff --git a/gdb/linux-tdep.c b/gdb/linux-tdep.c
+--- a/gdb/linux-tdep.c
++++ b/gdb/linux-tdep.c
+@@ -2567,6 +2567,28 @@ linux_displaced_step_location (struct gdbarch *gdbarch)
+   return addr;
+ }
+ 
++/* See linux-tdep.h.  */
++
++CORE_ADDR
++linux_get_hwcap (struct target_ops *target)
++{
++  CORE_ADDR field;
++  if (target_auxv_search (target, AT_HWCAP, &field) != 1)
++    return 0;
++  return field;
++}
++
++/* See linux-tdep.h.  */
++
++CORE_ADDR
++linux_get_hwcap2 (struct target_ops *target)
++{
++  CORE_ADDR field;
++  if (target_auxv_search (target, AT_HWCAP2, &field) != 1)
++    return 0;
++  return field;
++}
++
+ /* Display whether the gcore command is using the
+    /proc/PID/coredump_filter file.  */
+ 
+diff --git a/gdb/linux-tdep.h b/gdb/linux-tdep.h
+--- a/gdb/linux-tdep.h
++++ b/gdb/linux-tdep.h
+@@ -61,4 +61,12 @@ extern void linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch);
+ 
+ extern int linux_is_uclinux (void);
+ 
++/* Fetch the AT_HWCAP entry from the auxv vector for the given TARGET.  On
++   error, 0 is returned.  */
++extern CORE_ADDR linux_get_hwcap (struct target_ops *target);
++
++/* Fetch the AT_HWCAP2 entry from the auxv vector for the given TARGET.  On
++   error, 0 is returned.  */
++extern CORE_ADDR linux_get_hwcap2 (struct target_ops *target);
++
+ #endif /* linux-tdep.h */
+diff --git a/gdb/ppc-linux-nat.c b/gdb/ppc-linux-nat.c
+--- a/gdb/ppc-linux-nat.c
++++ b/gdb/ppc-linux-nat.c
+@@ -50,6 +50,7 @@
+ #include "arch/ppc-linux-common.h"
+ #include "arch/ppc-linux-tdesc.h"
+ #include "nat/ppc-linux.h"
++#include "linux-tdep.h"
+ 
+ /* Similarly for the hardware watchpoint support.  These requests are used
+    when the PowerPC HWDEBUG ptrace interface is not available.  */
+@@ -1560,31 +1561,6 @@ store_ppc_registers (const struct regcache *regcache, int tid)
+      function to fail most of the time, so we ignore them.  */
+ }
+ 
+-/* Fetch the AT_HWCAP entry from the aux vector.  */
+-static CORE_ADDR
+-ppc_linux_get_hwcap (void)
+-{
+-  CORE_ADDR field;
+-
+-  if (target_auxv_search (current_top_target (), AT_HWCAP, &field) != 1)
+-    return 0;
+-
+-  return field;
+-}
+-
+-/* Fetch the AT_HWCAP2 entry from the aux vector.  */
+-
+-static CORE_ADDR
+-ppc_linux_get_hwcap2 (void)
+-{
+-  CORE_ADDR field;
+-
+-  if (target_auxv_search (current_top_target (), AT_HWCAP2, &field) != 1)
+-    return 0;
+-
+-  return field;
+-}
+-
+ /* The cached DABR value, to install in new threads.
+    This variable is used when the PowerPC HWDEBUG ptrace
+    interface is not available.  */
+@@ -1741,7 +1717,7 @@ ppc_linux_nat_target::region_ok_for_hw_watchpoint (CORE_ADDR addr, LONGEST len)
+          takes two hardware watchpoints though.  */
+       if (len > 1
+ 	  && hwdebug_info.features & PPC_DEBUG_FEATURE_DATA_BP_RANGE
+-	  && ppc_linux_get_hwcap () & PPC_FEATURE_BOOKE)
++	  && linux_get_hwcap (current_top_target ()) & PPC_FEATURE_BOOKE)
+ 	return 2;
+       /* Check if the processor provides DAWR interface.  */
+       if (hwdebug_info.features & PPC_DEBUG_FEATURE_DATA_BP_DAWR)
+@@ -1761,7 +1737,7 @@ ppc_linux_nat_target::region_ok_for_hw_watchpoint (CORE_ADDR addr, LONGEST len)
+      ptrace interface, DAC-based processors (i.e., embedded processors) will
+      use addresses aligned to 4-bytes due to the way the read/write flags are
+      passed in the old ptrace interface.  */
+-  else if (((ppc_linux_get_hwcap () & PPC_FEATURE_BOOKE)
++  else if (((linux_get_hwcap (current_top_target ()) & PPC_FEATURE_BOOKE)
+ 	   && (addr + len) > (addr & ~3) + 4)
+ 	   || (addr + len) > (addr & ~7) + 8)
+     return 0;
+@@ -2303,7 +2279,7 @@ ppc_linux_nat_target::insert_watchpoint (CORE_ADDR addr, int len,
+       long dabr_value;
+       long read_mode, write_mode;
+ 
+-      if (ppc_linux_get_hwcap () & PPC_FEATURE_BOOKE)
++      if (linux_get_hwcap (current_top_target ()) & PPC_FEATURE_BOOKE)
+ 	{
+ 	  /* PowerPC 440 requires only the read/write flags to be passed
+ 	     to the kernel.  */
+@@ -2506,9 +2482,9 @@ ppc_linux_nat_target::watchpoint_addr_within_range (CORE_ADDR addr,
+   int mask;
+ 
+   if (have_ptrace_hwdebug_interface ()
+-      && ppc_linux_get_hwcap () & PPC_FEATURE_BOOKE)
++      && linux_get_hwcap (current_top_target ()) & PPC_FEATURE_BOOKE)
+     return start <= addr && start + length >= addr;
+-  else if (ppc_linux_get_hwcap () & PPC_FEATURE_BOOKE)
++  else if (linux_get_hwcap (current_top_target ()) & PPC_FEATURE_BOOKE)
+     mask = 3;
+   else
+     mask = 7;
+@@ -2646,8 +2622,8 @@ ppc_linux_nat_target::read_description ()
+ 
+   features.wordsize = ppc_linux_target_wordsize (tid);
+ 
+-  CORE_ADDR hwcap = ppc_linux_get_hwcap ();
+-  CORE_ADDR hwcap2 = ppc_linux_get_hwcap2 ();
++  CORE_ADDR hwcap = linux_get_hwcap (current_top_target ());
++  CORE_ADDR hwcap2 = linux_get_hwcap2 (current_top_target ());
+ 
+   if (have_ptrace_getsetvsxregs
+       && (hwcap & PPC_FEATURE_HAS_VSX))
+diff --git a/gdb/ppc-linux-tdep.c b/gdb/ppc-linux-tdep.c
+--- a/gdb/ppc-linux-tdep.c
++++ b/gdb/ppc-linux-tdep.c
+@@ -1602,10 +1602,7 @@ ppc_linux_core_read_description (struct gdbarch *gdbarch,
+   if (vsx)
+     features.vsx = true;
+ 
+-  CORE_ADDR hwcap;
+-
+-  if (target_auxv_search (target, AT_HWCAP, &hwcap) != 1)
+-    hwcap = 0;
++  CORE_ADDR hwcap = linux_get_hwcap (target);
+ 
+   features.isa205 = ppc_linux_has_isa205 (hwcap);
+ 
+diff --git a/gdb/s390-linux-nat.c b/gdb/s390-linux-nat.c
+--- a/gdb/s390-linux-nat.c
++++ b/gdb/s390-linux-nat.c
+@@ -42,6 +42,7 @@
+ #include <elf.h>
+ #include <algorithm>
+ #include "inf-ptrace.h"
++#include "linux-tdep.h"
+ 
+ /* Per-thread arch-specific data.  */
+ 
+@@ -1018,9 +1019,8 @@ s390_linux_nat_target::read_description ()
+      that mode, report s390 architecture with 64-bit GPRs.  */
+ #ifdef __s390x__
+   {
+-    CORE_ADDR hwcap = 0;
++    CORE_ADDR hwcap = linux_get_hwcap (current_top_target ());
+ 
+-    target_auxv_search (current_top_target (), AT_HWCAP, &hwcap);
+     have_regset_tdb = (hwcap & HWCAP_S390_TE)
+       && check_regset (tid, NT_S390_TDB, s390_sizeof_tdbregset);
+ 
+diff --git a/gdb/s390-linux-tdep.c b/gdb/s390-linux-tdep.c
+--- a/gdb/s390-linux-tdep.c
++++ b/gdb/s390-linux-tdep.c
+@@ -332,10 +332,9 @@ s390_core_read_description (struct gdbarch *gdbarch,
+ 			    struct target_ops *target, bfd *abfd)
+ {
+   asection *section = bfd_get_section_by_name (abfd, ".reg");
+-  CORE_ADDR hwcap = 0;
++  CORE_ADDR hwcap = linux_get_hwcap (target);
+   bool high_gprs, v1, v2, te, vx, gs;
+ 
+-  target_auxv_search (target, AT_HWCAP, &hwcap);
+   if (!section)
+     return NULL;
+ 

@@ -1,0 +1,114 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Mon, 27 Jul 2020 19:38:20 -0400
+Subject: gdb-rhbz1842691-corefile-mem-access-10of15.patch
+
+;; gcore command: Place all file-backed mappings in NT_FILE note
+;; Kevin Buettner, RH BZ 1842961
+
+   Author: Kevin Buettner <kevinb@redhat.com>
+   Date:   Wed Jul 1 06:34:50 2020 -0700
+
+    gcore command: Place all file-backed mappings in NT_FILE note
+
+    When making a core file with the GDB's gcore command on Linux,
+    the same criteria used for determining which mappings should be
+    dumped were also being used for determining which entries should
+    be placed in the NT_FILE note.  This is wrong; we want to place
+    all file-backed mappings in this note.
+
+    The predicate function, dump_mapping_p, was used to determine whether
+    or not to dump a mapping from within linux_find_memory_regions_full.
+    This commit leaves this predicate in place, but adds a new parameter,
+    should_dump_mapping_p, to linux_find_memory_regions_full.  It then
+    calls should_dump_mapping_p instead of dump_mapping_p.  dump_mapping_p
+    is passed to linux_find_memory_regions_full at one call site; at the
+    other call site, dump_note_entry_p is passed instead.
+
+    gdb/ChangeLog:
+
+    	* linux-tdep.c (dump_note_entry_p): New function.
+    	(linux_dump_mapping_p_ftype): New typedef.
+    	(linux_find_memory_regions_full): Add new parameter,
+    	should_dump_mapping_p.
+    	(linux_find_memory_regions): Adjust call to
+    	linux_find_memory_regions_full.
+    	(linux_make_mappings_core_file_notes): Use dump_note_entry_p in
+    	call to linux_find_memory_regions_full.
+
+diff --git a/gdb/linux-tdep.c b/gdb/linux-tdep.c
+--- a/gdb/linux-tdep.c
++++ b/gdb/linux-tdep.c
+@@ -710,6 +710,25 @@ dump_mapping_p (filter_flags filterflags, const struct smaps_vmflags *v,
+     }
+ }
+ 
++/* As above, but return true only when we should dump the NT_FILE
++   entry.  */
++
++static int
++dump_note_entry_p (filter_flags filterflags, const struct smaps_vmflags *v,
++		int maybe_private_p, int mapping_anon_p, int mapping_file_p,
++		const char *filename)
++{
++  /* vDSO and vsyscall mappings will end up in the core file.  Don't
++     put them in the NT_FILE note.  */
++  if (strcmp ("[vdso]", filename) == 0
++      || strcmp ("[vsyscall]", filename) == 0)
++    return 0;
++
++  /* Otherwise, any other file-based mapping should be placed in the
++     note.  */
++  return filename != nullptr;
++}
++
+ /* Implement the "info proc" command.  */
+ 
+ static void
+@@ -1224,10 +1243,18 @@ typedef int linux_find_memory_region_ftype (ULONGEST vaddr, ULONGEST size,
+ 					    const char *filename,
+ 					    void *data);
+ 
++typedef int linux_dump_mapping_p_ftype (filter_flags filterflags,
++					const struct smaps_vmflags *v,
++					int maybe_private_p,
++					int mapping_anon_p,
++					int mapping_file_p,
++					const char *filename);
++
+ /* List memory regions in the inferior for a corefile.  */
+ 
+ static int
+ linux_find_memory_regions_full (struct gdbarch *gdbarch,
++				linux_dump_mapping_p_ftype *should_dump_mapping_p,
+ 				linux_find_memory_region_ftype *func,
+ 				void *obfd)
+ {
+@@ -1378,7 +1405,7 @@ linux_find_memory_regions_full (struct gdbarch *gdbarch,
+ 	    }
+ 
+ 	  if (has_anonymous)
+-	    should_dump_p = dump_mapping_p (filterflags, &v, priv,
++	    should_dump_p = should_dump_mapping_p (filterflags, &v, priv,
+ 					    mapping_anon_p, mapping_file_p,
+ 					    filename);
+ 	  else
+@@ -1444,6 +1471,7 @@ linux_find_memory_regions (struct gdbarch *gdbarch,
+   data.obfd = obfd;
+ 
+   return linux_find_memory_regions_full (gdbarch,
++					 dump_mapping_p,
+ 					 linux_find_memory_regions_thunk,
+ 					 &data);
+ }
+@@ -1606,7 +1634,9 @@ linux_make_mappings_corefile_notes (struct gdbarch *gdbarch, bfd *obfd,
+   pack_long (buf, long_type, 1);
+   obstack_grow (&data_obstack, buf, TYPE_LENGTH (long_type));
+ 
+-  linux_find_memory_regions_full (gdbarch, linux_make_mappings_callback,
++  linux_find_memory_regions_full (gdbarch, 
++				  dump_note_entry_p,
++				  linux_make_mappings_callback,
+ 				  &mapping_data);
+ 
+   if (mapping_data.file_count != 0)

@@ -1,0 +1,573 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Wed, 2 Dec 2020 17:39:33 -0500
+Subject: gdb-rhbz1905701-DWARF-data_location.patch
+
+;; Backport "fortran dynamic type related fixes"
+;; Andrew Burgess (RH BZ 1905701)
+
+    commit e79eb02f2f09baecffb144bac6804f975065466f
+
+    gdb/fortran: resolve dynamic types when readjusting after an indirection
+
+    After dereferencing a pointer (in value_ind) or following a
+    reference (in coerce_ref) we call readjust_indirect_value_type to
+    "fixup" the type of the resulting value object.
+
+    This fixup handles cases relating to the type of the resulting object
+    being different (a sub-class) of the original pointers target type.
+
+    If we encounter a pointer to a dynamic type then after dereferencing a
+    pointer (in value_ind) the type of the object created will have had
+    its dynamic type resolved.  However, in readjust_indirect_value_type,
+    we use the target type of the original pointer to "fixup" the type of
+    the resulting value.  In this case, the target type will be a dynamic
+    type, so the resulting value object, once again has a dynamic type.
+
+    This then triggers an assertion later within GDB.
+
+    The solution I propose here is that we call resolve_dynamic_type on
+    the pointer's target type (within readjust_indirect_value_type) so
+    that the resulting value is not converted back to a dynamic type.
+
+    The test case is based on the original test in the bug report.
+
+    gdb/ChangeLog:
+
+            PR fortran/23051
+            PR fortran/26139
+            * valops.c (value_ind): Pass address to
+            readjust_indirect_value_type.
+            * value.c (readjust_indirect_value_type): Make parameter
+            non-const, and add extra address parameter.  Resolve original type
+            before using it.
+            * value.h (readjust_indirect_value_type): Update function
+            signature and comment.
+
+    gdb/testsuite/ChangeLog:
+
+            PR fortran/23051
+            PR fortran/26139
+            * gdb.fortran/class-allocatable-array.exp: New file.
+            * gdb.fortran/class-allocatable-array.f90: New file.
+            * gdb.fortran/pointer-to-pointer.exp: New file.
+            * gdb.fortran/pointer-to-pointer.f90: New file.
+
+diff --git a/gdb/testsuite/gdb.dwarf2/graalvm-data-loc2.c b/gdb/testsuite/gdb.dwarf2/graalvm-data-loc2.c
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.dwarf2/graalvm-data-loc2.c
+@@ -0,0 +1,63 @@
++/* Copyright 2014-2020 Free Software Foundation, Inc.
++
++   This file is part of GDB.
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
++
++/* This C file simulates the implementation of object pointers in
++   GraalVM Java native images where the object data is not addressed
++   directly. It serves as a regression test for a bug where printing
++   of such redirected data structures suffers from a gdb exception.
++
++   Debugging information on how to decode an object pointer to
++   identify the address of the underlying data will be generated
++   separately by the testcase using that file. */
++
++#include <stdlib.h>
++#include <string.h>
++
++struct Object {
++  struct Object *next;
++  int val;
++};
++
++struct Object *testOop;
++
++extern int debugMe() {
++  return 0;
++}
++
++struct Object *newObject() {
++  char *bytes = malloc(sizeof(struct Object));
++  return (struct Object *)bytes;
++}
++
++int
++main (void)
++{
++  struct Object *obj1 = newObject();
++  struct Object *obj2 = newObject();
++  struct Object *obj3 = newObject();
++  obj1->val = 0;
++  obj2->val = 1;
++  obj3->val = 2;
++
++  obj1->next = obj2;
++  obj2->next = obj3;
++  obj3->next = obj1;
++
++  testOop = obj1;
++
++  return debugMe();
++}
+diff --git a/gdb/testsuite/gdb.dwarf2/graalvm-data-loc2.exp b/gdb/testsuite/gdb.dwarf2/graalvm-data-loc2.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.dwarf2/graalvm-data-loc2.exp
+@@ -0,0 +1,122 @@
++# Copyright 2014-2020 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++load_lib dwarf.exp
++
++# This test can only be run on targets which support DWARF-2 and use gas.
++if {![dwarf2_support]} {
++    return 0
++}
++
++standard_testfile .c -dw.S
++
++if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile}] } {
++    return -1
++}
++
++# Make some DWARF for the test.
++set asm_file [standard_output_file $srcfile2]
++Dwarf::assemble $asm_file {
++    
++    cu {} {
++ 	DW_TAG_compile_unit {
++                {DW_AT_language @DW_LANG_C99}
++                {DW_AT_name     data-loc2.c}
++                {DW_AT_comp_dir /tmp}
++        } {
++            declare_labels integer_label struct_label pointer_label
++
++            integer_label: DW_TAG_base_type {
++                {DW_AT_byte_size 4 DW_FORM_sdata}
++                {DW_AT_encoding  @DW_ATE_signed}
++                {DW_AT_name      integer}
++            }
++
++	    struct_label: DW_TAG_structure_type {
++		{DW_AT_name "Object"}
++		{DW_AT_byte_size 20 DW_FORM_sdata}
++                {DW_AT_data_location {
++                    DW_OP_push_object_address
++                } SPECIAL_expr}
++	    } {
++		member {
++		    {name next}
++		    {type :$pointer_label}
++		    {data_member_location 0 data1}
++		}
++		member {
++		    {name val}
++		    {type :$integer_label}
++		    {data_member_location 8 data1}
++		}
++	    }
++	    pointer_label: DW_TAG_pointer_type {
++		{DW_AT_byte_size 4 DW_FORM_sdata}
++		{DW_AT_type  :$struct_label}
++	    }
++            DW_TAG_variable {
++                {DW_AT_name testOop}
++                {DW_AT_type :$pointer_label}
++                {DW_AT_location {
++                    DW_OP_addr [gdb_target_symbol testOop]
++                } SPECIAL_expr}
++                {external 1 flag}
++            }
++	}
++    }
++}
++
++# Now that we've generated the DWARF debugging info, rebuild our
++# program using our debug info instead of the info generated by
++# the compiler.
++
++if { [prepare_for_testing "failed to prepare" ${testfile} \
++	  [list $srcfile $asm_file] {nodebug}] } {
++    return -1
++}
++
++if ![runto_main] {
++    return -1
++}
++
++# ensure the object network is set up as expected and check that
++# printing of structs which employ the data_location does not
++# fail with a gdb exception
++
++gdb_test "break debugMe" \
++         "Breakpoint .*" \
++         "set breakpoint at debugMe"
++
++gdb_continue_to_breakpoint "continue to debugMe"
++
++gdb_test "print testOop->val" \
++         ".* = 0"
++
++gdb_test "print testOop->next->val" \
++         ".* = 1"
++
++gdb_test "print testOop->next->next->val" \
++         ".* = 2"
++
++gdb_test "print *testOop" \
++    ".* = {next = .*, val = 0}" \
++    "print contents of struct"
++
++gdb_test "print *testOop->next" \
++    ".* = {next = .*, val = 1}" \
++    "print contents of an indirect struct"
++
++gdb_test "print *testOop->next->next" \
++    ".* = {next = .*, val = 2}" \
++    "print contents of a double indirect struct"
+diff --git a/gdb/testsuite/gdb.fortran/class-allocatable-array.exp b/gdb/testsuite/gdb.fortran/class-allocatable-array.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.fortran/class-allocatable-array.exp
+@@ -0,0 +1,43 @@
++# Copyright 2020 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/> .
++
++# Test that GDB can print an allocatable array that is a data field
++# within a class like type.
++
++if {[skip_fortran_tests]} { return -1 }
++
++standard_testfile ".f90"
++load_lib fortran.exp
++
++if {[prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} \
++	 {debug f90}]} {
++    return -1
++}
++
++if {![runto MAIN__]} {
++    untested main"could not run to main"
++    return -1
++}
++
++gdb_breakpoint [gdb_get_line_number "Break Here"]
++gdb_continue_to_breakpoint "Break Here"
++
++# If this first test fails then the Fortran compiler being used uses
++# different names, or maybe a completely different approach, for
++# representing class like structures.  The following tests are
++# cetainly going to fail.
++gdb_test "print this" " = \\( _data = \[^\r\n\]+, _vptr = \[^\r\n\]+\\)"
++gdb_test "print this%_data" " = \\(PTR TO -> \\( Type test_type \\)\\) \[^\r\n\]+"
++gdb_test "print this%_data%b" " = \\(\\( 1, 2, 3\\) \\( 4, 5, 6\\) \\)"
+diff --git a/gdb/testsuite/gdb.fortran/class-allocatable-array.f90 b/gdb/testsuite/gdb.fortran/class-allocatable-array.f90
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.fortran/class-allocatable-array.f90
+@@ -0,0 +1,54 @@
++! Copyright 2020 Free Software Foundation, Inc.
++!
++! This program is free software; you can redistribute it and/or modify
++! it under the terms of the GNU General Public License as published by
++! the Free Software Foundation; either version 3 of the License, or
++! (at your option) any later version.
++!
++! This program is distributed in the hope that it will be useful,
++! but WITHOUT ANY WARRANTY; without even the implied warranty of
++! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++! GNU General Public License for more details.
++!
++! You should have received a copy of the GNU General Public License
++! along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++module test_module
++  type test_type
++     integer a
++     real, allocatable :: b (:, :)
++   contains
++     procedure :: test_proc
++  end type test_type
++
++contains
++
++  subroutine test_proc (this)
++    class(test_type), intent (inout) :: this
++    allocate (this%b (3, 2))
++    call fill_array_2d (this%b)
++    print *, ""		! Break Here
++  contains
++    ! Helper subroutine to fill 2-dimensional array with unique
++    ! values.
++    subroutine fill_array_2d (array)
++      real, dimension (:,:) :: array
++      real :: counter
++
++      counter = 1.0
++      do i=LBOUND (array, 2), UBOUND (array, 2), 1
++         do j=LBOUND (array, 1), UBOUND (array, 1), 1
++            array (j,i) = counter
++            counter = counter + 1
++         end do
++      end do
++    end subroutine fill_array_2d
++  end subroutine test_proc
++end module
++
++program test
++  use test_module
++  implicit none
++  type(test_type) :: t
++  call t%test_proc ()
++end program test
+diff --git a/gdb/testsuite/gdb.fortran/pointer-to-pointer.exp b/gdb/testsuite/gdb.fortran/pointer-to-pointer.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.fortran/pointer-to-pointer.exp
+@@ -0,0 +1,46 @@
++# Copyright 2020 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/> .
++
++# Test for GDB printing a pointer to a type containing a buffer.
++
++if {[skip_fortran_tests]} { return -1 }
++
++standard_testfile ".f90"
++load_lib fortran.exp
++
++if {[prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} \
++	 {debug f90}]} {
++    return -1
++}
++
++if {![runto MAIN__]} {
++    untested "could not run to main"
++    return -1
++}
++
++gdb_breakpoint [gdb_get_line_number "Break Here"]
++gdb_continue_to_breakpoint "Break Here"
++
++gdb_test "print *buffer" \
++    " = \\( alpha = \\(1\\.5, 2\\.5, 3\\.5, 4\\.5, 5\\.5\\) \\)"
++
++set l_buffer_type [multi_line \
++		       "Type l_buffer" \
++		       "    real\\(kind=4\\) :: alpha\\(.\\)" \
++		       "End Type l_buffer" ]
++
++gdb_test "ptype buffer" "type = PTR TO -> \\( ${l_buffer_type} \\)"
++gdb_test "ptype *buffer" "type = ${l_buffer_type}"
++gdb_test "ptype buffer%alpha" "type = real\\(kind=4\\) \\(5\\)"
+diff --git a/gdb/testsuite/gdb.fortran/pointer-to-pointer.f90 b/gdb/testsuite/gdb.fortran/pointer-to-pointer.f90
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.fortran/pointer-to-pointer.f90
+@@ -0,0 +1,34 @@
++! Copyright 2020 Free Software Foundation, Inc.
++!
++! This program is free software; you can redistribute it and/or modify
++! it under the terms of the GNU General Public License as published by
++! the Free Software Foundation; either version 3 of the License, or
++! (at your option) any later version.
++!
++! This program is distributed in the hope that it will be useful,
++! but WITHOUT ANY WARRANTY; without even the implied warranty of
++! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++! GNU General Public License for more details.
++!
++! You should have received a copy of the GNU General Public License
++! along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++program allocate_array
++
++  type l_buffer
++     real, dimension(:), pointer :: alpha
++  end type l_buffer
++  type(l_buffer), pointer :: buffer
++
++  allocate (buffer)
++  allocate (buffer%alpha (5))
++
++  buffer%alpha (1) = 1.5
++  buffer%alpha (2) = 2.5
++  buffer%alpha (3) = 3.5
++  buffer%alpha (4) = 4.5
++  buffer%alpha (5) = 5.5
++
++  print *, buffer%alpha	! Break Here.
++
++end program allocate_array
+diff --git a/gdb/valops.c b/gdb/valops.c
+--- a/gdb/valops.c
++++ b/gdb/valops.c
+@@ -1573,42 +1573,34 @@ value_ind (struct value *arg1)
+   if (TYPE_CODE (base_type) == TYPE_CODE_PTR)
+     {
+       struct type *enc_type;
+-      CORE_ADDR addr;
+-
+-      if (type_not_associated (base_type))
+-        error (_("Attempt to take contents of a not associated pointer."));
+-
+-      if (NULL != TYPE_DATA_LOCATION (TYPE_TARGET_TYPE (base_type)))
+-	addr = value_address (arg1);
+-      else
+-	addr = value_as_address (arg1);
+-
+-      if (addr != 0)
+-	TYPE_TARGET_TYPE (base_type) =
+-	    resolve_dynamic_type (TYPE_TARGET_TYPE (base_type), NULL, addr);
+ 
+       /* We may be pointing to something embedded in a larger object.
+          Get the real type of the enclosing object.  */
+       enc_type = check_typedef (value_enclosing_type (arg1));
+       enc_type = TYPE_TARGET_TYPE (enc_type);
+ 
++      CORE_ADDR base_addr;
+       if (TYPE_CODE (check_typedef (enc_type)) == TYPE_CODE_FUNC
+ 	  || TYPE_CODE (check_typedef (enc_type)) == TYPE_CODE_METHOD)
+-	/* For functions, go through find_function_addr, which knows
+-	   how to handle function descriptors.  */
+-	arg2 = value_at_lazy (enc_type, 
+-			      find_function_addr (arg1, NULL));
++	{
++	  /* For functions, go through find_function_addr, which knows
++	     how to handle function descriptors.  */
++	  base_addr = find_function_addr (arg1, NULL);
++	}
+       else
+-	/* Retrieve the enclosing object pointed to.  */
+-	arg2 = value_at_lazy (enc_type, 
+-			      (addr - value_pointed_to_offset (arg1)));
++	{
++	  /* Retrieve the enclosing object pointed to.  */
++	  base_addr = (value_as_address (arg1)
++		       - value_pointed_to_offset (arg1));
++	}
+ 
++      arg2 = value_at_lazy (enc_type, base_addr);
+       enc_type = value_type (arg2);
+-      return readjust_indirect_value_type (arg2, enc_type, base_type, arg1);
++      return readjust_indirect_value_type (arg2, enc_type, base_type,
++					   arg1, base_addr);
+     }
+ 
+   error (_("Attempt to take contents of a non-pointer value."));
+-  return 0;			/* For lint -- never reached.  */
+ }
+ 
+ /* Create a value for an array by allocating space in GDB, copying the
+diff --git a/gdb/value.c b/gdb/value.c
+--- a/gdb/value.c
++++ b/gdb/value.c
+@@ -3611,10 +3611,19 @@ coerce_ref_if_computed (const struct value *arg)
+ struct value *
+ readjust_indirect_value_type (struct value *value, struct type *enc_type,
+ 			      const struct type *original_type,
+-			      const struct value *original_value)
++			      struct value *original_value,
++			      CORE_ADDR original_value_address)
+ {
++  gdb_assert (TYPE_CODE (original_type) == TYPE_CODE_PTR
++	      || TYPE_IS_REFERENCE (original_type));
++
++  struct type *original_target_type = TYPE_TARGET_TYPE (original_type);
++  struct type *resolved_original_target_type
++    = resolve_dynamic_type (original_target_type, NULL,
++			    original_value_address);
++
+   /* Re-adjust type.  */
+-  deprecated_set_value_type (value, TYPE_TARGET_TYPE (original_type));
++  deprecated_set_value_type (value, resolved_original_target_type);
+ 
+   /* Add embedding info.  */
+   set_value_enclosing_type (value, enc_type);
+@@ -3641,12 +3650,11 @@ coerce_ref (struct value *arg)
+   enc_type = check_typedef (value_enclosing_type (arg));
+   enc_type = TYPE_TARGET_TYPE (enc_type);
+ 
+-  retval = value_at_lazy (enc_type,
+-                          unpack_pointer (value_type (arg),
+-                                          value_contents (arg)));
++  CORE_ADDR addr = unpack_pointer (value_type (arg), value_contents (arg));
++  retval = value_at_lazy (enc_type, addr);
+   enc_type = value_type (retval);
+-  return readjust_indirect_value_type (retval, enc_type,
+-                                       value_type_arg_tmp, arg);
++  return readjust_indirect_value_type (retval, enc_type, value_type_arg_tmp,
++				       arg, addr);
+ }
+ 
+ struct value *
+diff --git a/gdb/value.h b/gdb/value.h
+--- a/gdb/value.h
++++ b/gdb/value.h
+@@ -487,7 +487,9 @@ extern struct value *coerce_ref_if_computed (const struct value *arg);
+ 
+ /* Setup a new value type and enclosing value type for dereferenced value VALUE.
+    ENC_TYPE is the new enclosing type that should be set.  ORIGINAL_TYPE and
+-   ORIGINAL_VAL are the type and value of the original reference or pointer.
++   ORIGINAL_VAL are the type and value of the original reference or
++   pointer.  ORIGINAL_VALUE_ADDRESS is the address within VALUE, that is
++   the address that was dereferenced.
+ 
+    Note, that VALUE is modified by this function.
+ 
+@@ -496,7 +498,8 @@ extern struct value *coerce_ref_if_computed (const struct value *arg);
+ extern struct value * readjust_indirect_value_type (struct value *value,
+ 						    struct type *enc_type,
+ 						    const struct type *original_type,
+-						    const struct value *original_val);
++						    struct value *original_val,
++						    CORE_ADDR original_value_address);
+ 
+ /* Convert a REF to the object referenced.  */
+ 

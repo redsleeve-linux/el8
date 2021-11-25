@@ -1,0 +1,86 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Pedro Franco de Carvalho <pedromfc@linux.ibm.com>
+Date: Wed, 7 Jul 2021 19:05:04 -0400
+Subject: gdb-rhbz1854784-powerpc-remove-region-limit-dawr-6of7.patch
+
+;; Backport "[PowerPC] Always clear watchpoint with PTRACE_SET_DEBUGREG"
+;; (Pedro Franco de Carvalho, RH BZ 1854784)
+
+This patches changes low_prepare_to_resume in the ppc linux native target
+to always clear the watchpoint when the old PTRACE_SET_DEBUGREG interface
+is used, even if another watchpoint GDB requested to the target is
+written right after using the same call.
+
+The reason for this is that there were some older kernel versions for
+which overwriting a watchpoint with PTRACE_SET_DEBUGREG would not
+re-activate the watchpoint if it was previouly disabled following a hit.
+This happened when the kernel was configured with CONFIG_HW_BREAKPOINT on
+and uses perf events to install watchpoints.
+
+Previously, the ppc linux native target would immediately remove or
+insert watchpoints following a request from the upper layers.  This was
+changed in commit 227c0bf4b3dd0cf65dceb58e729e9da81b38b5a7 to fix other
+issues, which caused watchpoint requests to be applied to the inferior
+only in low_prepare_to_resume, right before the inferior is resumed.
+
+Usually, but maybe not always, after a hit, GDB will remove the
+watchpoint, resume the inferior for a single-step, possibly report the
+watchpoint hit to the user, and then re-insert the watchpoint before the
+inferior is next resumed.  In this case there would be no problems, but
+since I can't guarantee that there aren't other paths in GDB that allow
+the user to set a new watchpoint after the first one hit, and after its
+deletion by GDB, but before the inferior is resumed, there is a chance
+that PTRACE_SET_DEBUGREG could be called directly without the watchpoint
+first having been cleared, which could cause a false negative with the
+older kernel versions.
+
+This issue would affect kernel versions starting from this commit:
+
+5aae8a53708025d4e718f0d2e7c2f766779ddc71
+
+Up to the fix in this commit:
+
+a53fd61ac2f411745471c1c877d5e072fbbf0e5c
+
+gdb/ChangeLog:
+
+	PR breakpoints/26385
+	* ppc-linux-nat.c (ppc_linux_nat_target::low_prepare_to_resume):
+	Always clear watchpoint with PTRACE_SET_DEBUGREG.
+
+diff --git a/gdb/ppc-linux-nat.c b/gdb/ppc-linux-nat.c
+--- a/gdb/ppc-linux-nat.c
++++ b/gdb/ppc-linux-nat.c
+@@ -2922,20 +2922,23 @@ ppc_linux_nat_target::low_prepare_to_resume (struct lwp_info *lp)
+     {
+       gdb_assert (m_dreg_interface.debugreg_p ());
+ 
+-      /* Passing 0 to PTRACE_SET_DEBUGREG will clear the
+-	 watchpoint.  */
+-      long wp = 0;
++      /* Passing 0 to PTRACE_SET_DEBUGREG will clear the watchpoint.  We
++	 always clear the watchpoint instead of just overwriting it, in
++	 case there is a request for a new watchpoint, because on some
++	 older kernel versions and configurations simply overwriting the
++	 watchpoint after it was hit would not re-enable it.  */
++      if (ptrace (PTRACE_SET_DEBUGREG, lp->ptid.lwp (), 0, 0) < 0)
++	perror_with_name (_("Error clearing hardware watchpoint"));
+ 
+       /* GDB requested a watchpoint to be installed.  */
+       if (process_it != m_process_info.end ()
+ 	  && process_it->second.requested_wp_val.has_value ())
+-	wp = *(process_it->second.requested_wp_val);
+-
+-      long ret = ptrace (PTRACE_SET_DEBUGREG, lp->ptid.lwp (),
+-			 0, wp);
++	{
++	  long wp = *(process_it->second.requested_wp_val);
+ 
+-      if (ret < 0)
+-	perror_with_name (_("Error setting hardware watchpoint"));
++	  if (ptrace (PTRACE_SET_DEBUGREG, lp->ptid.lwp (), 0, wp) < 0)
++	    perror_with_name (_("Error setting hardware watchpoint"));
++	}
+     }
+ 
+   lp_arch_info->debug_regs_stale = false;

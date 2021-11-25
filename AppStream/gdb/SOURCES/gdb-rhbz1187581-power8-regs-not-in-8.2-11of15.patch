@@ -1,0 +1,1654 @@
+From FEDORA_PATCHES Mon Sep 17 00:00:00 2001
+From: Keith Seitz <keiths@redhat.com>
+Date: Fri, 11 Jan 2019 17:02:17 -0500
+Subject: gdb-rhbz1187581-power8-regs-not-in-8.2-11of15.patch
+
+;; [PowerPC] Add support for TAR
+;; Edjunior Barbosa Machado and Pedro Franco de Carvalho, RH BZ 1187581
+
+[PowerPC] Add support for TAR
+
+This patch adds support for the Target Address Register for powerpc
+linux native and core file targets, and in the powerpc linux server
+stub.
+
+gdb/ChangeLog:
+2018-10-26  Edjunior Barbosa Machado  <emachado@linux.vnet.ibm.com>
+        Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * arch/ppc-linux-tdesc.h (tdesc_powerpc_isa207_vsx32l)
+    (tdesc_powerpc_isa207_vsx64l): Declare.
+    * arch/ppc-linux-common.h (PPC_LINUX_SIZEOF_TARREGSET): Define.
+    (struct ppc_linux_features) <isa207>: New field.
+    (ppc_linux_no_features): Add initializer for isa207 field.
+    * arch/ppc-linux-common.c (ppc_linux_match_description): Return
+    new tdescs.
+    * nat/ppc-linux.h (PPC_FEATURE2_ARCH_2_07, PPC_FEATURE2_TAR)
+    (NT_PPC_TAR): Define if not already defined.
+    * features/Makefile (WHICH): Add rs6000/powerpc-isa207-vsx32l and
+    rs6000/powerpc-isa207-vsx64l.
+    (XMLTOC): Add rs6000/powerpc-isa207-vsx32l.xml and
+    rs6000/powerpc-isa207-vsx64l.xml.
+    * features/rs6000/power-tar.xml: New file.
+    * features/rs6000/powerpc-isa207-vsx32l.xml: New file.
+    * features/rs6000/powerpc-isa207-vsx64l.xml: New file.
+    * features/rs6000/powerpc-isa207-vsx32l.c: Generate.
+    * features/rs6000/powerpc-isa207-vsx64l.c: Generate.
+    * regformats/rs6000/powerpc-isa207-vsx32l.dat: Generate.
+    * regformats/rs6000/powerpc-isa207-vsx64l.dat: Generate.
+    * ppc-linux-nat.c (fetch_register, fetch_ppc_registers): Call
+    fetch_regset with the TAR regset.
+    (store_register, store_ppc_registers): Call store_regset with the
+    TAR regset.
+    (ppc_linux_nat_target::read_description): Set isa207 field in the
+    features struct if needed.
+    * ppc-linux-tdep.c: Include
+    features/rs6000/powerpc-isa207-vsx32l.c and
+    features/rs6000/powerpc-isa207-vsx64l.c.
+    (ppc32_regmap_tar, ppc32_linux_tarregset): New globals.
+    (ppc_linux_iterate_over_regset_sections): Call back with the tar
+    regset.
+    (ppc_linux_core_read_description): Check if the tar section is
+    present and set isa207 in the features struct.
+    (_initialize_ppc_linux_tdep): Call
+    initialize_tdesc_powerpc_isa207_vsx32l and
+    initialize_tdesc_powerpc_isa207_vsx64l.
+    * ppc-linux-tdep.h (ppc32_linux_tarregset): Declare.
+    * ppc-tdep.h (gdbarch_tdep) <ppc_tar_regnum>: New field.
+    (enum) <PPC_TAR_REGNUM>: New enum value.
+    * rs6000-tdep.c (rs6000_gdbarch_init): Look for and validate tar
+    feature.
+    (ppc_process_record_op31): Record changes to TAR.
+
+gdb/gdbserver/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * configure.srv (ipa_ppc_linux_regobj): Add
+    powerpc-isa207-vsx64l-ipa.o and powerpc-isa207-vsx32l-ipa.o.
+    (powerpc*-*-linux*): Add powerpc-isa207-vsx32l.o and
+    powerpc-isa207-vsx64l.o to srv_regobj, add rs6000/power-tar.xml,
+    rs6000/powerpc-isa207-vsx32l.xml, and
+    rs6000/powerpc-isa207-vsx64l.xml to srv_xmlfiles.
+    * linux-ppc-tdesc-init.h (enum ppc_linux_tdesc)
+    <PPC_TDESC_ISA207_VSX>: New enum value.
+    (init_registers_powerpc_isa207_vsx32l): Declare.
+    (init_registers_powerpc_isa207_vsx64l): Declare.
+    * linux-ppc-low.c (ppc_fill_tarregset): New function.
+    (ppc_store_tarregset): New function.
+    (ppc_regsets): Add entry for the TAR regset.
+    (ppc_arch_setup): Set isa207 in features struct when needed.  Set
+    size for the TAR regsets.
+    (ppc_get_ipa_tdesc_idx): Return PPC_TDESC_ISA207_VSX.
+    (initialize_low_arch): Call init_registers_powerpc_isa207_vsx32l
+    and init_registers_powerpc_isa207_vsx64l.
+    * linux-ppc-ipa.c (get_ipa_tdesc): Handle PPC_TDESC_ISA207_VSX.
+    (initialize_low_tracepoint): Call
+    init_registers_powerpc_isa207_vsx32l and
+    init_registers_powerpc_isa207_vsx64l.
+
+gdb/testsuite/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * gdb.arch/powerpc-tar.c: New file.
+    * gdb.arch/powerpc-tar.exp: New file.
+
+gdb/doc/ChangeLog:
+2018-10-26  Pedro Franco de Carvalho  <pedromfc@linux.ibm.com>
+
+    * gdb.texinfo (PowerPC Features): Describe new feature
+    "org.gnu.gdb.power.tar".
+
+diff --git a/gdb/arch/ppc-linux-common.c b/gdb/arch/ppc-linux-common.c
+--- a/gdb/arch/ppc-linux-common.c
++++ b/gdb/arch/ppc-linux-common.c
+@@ -53,7 +53,8 @@ ppc_linux_match_description (struct ppc_linux_features features)
+       if (features.cell)
+ 	tdesc = tdesc_powerpc_cell64l;
+       else if (features.vsx)
+-	tdesc = (features.ppr_dscr? tdesc_powerpc_isa205_ppr_dscr_vsx64l
++	tdesc = (features.isa207? tdesc_powerpc_isa207_vsx64l
++		 : features.ppr_dscr? tdesc_powerpc_isa205_ppr_dscr_vsx64l
+ 		 : features.isa205? tdesc_powerpc_isa205_vsx64l
+ 		 : tdesc_powerpc_vsx64l);
+       else if (features.altivec)
+@@ -70,7 +71,8 @@ ppc_linux_match_description (struct ppc_linux_features features)
+       if (features.cell)
+ 	tdesc = tdesc_powerpc_cell32l;
+       else if (features.vsx)
+-	tdesc = (features.ppr_dscr? tdesc_powerpc_isa205_ppr_dscr_vsx32l
++	tdesc = (features.isa207? tdesc_powerpc_isa207_vsx32l
++		 : features.ppr_dscr? tdesc_powerpc_isa205_ppr_dscr_vsx32l
+ 		 : features.isa205? tdesc_powerpc_isa205_vsx32l
+ 		 : tdesc_powerpc_vsx32l);
+       else if (features.altivec)
+diff --git a/gdb/arch/ppc-linux-common.h b/gdb/arch/ppc-linux-common.h
+--- a/gdb/arch/ppc-linux-common.h
++++ b/gdb/arch/ppc-linux-common.h
+@@ -32,6 +32,7 @@ struct target_desc;
+ #define PPC_LINUX_SIZEOF_VSXREGSET 256
+ #define PPC_LINUX_SIZEOF_PPRREGSET 8
+ #define PPC_LINUX_SIZEOF_DSCRREGSET 8
++#define PPC_LINUX_SIZEOF_TARREGSET 8
+ 
+ /* Check if the hwcap auxv entry indicates that isa205 is supported.  */
+ bool ppc_linux_has_isa205 (CORE_ADDR hwcap);
+@@ -44,6 +45,7 @@ struct ppc_linux_features
+   bool vsx;
+   bool isa205;
+   bool ppr_dscr;
++  bool isa207;
+   bool cell;
+ };
+ 
+@@ -55,6 +57,7 @@ const struct ppc_linux_features ppc_linux_no_features = {
+   false,
+   false,
+   false,
++  false,
+ };
+ 
+ /* Return a target description that matches FEATURES.  */
+diff --git a/gdb/arch/ppc-linux-tdesc.h b/gdb/arch/ppc-linux-tdesc.h
+--- a/gdb/arch/ppc-linux-tdesc.h
++++ b/gdb/arch/ppc-linux-tdesc.h
+@@ -30,6 +30,7 @@ extern struct target_desc *tdesc_powerpc_isa205_32l;
+ extern struct target_desc *tdesc_powerpc_isa205_altivec32l;
+ extern struct target_desc *tdesc_powerpc_isa205_vsx32l;
+ extern struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx32l;
++extern struct target_desc *tdesc_powerpc_isa207_vsx32l;
+ extern struct target_desc *tdesc_powerpc_e500l;
+ 
+ extern struct target_desc *tdesc_powerpc_64l;
+@@ -40,5 +41,6 @@ extern struct target_desc *tdesc_powerpc_isa205_64l;
+ extern struct target_desc *tdesc_powerpc_isa205_altivec64l;
+ extern struct target_desc *tdesc_powerpc_isa205_vsx64l;
+ extern struct target_desc *tdesc_powerpc_isa205_ppr_dscr_vsx64l;
++extern struct target_desc *tdesc_powerpc_isa207_vsx64l;
+ 
+ #endif /* ARCH_PPC_LINUX_TDESC_H */
+diff --git a/gdb/doc/gdb.texinfo b/gdb/doc/gdb.texinfo
+--- a/gdb/doc/gdb.texinfo
++++ b/gdb/doc/gdb.texinfo
+@@ -42561,6 +42561,9 @@ contain the 64-bit register @samp{ppr}.
+ The @samp{org.gnu.gdb.power.dscr} feature is optional.  It should
+ contain the 64-bit register @samp{dscr}.
+ 
++The @samp{org.gnu.gdb.power.tar} feature is optional.  It should
++contain the 64-bit register @samp{tar}.
++
+ @node S/390 and System z Features
+ @subsection S/390 and System z Features
+ @cindex target descriptions, S/390 features
+diff --git a/gdb/features/Makefile b/gdb/features/Makefile
+--- a/gdb/features/Makefile
++++ b/gdb/features/Makefile
+@@ -75,6 +75,7 @@ WHICH = aarch64 \
+ 	rs6000/powerpc-isa205-vsx32l rs6000/powerpc-isa205-vsx64l \
+ 	rs6000/powerpc-isa205-ppr-dscr-vsx32l \
+ 	rs6000/powerpc-isa205-ppr-dscr-vsx64l \
++	rs6000/powerpc-isa207-vsx32l rs6000/powerpc-isa207-vsx64l \
+ 	s390-linux32 s390-linux64 s390x-linux64 \
+ 	s390-linux32v1 s390-linux64v1 s390x-linux64v1 \
+ 	s390-linux32v2 s390-linux64v2 s390x-linux64v2 \
+@@ -171,6 +172,8 @@ XMLTOC = \
+ 	rs6000/powerpc-isa205-vsx64l.xml \
+ 	rs6000/powerpc-isa205-ppr-dscr-vsx32l.xml \
+ 	rs6000/powerpc-isa205-ppr-dscr-vsx64l.xml \
++	rs6000/powerpc-isa207-vsx32l.xml \
++	rs6000/powerpc-isa207-vsx64l.xml \
+ 	rs6000/powerpc-vsx32.xml \
+ 	rs6000/powerpc-vsx32l.xml \
+ 	rs6000/powerpc-vsx64.xml \
+diff --git a/gdb/features/rs6000/power-tar.xml b/gdb/features/rs6000/power-tar.xml
+new file mode 100644
+--- /dev/null
++++ b/gdb/features/rs6000/power-tar.xml
+@@ -0,0 +1,12 @@
++<?xml version="1.0"?>
++<!-- Copyright (C) 2018 Free Software Foundation, Inc.
++
++     Copying and distribution of this file, with or without modification,
++     are permitted in any medium without royalty provided the copyright
++     notice and this notice are preserved.  -->
++
++<!-- POWER8 Target Address Register.  -->
++<!DOCTYPE feature SYSTEM "gdb-target.dtd">
++<feature name="org.gnu.gdb.power.tar">
++  <reg name="tar" bitsize="64" type="uint64"/>
++</feature>
+diff --git a/gdb/features/rs6000/powerpc-isa207-vsx32l.c b/gdb/features/rs6000/powerpc-isa207-vsx32l.c
+new file mode 100644
+--- /dev/null
++++ b/gdb/features/rs6000/powerpc-isa207-vsx32l.c
+@@ -0,0 +1,203 @@
++/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
++  Original: powerpc-isa207-vsx32l.xml */
++
++#include "defs.h"
++#include "osabi.h"
++#include "target-descriptions.h"
++
++struct target_desc *tdesc_powerpc_isa207_vsx32l;
++static void
++initialize_tdesc_powerpc_isa207_vsx32l (void)
++{
++  struct target_desc *result = allocate_target_description ();
++  set_tdesc_architecture (result, bfd_scan_arch ("powerpc:common"));
++
++  struct tdesc_feature *feature;
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.core");
++  tdesc_create_reg (feature, "r0", 0, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r1", 1, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r2", 2, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r3", 3, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r4", 4, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r5", 5, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r6", 6, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r7", 7, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r8", 8, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r9", 9, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r10", 10, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r11", 11, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r12", 12, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r13", 13, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r14", 14, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r15", 15, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r16", 16, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r17", 17, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r18", 18, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r19", 19, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r20", 20, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r21", 21, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r22", 22, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r23", 23, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r24", 24, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r25", 25, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r26", 26, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r27", 27, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r28", 28, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r29", 29, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r30", 30, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "r31", 31, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "pc", 64, 1, NULL, 32, "code_ptr");
++  tdesc_create_reg (feature, "msr", 65, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "cr", 66, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "lr", 67, 1, NULL, 32, "code_ptr");
++  tdesc_create_reg (feature, "ctr", 68, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "xer", 69, 1, NULL, 32, "uint32");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.fpu");
++  tdesc_create_reg (feature, "f0", 32, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f1", 33, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f2", 34, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f3", 35, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f4", 36, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f5", 37, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f6", 38, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f7", 39, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f8", 40, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f9", 41, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f10", 42, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f11", 43, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f12", 44, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f13", 45, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f14", 46, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f15", 47, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f16", 48, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f17", 49, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f18", 50, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f19", 51, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f20", 52, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f21", 53, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f22", 54, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f23", 55, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f24", 56, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f25", 57, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f26", 58, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f27", 59, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f28", 60, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f29", 61, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f30", 62, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f31", 63, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "fpscr", 70, 1, "float", 64, "int");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.linux");
++  tdesc_create_reg (feature, "orig_r3", 71, 1, NULL, 32, "int");
++  tdesc_create_reg (feature, "trap", 72, 1, NULL, 32, "int");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.altivec");
++  tdesc_type *element_type;
++  element_type = tdesc_named_type (feature, "ieee_single");
++  tdesc_create_vector (feature, "v4f", element_type, 4);
++
++  element_type = tdesc_named_type (feature, "int32");
++  tdesc_create_vector (feature, "v4i32", element_type, 4);
++
++  element_type = tdesc_named_type (feature, "int16");
++  tdesc_create_vector (feature, "v8i16", element_type, 8);
++
++  element_type = tdesc_named_type (feature, "int8");
++  tdesc_create_vector (feature, "v16i8", element_type, 16);
++
++  tdesc_type_with_fields *type_with_fields;
++  type_with_fields = tdesc_create_union (feature, "vec128");
++  tdesc_type *field_type;
++  field_type = tdesc_named_type (feature, "uint128");
++  tdesc_add_field (type_with_fields, "uint128", field_type);
++  field_type = tdesc_named_type (feature, "v4f");
++  tdesc_add_field (type_with_fields, "v4_float", field_type);
++  field_type = tdesc_named_type (feature, "v4i32");
++  tdesc_add_field (type_with_fields, "v4_int32", field_type);
++  field_type = tdesc_named_type (feature, "v8i16");
++  tdesc_add_field (type_with_fields, "v8_int16", field_type);
++  field_type = tdesc_named_type (feature, "v16i8");
++  tdesc_add_field (type_with_fields, "v16_int8", field_type);
++
++  tdesc_create_reg (feature, "vr0", 73, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr1", 74, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr2", 75, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr3", 76, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr4", 77, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr5", 78, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr6", 79, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr7", 80, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr8", 81, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr9", 82, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr10", 83, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr11", 84, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr12", 85, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr13", 86, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr14", 87, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr15", 88, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr16", 89, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr17", 90, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr18", 91, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr19", 92, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr20", 93, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr21", 94, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr22", 95, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr23", 96, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr24", 97, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr25", 98, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr26", 99, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr27", 100, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr28", 101, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr29", 102, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr30", 103, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr31", 104, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vscr", 105, 1, "vector", 32, "int");
++  tdesc_create_reg (feature, "vrsave", 106, 1, "vector", 32, "int");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.vsx");
++  tdesc_create_reg (feature, "vs0h", 107, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs1h", 108, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs2h", 109, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs3h", 110, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs4h", 111, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs5h", 112, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs6h", 113, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs7h", 114, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs8h", 115, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs9h", 116, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs10h", 117, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs11h", 118, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs12h", 119, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs13h", 120, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs14h", 121, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs15h", 122, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs16h", 123, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs17h", 124, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs18h", 125, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs19h", 126, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs20h", 127, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs21h", 128, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs22h", 129, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs23h", 130, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs24h", 131, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs25h", 132, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs26h", 133, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs27h", 134, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs28h", 135, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs29h", 136, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs30h", 137, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs31h", 138, 1, NULL, 64, "uint64");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.ppr");
++  tdesc_create_reg (feature, "ppr", 139, 1, NULL, 64, "uint64");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.dscr");
++  tdesc_create_reg (feature, "dscr", 140, 1, NULL, 64, "uint64");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.tar");
++  tdesc_create_reg (feature, "tar", 141, 1, NULL, 64, "uint64");
++
++  tdesc_powerpc_isa207_vsx32l = result;
++}
+diff --git a/gdb/features/rs6000/powerpc-isa207-vsx32l.xml b/gdb/features/rs6000/powerpc-isa207-vsx32l.xml
+new file mode 100644
+--- /dev/null
++++ b/gdb/features/rs6000/powerpc-isa207-vsx32l.xml
+@@ -0,0 +1,19 @@
++<?xml version="1.0"?>
++<!-- Copyright (C) 2018 Free Software Foundation, Inc.
++
++     Copying and distribution of this file, with or without modification,
++     are permitted in any medium without royalty provided the copyright
++     notice and this notice are preserved.  -->
++
++<!DOCTYPE target SYSTEM "gdb-target.dtd">
++<target>
++  <architecture>powerpc:common</architecture>
++  <xi:include href="power-core.xml"/>
++  <xi:include href="power-fpu-isa205.xml"/>
++  <xi:include href="power-linux.xml"/>
++  <xi:include href="power-altivec.xml"/>
++  <xi:include href="power-vsx.xml"/>
++  <xi:include href="power-ppr.xml"/>
++  <xi:include href="power-dscr.xml"/>
++  <xi:include href="power-tar.xml"/>
++</target>
+diff --git a/gdb/features/rs6000/powerpc-isa207-vsx64l.c b/gdb/features/rs6000/powerpc-isa207-vsx64l.c
+new file mode 100644
+--- /dev/null
++++ b/gdb/features/rs6000/powerpc-isa207-vsx64l.c
+@@ -0,0 +1,203 @@
++/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
++  Original: powerpc-isa207-vsx64l.xml */
++
++#include "defs.h"
++#include "osabi.h"
++#include "target-descriptions.h"
++
++struct target_desc *tdesc_powerpc_isa207_vsx64l;
++static void
++initialize_tdesc_powerpc_isa207_vsx64l (void)
++{
++  struct target_desc *result = allocate_target_description ();
++  set_tdesc_architecture (result, bfd_scan_arch ("powerpc:common64"));
++
++  struct tdesc_feature *feature;
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.core");
++  tdesc_create_reg (feature, "r0", 0, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r1", 1, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r2", 2, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r3", 3, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r4", 4, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r5", 5, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r6", 6, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r7", 7, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r8", 8, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r9", 9, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r10", 10, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r11", 11, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r12", 12, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r13", 13, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r14", 14, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r15", 15, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r16", 16, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r17", 17, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r18", 18, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r19", 19, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r20", 20, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r21", 21, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r22", 22, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r23", 23, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r24", 24, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r25", 25, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r26", 26, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r27", 27, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r28", 28, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r29", 29, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r30", 30, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "r31", 31, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "pc", 64, 1, NULL, 64, "code_ptr");
++  tdesc_create_reg (feature, "msr", 65, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "cr", 66, 1, NULL, 32, "uint32");
++  tdesc_create_reg (feature, "lr", 67, 1, NULL, 64, "code_ptr");
++  tdesc_create_reg (feature, "ctr", 68, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "xer", 69, 1, NULL, 32, "uint32");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.fpu");
++  tdesc_create_reg (feature, "f0", 32, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f1", 33, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f2", 34, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f3", 35, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f4", 36, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f5", 37, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f6", 38, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f7", 39, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f8", 40, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f9", 41, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f10", 42, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f11", 43, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f12", 44, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f13", 45, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f14", 46, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f15", 47, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f16", 48, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f17", 49, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f18", 50, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f19", 51, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f20", 52, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f21", 53, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f22", 54, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f23", 55, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f24", 56, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f25", 57, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f26", 58, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f27", 59, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f28", 60, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f29", 61, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f30", 62, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "f31", 63, 1, NULL, 64, "ieee_double");
++  tdesc_create_reg (feature, "fpscr", 70, 1, "float", 64, "int");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.linux");
++  tdesc_create_reg (feature, "orig_r3", 71, 1, NULL, 64, "int");
++  tdesc_create_reg (feature, "trap", 72, 1, NULL, 64, "int");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.altivec");
++  tdesc_type *element_type;
++  element_type = tdesc_named_type (feature, "ieee_single");
++  tdesc_create_vector (feature, "v4f", element_type, 4);
++
++  element_type = tdesc_named_type (feature, "int32");
++  tdesc_create_vector (feature, "v4i32", element_type, 4);
++
++  element_type = tdesc_named_type (feature, "int16");
++  tdesc_create_vector (feature, "v8i16", element_type, 8);
++
++  element_type = tdesc_named_type (feature, "int8");
++  tdesc_create_vector (feature, "v16i8", element_type, 16);
++
++  tdesc_type_with_fields *type_with_fields;
++  type_with_fields = tdesc_create_union (feature, "vec128");
++  tdesc_type *field_type;
++  field_type = tdesc_named_type (feature, "uint128");
++  tdesc_add_field (type_with_fields, "uint128", field_type);
++  field_type = tdesc_named_type (feature, "v4f");
++  tdesc_add_field (type_with_fields, "v4_float", field_type);
++  field_type = tdesc_named_type (feature, "v4i32");
++  tdesc_add_field (type_with_fields, "v4_int32", field_type);
++  field_type = tdesc_named_type (feature, "v8i16");
++  tdesc_add_field (type_with_fields, "v8_int16", field_type);
++  field_type = tdesc_named_type (feature, "v16i8");
++  tdesc_add_field (type_with_fields, "v16_int8", field_type);
++
++  tdesc_create_reg (feature, "vr0", 73, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr1", 74, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr2", 75, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr3", 76, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr4", 77, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr5", 78, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr6", 79, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr7", 80, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr8", 81, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr9", 82, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr10", 83, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr11", 84, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr12", 85, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr13", 86, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr14", 87, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr15", 88, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr16", 89, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr17", 90, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr18", 91, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr19", 92, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr20", 93, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr21", 94, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr22", 95, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr23", 96, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr24", 97, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr25", 98, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr26", 99, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr27", 100, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr28", 101, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr29", 102, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr30", 103, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vr31", 104, 1, NULL, 128, "vec128");
++  tdesc_create_reg (feature, "vscr", 105, 1, "vector", 32, "int");
++  tdesc_create_reg (feature, "vrsave", 106, 1, "vector", 32, "int");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.vsx");
++  tdesc_create_reg (feature, "vs0h", 107, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs1h", 108, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs2h", 109, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs3h", 110, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs4h", 111, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs5h", 112, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs6h", 113, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs7h", 114, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs8h", 115, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs9h", 116, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs10h", 117, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs11h", 118, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs12h", 119, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs13h", 120, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs14h", 121, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs15h", 122, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs16h", 123, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs17h", 124, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs18h", 125, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs19h", 126, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs20h", 127, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs21h", 128, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs22h", 129, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs23h", 130, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs24h", 131, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs25h", 132, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs26h", 133, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs27h", 134, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs28h", 135, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs29h", 136, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs30h", 137, 1, NULL, 64, "uint64");
++  tdesc_create_reg (feature, "vs31h", 138, 1, NULL, 64, "uint64");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.ppr");
++  tdesc_create_reg (feature, "ppr", 139, 1, NULL, 64, "uint64");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.dscr");
++  tdesc_create_reg (feature, "dscr", 140, 1, NULL, 64, "uint64");
++
++  feature = tdesc_create_feature (result, "org.gnu.gdb.power.tar");
++  tdesc_create_reg (feature, "tar", 141, 1, NULL, 64, "uint64");
++
++  tdesc_powerpc_isa207_vsx64l = result;
++}
+diff --git a/gdb/features/rs6000/powerpc-isa207-vsx64l.xml b/gdb/features/rs6000/powerpc-isa207-vsx64l.xml
+new file mode 100644
+--- /dev/null
++++ b/gdb/features/rs6000/powerpc-isa207-vsx64l.xml
+@@ -0,0 +1,19 @@
++<?xml version="1.0"?>
++<!-- Copyright (C) 2018 Free Software Foundation, Inc.
++
++     Copying and distribution of this file, with or without modification,
++     are permitted in any medium without royalty provided the copyright
++     notice and this notice are preserved.  -->
++
++<!DOCTYPE target SYSTEM "gdb-target.dtd">
++<target>
++  <architecture>powerpc:common64</architecture>
++  <xi:include href="power64-core.xml"/>
++  <xi:include href="power-fpu-isa205.xml"/>
++  <xi:include href="power64-linux.xml"/>
++  <xi:include href="power-altivec.xml"/>
++  <xi:include href="power-vsx.xml"/>
++  <xi:include href="power-ppr.xml"/>
++  <xi:include href="power-dscr.xml"/>
++  <xi:include href="power-tar.xml"/>
++</target>
+diff --git a/gdb/gdbserver/configure.srv b/gdb/gdbserver/configure.srv
+--- a/gdb/gdbserver/configure.srv
++++ b/gdb/gdbserver/configure.srv
+@@ -32,7 +32,7 @@ else
+    srv_amd64_linux_regobj=""
+ fi
+ 
+-ipa_ppc_linux_regobj="powerpc-32l-ipa.o powerpc-altivec32l-ipa.o powerpc-cell32l-ipa.o powerpc-vsx32l-ipa.o powerpc-isa205-32l-ipa.o powerpc-isa205-altivec32l-ipa.o powerpc-isa205-vsx32l-ipa.o powerpc-isa205-ppr-dscr-vsx32l-ipa.o powerpc-e500l-ipa.o powerpc-64l-ipa.o powerpc-altivec64l-ipa.o powerpc-cell64l-ipa.o powerpc-vsx64l-ipa.o powerpc-isa205-64l-ipa.o powerpc-isa205-altivec64l-ipa.o powerpc-isa205-vsx64l-ipa.o powerpc-isa205-ppr-dscr-vsx64l-ipa.o"
++ipa_ppc_linux_regobj="powerpc-32l-ipa.o powerpc-altivec32l-ipa.o powerpc-cell32l-ipa.o powerpc-vsx32l-ipa.o powerpc-isa205-32l-ipa.o powerpc-isa205-altivec32l-ipa.o powerpc-isa205-vsx32l-ipa.o powerpc-isa205-ppr-dscr-vsx32l-ipa.o powerpc-isa207-vsx32l-ipa.o powerpc-e500l-ipa.o powerpc-64l-ipa.o powerpc-altivec64l-ipa.o powerpc-cell64l-ipa.o powerpc-vsx64l-ipa.o powerpc-isa205-64l-ipa.o powerpc-isa205-altivec64l-ipa.o powerpc-isa205-vsx64l-ipa.o powerpc-isa205-ppr-dscr-vsx64l-ipa.o powerpc-isa207-vsx64l-ipa.o"
+ 
+ # Linux object files.  This is so we don't have to repeat
+ # these files over and over again.
+@@ -218,6 +218,7 @@ case "${target}" in
+ 			srv_regobj="${srv_regobj} powerpc-isa205-altivec32l.o"
+ 			srv_regobj="${srv_regobj} powerpc-isa205-vsx32l.o"
+ 			srv_regobj="${srv_regobj} powerpc-isa205-ppr-dscr-vsx32l.o"
++			srv_regobj="${srv_regobj} powerpc-isa207-vsx32l.o"
+ 			srv_regobj="${srv_regobj} powerpc-e500l.o"
+ 			srv_regobj="${srv_regobj} powerpc-64l.o"
+ 			srv_regobj="${srv_regobj} powerpc-altivec64l.o"
+@@ -227,6 +228,7 @@ case "${target}" in
+ 			srv_regobj="${srv_regobj} powerpc-isa205-altivec64l.o"
+ 			srv_regobj="${srv_regobj} powerpc-isa205-vsx64l.o"
+ 			srv_regobj="${srv_regobj} powerpc-isa205-ppr-dscr-vsx64l.o"
++			srv_regobj="${srv_regobj} powerpc-isa207-vsx64l.o"
+ 			srv_tgtobj="$srv_linux_obj linux-ppc-low.o ppc-linux.o"
+ 			srv_tgtobj="${srv_tgtobj} arch/ppc-linux-common.o"
+ 			srv_xmlfiles="rs6000/powerpc-32l.xml"
+@@ -237,6 +239,7 @@ case "${target}" in
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-isa205-altivec32l.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-isa205-vsx32l.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-isa205-ppr-dscr-vsx32l.xml"
++			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-isa207-vsx32l.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/power-altivec.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/power-vsx.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/power-core.xml"
+@@ -245,6 +248,7 @@ case "${target}" in
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/power-fpu-isa205.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/power-dscr.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/power-ppr.xml"
++			srv_xmlfiles="${srv_xmlfiles} rs6000/power-tar.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-e500l.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/power-spe.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-64l.xml"
+@@ -255,6 +259,7 @@ case "${target}" in
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-isa205-altivec64l.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-isa205-vsx64l.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-isa205-ppr-dscr-vsx64l.xml"
++			srv_xmlfiles="${srv_xmlfiles} rs6000/powerpc-isa207-vsx64l.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/power64-core.xml"
+ 			srv_xmlfiles="${srv_xmlfiles} rs6000/power64-linux.xml"
+ 			srv_linux_usrregs=yes
+diff --git a/gdb/gdbserver/linux-ppc-ipa.c b/gdb/gdbserver/linux-ppc-ipa.c
+--- a/gdb/gdbserver/linux-ppc-ipa.c
++++ b/gdb/gdbserver/linux-ppc-ipa.c
+@@ -193,6 +193,8 @@ get_ipa_tdesc (int idx)
+       return tdesc_powerpc_isa205_vsx64l;
+     case PPC_TDESC_ISA205_PPR_DSCR_VSX:
+       return tdesc_powerpc_isa205_ppr_dscr_vsx64l;
++    case PPC_TDESC_ISA207_VSX:
++      return tdesc_powerpc_isa207_vsx64l;
+ #else
+     case PPC_TDESC_BASE:
+       return tdesc_powerpc_32l;
+@@ -210,6 +212,8 @@ get_ipa_tdesc (int idx)
+       return tdesc_powerpc_isa205_vsx32l;
+     case PPC_TDESC_ISA205_PPR_DSCR_VSX:
+       return tdesc_powerpc_isa205_ppr_dscr_vsx32l;
++    case PPC_TDESC_ISA207_VSX:
++      return tdesc_powerpc_isa207_vsx32l;
+     case PPC_TDESC_E500:
+       return tdesc_powerpc_e500l;
+ #endif
+@@ -239,6 +243,7 @@ initialize_low_tracepoint (void)
+   init_registers_powerpc_isa205_altivec64l ();
+   init_registers_powerpc_isa205_vsx64l ();
+   init_registers_powerpc_isa205_ppr_dscr_vsx64l ();
++  init_registers_powerpc_isa207_vsx64l ();
+ #else
+   init_registers_powerpc_32l ();
+   init_registers_powerpc_altivec32l ();
+@@ -248,6 +253,7 @@ initialize_low_tracepoint (void)
+   init_registers_powerpc_isa205_altivec32l ();
+   init_registers_powerpc_isa205_vsx32l ();
+   init_registers_powerpc_isa205_ppr_dscr_vsx32l ();
++  init_registers_powerpc_isa207_vsx32l ();
+   init_registers_powerpc_e500l ();
+ #endif
+ }
+diff --git a/gdb/gdbserver/linux-ppc-low.c b/gdb/gdbserver/linux-ppc-low.c
+--- a/gdb/gdbserver/linux-ppc-low.c
++++ b/gdb/gdbserver/linux-ppc-low.c
+@@ -525,6 +525,26 @@ ppc_store_dscrregset (struct regcache *regcache, const void *buf)
+   supply_register_by_name (regcache, "dscr", dscr);
+ }
+ 
++/* Target Address Register regset fill function.  */
++
++static void
++ppc_fill_tarregset (struct regcache *regcache, void *buf)
++{
++  char *tar = (char *) buf;
++
++  collect_register_by_name (regcache, "tar", tar);
++}
++
++/* Target Address Register regset store function.  */
++
++static void
++ppc_store_tarregset (struct regcache *regcache, const void *buf)
++{
++  const char *tar = (const char *) buf;
++
++  supply_register_by_name (regcache, "tar", tar);
++}
++
+ static void
+ ppc_fill_vsxregset (struct regcache *regcache, void *buf)
+ {
+@@ -634,6 +654,8 @@ static struct regset_info ppc_regsets[] = {
+      fetch them every time, but still fall back to PTRACE_PEEKUSER for the
+      general registers.  Some kernels support these, but not the newer
+      PPC_PTRACE_GETREGS.  */
++  { PTRACE_GETREGSET, PTRACE_SETREGSET, NT_PPC_TAR, 0, EXTENDED_REGS,
++    ppc_fill_tarregset, ppc_store_tarregset },
+   { PTRACE_GETREGSET, PTRACE_SETREGSET, NT_PPC_PPR, 0, EXTENDED_REGS,
+     ppc_fill_pprregset, ppc_store_pprregset },
+   { PTRACE_GETREGSET, PTRACE_SETREGSET, NT_PPC_DSCR, 0, EXTENDED_REGS,
+@@ -708,7 +730,14 @@ ppc_arch_setup (void)
+   if ((ppc_hwcap2 & PPC_FEATURE2_DSCR)
+       && ppc_check_regset (tid, NT_PPC_DSCR, PPC_LINUX_SIZEOF_DSCRREGSET)
+       && ppc_check_regset (tid, NT_PPC_PPR, PPC_LINUX_SIZEOF_PPRREGSET))
+-    features.ppr_dscr = true;
++    {
++      features.ppr_dscr = true;
++      if ((ppc_hwcap2 & PPC_FEATURE2_ARCH_2_07)
++	  && (ppc_hwcap2 & PPC_FEATURE2_TAR)
++	  && ppc_check_regset (tid, NT_PPC_TAR,
++			       PPC_LINUX_SIZEOF_TARREGSET))
++	features.isa207 = true;
++    }
+ 
+   if (ppc_hwcap & PPC_FEATURE_CELL)
+     features.cell = true;
+@@ -765,6 +794,10 @@ ppc_arch_setup (void)
+ 	    regset->size = (features.ppr_dscr ?
+ 			    PPC_LINUX_SIZEOF_DSCRREGSET : 0);
+ 	    break;
++	  case NT_PPC_TAR:
++	    regset->size = (features.isa207 ?
++			    PPC_LINUX_SIZEOF_TARREGSET : 0);
++	    break;
+ 	  default:
+ 	    break;
+ 	  }
+@@ -3146,6 +3179,8 @@ ppc_get_ipa_tdesc_idx (void)
+     return PPC_TDESC_ISA205_VSX;
+   if (tdesc == tdesc_powerpc_isa205_ppr_dscr_vsx64l)
+     return PPC_TDESC_ISA205_PPR_DSCR_VSX;
++  if (tdesc == tdesc_powerpc_isa207_vsx64l)
++    return PPC_TDESC_ISA207_VSX;
+ #endif
+ 
+   if (tdesc == tdesc_powerpc_32l)
+@@ -3164,6 +3199,8 @@ ppc_get_ipa_tdesc_idx (void)
+     return PPC_TDESC_ISA205_VSX;
+   if (tdesc == tdesc_powerpc_isa205_ppr_dscr_vsx32l)
+     return PPC_TDESC_ISA205_PPR_DSCR_VSX;
++  if (tdesc == tdesc_powerpc_isa207_vsx32l)
++    return PPC_TDESC_ISA207_VSX;
+   if (tdesc == tdesc_powerpc_e500l)
+     return PPC_TDESC_E500;
+ 
+@@ -3223,6 +3260,7 @@ initialize_low_arch (void)
+   init_registers_powerpc_isa205_altivec32l ();
+   init_registers_powerpc_isa205_vsx32l ();
+   init_registers_powerpc_isa205_ppr_dscr_vsx32l ();
++  init_registers_powerpc_isa207_vsx32l ();
+   init_registers_powerpc_e500l ();
+ #if __powerpc64__
+   init_registers_powerpc_64l ();
+@@ -3233,6 +3271,7 @@ initialize_low_arch (void)
+   init_registers_powerpc_isa205_altivec64l ();
+   init_registers_powerpc_isa205_vsx64l ();
+   init_registers_powerpc_isa205_ppr_dscr_vsx64l ();
++  init_registers_powerpc_isa207_vsx64l ();
+ #endif
+ 
+   initialize_regsets_info (&ppc_regsets_info);
+diff --git a/gdb/gdbserver/linux-ppc-tdesc-init.h b/gdb/gdbserver/linux-ppc-tdesc-init.h
+--- a/gdb/gdbserver/linux-ppc-tdesc-init.h
++++ b/gdb/gdbserver/linux-ppc-tdesc-init.h
+@@ -30,6 +30,7 @@ enum ppc_linux_tdesc {
+   PPC_TDESC_ISA205_ALTIVEC,
+   PPC_TDESC_ISA205_VSX,
+   PPC_TDESC_ISA205_PPR_DSCR_VSX,
++  PPC_TDESC_ISA207_VSX,
+   PPC_TDESC_E500,
+ };
+ 
+@@ -59,6 +60,9 @@ void init_registers_powerpc_isa205_vsx32l (void);
+ /* Defined in auto-generated file powerpc-isa205-ppr-dscr-vsx32l.c.  */
+ void init_registers_powerpc_isa205_ppr_dscr_vsx32l (void);
+ 
++/* Defined in auto-generated file powerpc-isa207-vsx32l.c.  */
++void init_registers_powerpc_isa207_vsx32l (void);
++
+ /* Defined in auto-generated file powerpc-e500l.c.  */
+ void init_registers_powerpc_e500l (void);
+ 
+@@ -90,4 +94,7 @@ void init_registers_powerpc_isa205_vsx64l (void);
+ /* Defined in auto-generated file powerpc-isa205-ppr-dscr-vsx64l.c.  */
+ void init_registers_powerpc_isa205_ppr_dscr_vsx64l (void);
+ 
++/* Defined in auto-generated file powerpc-isa207-vsx64l.c.  */
++void init_registers_powerpc_isa207_vsx64l (void);
++
+ #endif
+diff --git a/gdb/nat/ppc-linux.h b/gdb/nat/ppc-linux.h
+--- a/gdb/nat/ppc-linux.h
++++ b/gdb/nat/ppc-linux.h
+@@ -54,6 +54,12 @@
+ #ifndef PPC_FEATURE2_DSCR
+ #define PPC_FEATURE2_DSCR 0x20000000
+ #endif
++#ifndef PPC_FEATURE2_ARCH_2_07
++#define PPC_FEATURE2_ARCH_2_07 0x80000000
++#endif
++#ifndef PPC_FEATURE2_TAR
++#define PPC_FEATURE2_TAR 0x04000000
++#endif
+ 
+ /* Glibc's headers don't define PTRACE_GETVRREGS so we cannot use a
+    configure time check.  Some older glibc's (for instance 2.2.1)
+@@ -85,6 +91,11 @@
+ #define PTRACE_SETEVRREGS 21
+ #endif
+ 
++/* Target Address Register.  */
++#ifndef NT_PPC_TAR
++#define NT_PPC_TAR 0x103
++#endif
++
+ /* Program Priority Register.  */
+ #ifndef NT_PPC_PPR
+ #define NT_PPC_PPR 0x104
+diff --git a/gdb/ppc-linux-nat.c b/gdb/ppc-linux-nat.c
+--- a/gdb/ppc-linux-nat.c
++++ b/gdb/ppc-linux-nat.c
+@@ -658,6 +658,15 @@ fetch_register (struct regcache *regcache, int tid, int regno)
+ 		    &ppc32_linux_pprregset);
+       return;
+     }
++  else if (regno == PPC_TAR_REGNUM)
++    {
++      gdb_assert (tdep->ppc_tar_regnum != -1);
++
++      fetch_regset (regcache, tid, NT_PPC_TAR,
++		    PPC_LINUX_SIZEOF_TARREGSET,
++		    &ppc32_linux_tarregset);
++      return;
++    }
+ 
+   if (regaddr == -1)
+     {
+@@ -862,6 +871,10 @@ fetch_ppc_registers (struct regcache *regcache, int tid)
+     fetch_regset (regcache, tid, NT_PPC_DSCR,
+ 		  PPC_LINUX_SIZEOF_DSCRREGSET,
+ 		  &ppc32_linux_dscrregset);
++  if (tdep->ppc_tar_regnum != -1)
++    fetch_regset (regcache, tid, NT_PPC_TAR,
++		  PPC_LINUX_SIZEOF_TARREGSET,
++		  &ppc32_linux_tarregset);
+ }
+ 
+ /* Fetch registers from the child process.  Fetch all registers if
+@@ -1060,6 +1073,15 @@ store_register (const struct regcache *regcache, int tid, int regno)
+ 		    &ppc32_linux_pprregset);
+       return;
+     }
++  else if (regno == PPC_TAR_REGNUM)
++    {
++      gdb_assert (tdep->ppc_tar_regnum != -1);
++
++      store_regset (regcache, tid, regno, NT_PPC_TAR,
++		    PPC_LINUX_SIZEOF_TARREGSET,
++		    &ppc32_linux_tarregset);
++      return;
++    }
+ 
+   if (regaddr == -1)
+     return;
+@@ -1282,6 +1304,10 @@ store_ppc_registers (const struct regcache *regcache, int tid)
+     store_regset (regcache, tid, -1, NT_PPC_DSCR,
+ 		  PPC_LINUX_SIZEOF_DSCRREGSET,
+ 		  &ppc32_linux_dscrregset);
++  if (tdep->ppc_tar_regnum != -1)
++    store_regset (regcache, tid, -1, NT_PPC_TAR,
++		  PPC_LINUX_SIZEOF_TARREGSET,
++		  &ppc32_linux_tarregset);
+ }
+ 
+ /* Fetch the AT_HWCAP entry from the aux vector.  */
+@@ -2409,7 +2435,13 @@ ppc_linux_nat_target::read_description ()
+   if ((hwcap2 & PPC_FEATURE2_DSCR)
+       && check_regset (tid, NT_PPC_PPR, PPC_LINUX_SIZEOF_PPRREGSET)
+       && check_regset (tid, NT_PPC_DSCR, PPC_LINUX_SIZEOF_DSCRREGSET))
+-    features.ppr_dscr = true;
++    {
++      features.ppr_dscr = true;
++      if ((hwcap2 & PPC_FEATURE2_ARCH_2_07)
++	  && (hwcap2 & PPC_FEATURE2_TAR)
++	  && check_regset (tid, NT_PPC_TAR, PPC_LINUX_SIZEOF_TARREGSET))
++	features.isa207 = true;
++    }
+ 
+   return ppc_linux_match_description (features);
+ }
+diff --git a/gdb/ppc-linux-tdep.c b/gdb/ppc-linux-tdep.c
+--- a/gdb/ppc-linux-tdep.c
++++ b/gdb/ppc-linux-tdep.c
+@@ -72,6 +72,7 @@
+ #include "features/rs6000/powerpc-isa205-altivec32l.c"
+ #include "features/rs6000/powerpc-isa205-vsx32l.c"
+ #include "features/rs6000/powerpc-isa205-ppr-dscr-vsx32l.c"
++#include "features/rs6000/powerpc-isa207-vsx32l.c"
+ #include "features/rs6000/powerpc-64l.c"
+ #include "features/rs6000/powerpc-altivec64l.c"
+ #include "features/rs6000/powerpc-cell64l.c"
+@@ -80,6 +81,7 @@
+ #include "features/rs6000/powerpc-isa205-altivec64l.c"
+ #include "features/rs6000/powerpc-isa205-vsx64l.c"
+ #include "features/rs6000/powerpc-isa205-ppr-dscr-vsx64l.c"
++#include "features/rs6000/powerpc-isa207-vsx64l.c"
+ #include "features/rs6000/powerpc-e500l.c"
+ 
+ /* Shared library operations for PowerPC-Linux.  */
+@@ -581,6 +583,22 @@ const struct regset ppc32_linux_dscrregset = {
+   regcache_collect_regset
+ };
+ 
++/* Target Address Register regmap.  */
++
++static const struct regcache_map_entry ppc32_regmap_tar[] =
++  {
++      { 1, PPC_TAR_REGNUM, 8 },
++      { 0 }
++  };
++
++/* Target Address Register regset.  */
++
++const struct regset ppc32_linux_tarregset = {
++  ppc32_regmap_tar,
++  regcache_supply_regset,
++  regcache_collect_regset
++};
++
+ const struct regset *
+ ppc_linux_gregset (int wordsize)
+ {
+@@ -621,6 +639,7 @@ ppc_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
+   int have_vsx = tdep->ppc_vsr0_upper_regnum != -1;
+   int have_ppr = tdep->ppc_ppr_regnum != -1;
+   int have_dscr = tdep->ppc_dscr_regnum != -1;
++  int have_tar = tdep->ppc_tar_regnum != -1;
+ 
+   if (tdep->wordsize == 4)
+     cb (".reg", 48 * 4, 48 * 4, &ppc32_linux_gregset, NULL, cb_data);
+@@ -650,6 +669,11 @@ ppc_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
+ 	PPC_LINUX_SIZEOF_DSCRREGSET,
+ 	&ppc32_linux_dscrregset, "Data Stream Control Register",
+ 	cb_data);
++
++  if (have_tar)
++    cb (".reg-ppc-tar", PPC_LINUX_SIZEOF_TARREGSET,
++	PPC_LINUX_SIZEOF_TARREGSET,
++	&ppc32_linux_tarregset, "Target Address Register", cb_data);
+ }
+ 
+ static void
+@@ -1064,6 +1088,7 @@ ppc_linux_core_read_description (struct gdbarch *gdbarch,
+   asection *section = bfd_get_section_by_name (abfd, ".reg");
+   asection *ppr = bfd_get_section_by_name (abfd, ".reg-ppc-ppr");
+   asection *dscr = bfd_get_section_by_name (abfd, ".reg-ppc-dscr");
++  asection *tar = bfd_get_section_by_name (abfd, ".reg-ppc-tar");
+ 
+   if (! section)
+     return NULL;
+@@ -1097,7 +1122,11 @@ ppc_linux_core_read_description (struct gdbarch *gdbarch,
+   features.isa205 = ppc_linux_has_isa205 (hwcap);
+ 
+   if (ppr && dscr)
+-    features.ppr_dscr = true;
++    {
++      features.ppr_dscr = true;
++      if (tar)
++	features.isa207 = true;
++    }
+ 
+   return ppc_linux_match_description (features);
+ }
+@@ -1973,6 +2002,7 @@ _initialize_ppc_linux_tdep (void)
+   initialize_tdesc_powerpc_isa205_altivec32l ();
+   initialize_tdesc_powerpc_isa205_vsx32l ();
+   initialize_tdesc_powerpc_isa205_ppr_dscr_vsx32l ();
++  initialize_tdesc_powerpc_isa207_vsx32l ();
+   initialize_tdesc_powerpc_64l ();
+   initialize_tdesc_powerpc_altivec64l ();
+   initialize_tdesc_powerpc_cell64l ();
+@@ -1981,5 +2011,6 @@ _initialize_ppc_linux_tdep (void)
+   initialize_tdesc_powerpc_isa205_altivec64l ();
+   initialize_tdesc_powerpc_isa205_vsx64l ();
+   initialize_tdesc_powerpc_isa205_ppr_dscr_vsx64l ();
++  initialize_tdesc_powerpc_isa207_vsx64l ();
+   initialize_tdesc_powerpc_e500l ();
+ }
+diff --git a/gdb/ppc-linux-tdep.h b/gdb/ppc-linux-tdep.h
+--- a/gdb/ppc-linux-tdep.h
++++ b/gdb/ppc-linux-tdep.h
+@@ -47,5 +47,6 @@ int ppc_linux_trap_reg_p (struct gdbarch *gdbarch);
+ /* Additional register sets, defined in ppc-linux-tdep.c.  */
+ extern const struct regset ppc32_linux_pprregset;
+ extern const struct regset ppc32_linux_dscrregset;
++extern const struct regset ppc32_linux_tarregset;
+ 
+ #endif /* PPC_LINUX_TDEP_H */
+diff --git a/gdb/ppc-tdep.h b/gdb/ppc-tdep.h
+--- a/gdb/ppc-tdep.h
++++ b/gdb/ppc-tdep.h
+@@ -259,6 +259,9 @@ struct gdbarch_tdep
+     /* Data Stream Control Register.  */
+     int ppc_dscr_regnum;
+ 
++    /* Target Address Register.  */
++    int ppc_tar_regnum;
++
+     /* Decimal 128 registers.  */
+     int ppc_dl0_regnum;		/* First Decimal128 argument register pair.  */
+ 
+@@ -317,6 +320,7 @@ enum {
+   PPC_VSR31_UPPER_REGNUM = 171,
+   PPC_PPR_REGNUM = 172,
+   PPC_DSCR_REGNUM = 173,
++  PPC_TAR_REGNUM = 174,
+   PPC_NUM_REGS
+ };
+ 
+diff --git a/gdb/regformats/rs6000/powerpc-isa207-vsx32l.dat b/gdb/regformats/rs6000/powerpc-isa207-vsx32l.dat
+new file mode 100644
+--- /dev/null
++++ b/gdb/regformats/rs6000/powerpc-isa207-vsx32l.dat
+@@ -0,0 +1,147 @@
++# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
++# Generated from: rs6000/powerpc-isa207-vsx32l.xml
++name:powerpc_isa207_vsx32l
++xmltarget:powerpc-isa207-vsx32l.xml
++expedite:r1,pc
++32:r0
++32:r1
++32:r2
++32:r3
++32:r4
++32:r5
++32:r6
++32:r7
++32:r8
++32:r9
++32:r10
++32:r11
++32:r12
++32:r13
++32:r14
++32:r15
++32:r16
++32:r17
++32:r18
++32:r19
++32:r20
++32:r21
++32:r22
++32:r23
++32:r24
++32:r25
++32:r26
++32:r27
++32:r28
++32:r29
++32:r30
++32:r31
++64:f0
++64:f1
++64:f2
++64:f3
++64:f4
++64:f5
++64:f6
++64:f7
++64:f8
++64:f9
++64:f10
++64:f11
++64:f12
++64:f13
++64:f14
++64:f15
++64:f16
++64:f17
++64:f18
++64:f19
++64:f20
++64:f21
++64:f22
++64:f23
++64:f24
++64:f25
++64:f26
++64:f27
++64:f28
++64:f29
++64:f30
++64:f31
++32:pc
++32:msr
++32:cr
++32:lr
++32:ctr
++32:xer
++64:fpscr
++32:orig_r3
++32:trap
++128:vr0
++128:vr1
++128:vr2
++128:vr3
++128:vr4
++128:vr5
++128:vr6
++128:vr7
++128:vr8
++128:vr9
++128:vr10
++128:vr11
++128:vr12
++128:vr13
++128:vr14
++128:vr15
++128:vr16
++128:vr17
++128:vr18
++128:vr19
++128:vr20
++128:vr21
++128:vr22
++128:vr23
++128:vr24
++128:vr25
++128:vr26
++128:vr27
++128:vr28
++128:vr29
++128:vr30
++128:vr31
++32:vscr
++32:vrsave
++64:vs0h
++64:vs1h
++64:vs2h
++64:vs3h
++64:vs4h
++64:vs5h
++64:vs6h
++64:vs7h
++64:vs8h
++64:vs9h
++64:vs10h
++64:vs11h
++64:vs12h
++64:vs13h
++64:vs14h
++64:vs15h
++64:vs16h
++64:vs17h
++64:vs18h
++64:vs19h
++64:vs20h
++64:vs21h
++64:vs22h
++64:vs23h
++64:vs24h
++64:vs25h
++64:vs26h
++64:vs27h
++64:vs28h
++64:vs29h
++64:vs30h
++64:vs31h
++64:ppr
++64:dscr
++64:tar
+diff --git a/gdb/regformats/rs6000/powerpc-isa207-vsx64l.dat b/gdb/regformats/rs6000/powerpc-isa207-vsx64l.dat
+new file mode 100644
+--- /dev/null
++++ b/gdb/regformats/rs6000/powerpc-isa207-vsx64l.dat
+@@ -0,0 +1,147 @@
++# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
++# Generated from: rs6000/powerpc-isa207-vsx64l.xml
++name:powerpc_isa207_vsx64l
++xmltarget:powerpc-isa207-vsx64l.xml
++expedite:r1,pc
++64:r0
++64:r1
++64:r2
++64:r3
++64:r4
++64:r5
++64:r6
++64:r7
++64:r8
++64:r9
++64:r10
++64:r11
++64:r12
++64:r13
++64:r14
++64:r15
++64:r16
++64:r17
++64:r18
++64:r19
++64:r20
++64:r21
++64:r22
++64:r23
++64:r24
++64:r25
++64:r26
++64:r27
++64:r28
++64:r29
++64:r30
++64:r31
++64:f0
++64:f1
++64:f2
++64:f3
++64:f4
++64:f5
++64:f6
++64:f7
++64:f8
++64:f9
++64:f10
++64:f11
++64:f12
++64:f13
++64:f14
++64:f15
++64:f16
++64:f17
++64:f18
++64:f19
++64:f20
++64:f21
++64:f22
++64:f23
++64:f24
++64:f25
++64:f26
++64:f27
++64:f28
++64:f29
++64:f30
++64:f31
++64:pc
++64:msr
++32:cr
++64:lr
++64:ctr
++32:xer
++64:fpscr
++64:orig_r3
++64:trap
++128:vr0
++128:vr1
++128:vr2
++128:vr3
++128:vr4
++128:vr5
++128:vr6
++128:vr7
++128:vr8
++128:vr9
++128:vr10
++128:vr11
++128:vr12
++128:vr13
++128:vr14
++128:vr15
++128:vr16
++128:vr17
++128:vr18
++128:vr19
++128:vr20
++128:vr21
++128:vr22
++128:vr23
++128:vr24
++128:vr25
++128:vr26
++128:vr27
++128:vr28
++128:vr29
++128:vr30
++128:vr31
++32:vscr
++32:vrsave
++64:vs0h
++64:vs1h
++64:vs2h
++64:vs3h
++64:vs4h
++64:vs5h
++64:vs6h
++64:vs7h
++64:vs8h
++64:vs9h
++64:vs10h
++64:vs11h
++64:vs12h
++64:vs13h
++64:vs14h
++64:vs15h
++64:vs16h
++64:vs17h
++64:vs18h
++64:vs19h
++64:vs20h
++64:vs21h
++64:vs22h
++64:vs23h
++64:vs24h
++64:vs25h
++64:vs26h
++64:vs27h
++64:vs28h
++64:vs29h
++64:vs30h
++64:vs31h
++64:ppr
++64:dscr
++64:tar
+diff --git a/gdb/rs6000-tdep.c b/gdb/rs6000-tdep.c
+--- a/gdb/rs6000-tdep.c
++++ b/gdb/rs6000-tdep.c
+@@ -4699,6 +4699,10 @@ ppc_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
+ 	case 256:		/* VRSAVE */
+ 	  record_full_arch_list_add_reg (regcache, tdep->ppc_vrsave_regnum);
+ 	  return 0;
++	case 815:		/* TAR */
++	  if (tdep->ppc_tar_regnum >= 0)
++	    record_full_arch_list_add_reg (regcache, tdep->ppc_tar_regnum);
++	  return 0;
+ 	case 896:
+ 	case 898:		/* PPR */
+ 	  if (tdep->ppc_ppr_regnum >= 0)
+@@ -5867,6 +5871,7 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
+   enum powerpc_elf_abi elf_abi = POWERPC_ELF_AUTO;
+   int have_fpu = 0, have_spe = 0, have_mq = 0, have_altivec = 0;
+   int have_dfp = 0, have_vsx = 0, have_ppr = 0, have_dscr = 0;
++  int have_tar = 0;
+   int tdesc_wordsize = -1;
+   const struct target_desc *tdesc = info.target_desc;
+   struct tdesc_arch_data *tdesc_data = NULL;
+@@ -6187,6 +6192,25 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
+ 	}
+       else
+ 	have_dscr = 0;
++
++      /* Target Address Register.  */
++      feature = tdesc_find_feature (tdesc,
++				    "org.gnu.gdb.power.tar");
++      if (feature != NULL)
++	{
++	  valid_p = 1;
++	  valid_p &= tdesc_numbered_register (feature, tdesc_data,
++					      PPC_TAR_REGNUM, "tar");
++
++	  if (!valid_p)
++	    {
++	      tdesc_data_cleanup (tdesc_data);
++	      return NULL;
++	    }
++	  have_tar = 1;
++	}
++      else
++	have_tar = 0;
+     }
+ 
+   /* If we have a 64-bit binary on a 32-bit target, complain.  Also
+@@ -6383,6 +6407,7 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
+   tdep->ppc_spefscr_regnum = have_spe ? PPC_SPE_FSCR_REGNUM : -1;
+   tdep->ppc_ppr_regnum = have_ppr ? PPC_PPR_REGNUM : -1;
+   tdep->ppc_dscr_regnum = have_dscr ? PPC_DSCR_REGNUM : -1;
++  tdep->ppc_tar_regnum = have_tar ? PPC_TAR_REGNUM : -1;
+ 
+   set_gdbarch_pc_regnum (gdbarch, PPC_PC_REGNUM);
+   set_gdbarch_sp_regnum (gdbarch, PPC_R0_REGNUM + 1);
+diff --git a/gdb/testsuite/gdb.arch/powerpc-tar.c b/gdb/testsuite/gdb.arch/powerpc-tar.c
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.arch/powerpc-tar.c
+@@ -0,0 +1,33 @@
++/* This testcase is part of GDB, the GNU debugger.
++
++   Copyright (C) 2018 Free Software Foundation, Inc.
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
++
++int main (void)
++{
++  void * target1 = &&target1_l;
++  void * target2 = &&target2_l;
++  asm volatile ("mtspr 815,%0" : : "r" (target1) : );
++
++  /* Branch always to TAR.  */
++  asm volatile ("bctar 20,0,0"); // marker
++
++ target2_l:
++  asm volatile ("nop"); // marker 2
++ target1_l:
++  asm volatile ("nop");
++
++  return 0;
++}
+diff --git a/gdb/testsuite/gdb.arch/powerpc-tar.exp b/gdb/testsuite/gdb.arch/powerpc-tar.exp
+new file mode 100644
+--- /dev/null
++++ b/gdb/testsuite/gdb.arch/powerpc-tar.exp
+@@ -0,0 +1,122 @@
++# Copyright (C) 2018 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++
++# This file is part of the gdb testsuite.
++
++# Test access to special purpose register TAR (the Target Address
++# Register).  The test inferior writes to this register, we check that
++# GDB reads the same value, then write to the register the address of
++# another label.  We then let the inferior continue and execute a
++# branch to TAR and check that we stop at the address that we wrote to
++# register.
++
++if {![istarget "powerpc*-*-linux*"]} then {
++    verbose "Skipping PowerPC test for the TAR register."
++    return
++}
++
++standard_testfile .c
++
++if {[build_executable "compile" $binfile $srcfile {debug}] == -1} {
++    return -1
++}
++
++proc check_register_access { regname } {
++    global gdb_prompt
++
++    set test "$regname register access"
++    gdb_test_multiple "info reg $regname" "$test" {
++	-re "Invalid register.*\r\n$gdb_prompt $" {
++	    unsupported "$test"
++	    return 0
++	}
++	-re "\r\n$regname.*\r\n$gdb_prompt $" {
++	    pass "$test"
++	    return 1
++	}
++    }
++    return 0
++}
++
++proc tar_available {} {
++    global gdb_prompt
++    global inferior_exited_re
++
++    set test "TAR available to inferior"
++    gdb_test_multiple "continue" "" {
++	-re "Illegal instruction.*\r\n$gdb_prompt $" {
++	    unsupported "$test"
++	    return 0
++	}
++	-re "$inferior_exited_re normally.*$gdb_prompt $" {
++	    pass "$test"
++	    return 1
++	}
++    }
++    return 0
++}
++
++# Do one pass to check if TAR is usable, system
++# software can prevent it from being used.
++with_test_prefix "check TAR access" {
++    clean_restart $binfile
++
++    if ![runto_main] {
++	return
++    }
++
++    if {![check_register_access "tar"]} {
++	return
++    }
++
++    if {![tar_available]} {
++	return
++    }
++}
++
++# Now do the actual test
++clean_restart $binfile
++
++if ![runto_main] {
++    return
++}
++
++gdb_breakpoint [gdb_get_line_number "marker"]
++
++gdb_continue_to_breakpoint "continue to marker"
++
++set target1 [get_hexadecimal_valueof "target1" -1]
++set tar [get_hexadecimal_valueof "\$tar" -2]
++
++set test "TAR value from mtspr"
++
++if {${target1} == ${tar}} {
++    pass $test
++} else {
++    fail $test
++}
++
++set target2 [get_hexadecimal_valueof "target2" -1]
++
++if {$target2 == -1} {
++    fail "Could not get value of target2"
++    return
++}
++
++gdb_test_no_output "set \$tar = $target2" "set tar"
++
++gdb_breakpoint [gdb_get_line_number "marker 2"]
++
++gdb_continue_to_breakpoint "continue to new target address" ".*marker 2.*"
