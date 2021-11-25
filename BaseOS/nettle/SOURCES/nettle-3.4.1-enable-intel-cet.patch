@@ -1,0 +1,210 @@
+diff --git a/asm.m4 b/asm.m4
+index 8da47201..59d64098 100644
+--- a/asm.m4
++++ b/asm.m4
+@@ -32,7 +32,7 @@ define(<GMP_NUMB_BITS>,<>)dnl
+ define(<PROLOGUE>,
+ <.globl C_NAME($1)
+ DECLARE_FUNC(C_NAME($1))
+-C_NAME($1):>)
++C_NAME($1): ASM_X86_ENDBR>)
+ 
+ define(<EPILOGUE>,
+ <ifelse(ELF_STYLE,yes,
+--- a/config.m4.in	2018-12-04 21:56:06.000000000 +0100
++++ b/config.m4.in	2020-05-15 11:25:42.350465132 +0200
+@@ -7,6 +7,9 @@
+ define(<ALIGN_LOG>, <@ASM_ALIGN_LOG@>)dnl
+ define(<W64_ABI>, <@W64_ABI@>)dnl
+ define(<RODATA>, <@ASM_RODATA@>)dnl
++define(<ASM_X86_ENDBR>,<@ASM_X86_ENDBR@>)dnl
++define(<ASM_X86_MARK_CET_ALIGN>,<@ASM_X86_MARK_CET_ALIGN@>)dnl
+ divert(1)
++@ASM_X86_MARK_CET@
+ @ASM_MARK_NOEXEC_STACK@
+ divert
+--- a/configure.ac	2018-12-04 21:56:06.000000000 +0100
++++ b/configure.ac	2020-05-15 11:46:39.152373137 +0200
+@@ -787,6 +787,68 @@
+   ASM_ALIGN_LOG="$nettle_cv_asm_align_log"
+ fi
+ 
++dnl  Define
++dnl  1. ASM_X86_ENDBR for endbr32/endbr64.
++dnl  2. ASM_X86_MARK_CET to add a .note.gnu.property section to mark
++dnl  Intel CET support if needed.
++dnl  3. ASM_X86_MARK_CET_ALIGN to align ASM_X86_MARK_CET.
++AC_CACHE_CHECK([if Intel CET is enabled],
++  [nettle_cv_asm_x86_intel_cet],
++  [AC_TRY_COMPILE([
++#ifndef __CET__
++#error Intel CET is not enabled
++#endif
++  ], [],
++  [nettle_cv_asm_x86_intel_cet=yes],
++  [nettle_cv_asm_x86_intel_cet=no])])
++if test "$nettle_cv_asm_x86_intel_cet" = yes; then
++  case $ABI in
++  32|standard)
++    ASM_X86_ENDBR=endbr32
++    ASM_X86_MARK_CET_ALIGN=2
++    ;;
++  64)
++    ASM_X86_ENDBR=endbr64
++    ASM_X86_MARK_CET_ALIGN=3
++    ;;
++  x32)
++    ASM_X86_ENDBR=endbr64
++    ASM_X86_MARK_CET_ALIGN=2
++    ;;
++  esac
++  AC_CACHE_CHECK([if .note.gnu.property section is needed],
++    [nettle_cv_asm_x86_gnu_property],
++    [AC_TRY_COMPILE([
++#if !defined __ELF__ || !defined __CET__
++#error GNU property is not needed
++#endif
++    ], [],
++    [nettle_cv_asm_x86_gnu_property=yes],
++    [nettle_cv_asm_x86_gnu_property=no])])
++else
++  nettle_cv_asm_x86_gnu_property=no
++fi
++if test "$nettle_cv_asm_x86_gnu_property" = yes; then
++  ASM_X86_MARK_CET='
++	.pushsection ".note.gnu.property", "a"
++	.p2align ASM_X86_MARK_CET_ALIGN
++	.long 1f - 0f
++	.long 4f - 1f
++	.long 5
++0:
++	.asciz "GNU"
++1:
++	.p2align ASM_X86_MARK_CET_ALIGN
++	.long 0xc0000002
++	.long 3f - 2f
++2:
++	.long 3
++3:
++	.p2align ASM_X86_MARK_CET_ALIGN
++4:
++	.popsection'
++fi
++
+ AC_SUBST(ASM_SYMBOL_PREFIX)
+ AC_SUBST(ASM_ELF_STYLE)
+ AC_SUBST(ASM_COFF_STYLE)
+@@ -796,6 +858,9 @@
+ AC_SUBST(ASM_ALIGN_LOG)
+ AC_SUBST(W64_ABI)
+ AC_SUBST(EMULATOR)
++AC_SUBST(ASM_X86_ENDBR)
++AC_SUBST(ASM_X86_MARK_CET)
++AC_SUBST(ASM_X86_MARK_CET_ALIGN)
+ 
+ AC_SUBST(LIBNETTLE_MAJOR)
+ AC_SUBST(LIBNETTLE_MINOR)
+diff --git a/testsuite/.test-rules.make b/testsuite/.test-rules.make
+index 922a2c7f..9de8f412 100644
+--- a/testsuite/.test-rules.make
++++ b/testsuite/.test-rules.make
+@@ -178,6 +178,9 @@ xts-test$(EXEEXT): xts-test.$(OBJEXT)
+ pbkdf2-test$(EXEEXT): pbkdf2-test.$(OBJEXT)
+ 	$(LINK) pbkdf2-test.$(OBJEXT) $(TEST_OBJS) -o pbkdf2-test$(EXEEXT)
+ 
++x86-ibt-test$(EXEEXT): x86-ibt-test.$(OBJEXT)
++	$(LINK) x86-ibt-test.$(OBJEXT) $(TEST_OBJS) -o x86-ibt-test$(EXEEXT)
++
+ sexp-test$(EXEEXT): sexp-test.$(OBJEXT)
+ 	$(LINK) sexp-test.$(OBJEXT) $(TEST_OBJS) -o sexp-test$(EXEEXT)
+ 
+--- a/testsuite/Makefile.in	2018-12-04 21:56:06.000000000 +0100
++++ b/testsuite/Makefile.in	2020-05-15 11:21:15.673321598 +0200
+@@ -31,7 +31,8 @@
+ 		    hmac-test.c umac-test.c \
+ 		    meta-hash-test.c meta-cipher-test.c\
+ 		    meta-aead-test.c meta-armor-test.c \
+-		    buffer-test.c yarrow-test.c pbkdf2-test.c
++		    buffer-test.c yarrow-test.c pbkdf2-test.c \
++		    x86-ibt-test.c
+ 
+ TS_HOGWEED_SOURCES = sexp-test.c sexp-format-test.c \
+ 		     rsa2sexp-test.c sexp2rsa-test.c \
+diff --git a/testsuite/x86-ibt-test.c b/testsuite/x86-ibt-test.c
+new file mode 100644
+index 00000000..1f3d1d67
+--- /dev/null
++++ b/testsuite/x86-ibt-test.c
+@@ -0,0 +1,69 @@
++#include "testutils.h"
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__)) \
++    && defined(__CET__) && defined(__linux__)
++#include <signal.h>
++
++static void
++segfault_handler(int signo)
++{
++  exit(0);
++}
++
++static void
++ibt_violation(void)
++{
++#ifdef __i386__
++  unsigned int reg;
++  asm volatile("lea 1f, %0\n\t"
++	       "jmp *%0\n"
++	       "1:" : "=r" (reg));
++#else
++  unsigned long long reg;
++  asm volatile("lea 1f(%%rip), %0\n\t"
++	       "jmp *%0\n"
++	       "1:" : "=r" (reg));
++#endif
++}
++
++#ifdef __i386__
++static unsigned int
++_get_ssp(void)
++{
++  unsigned int ssp;
++  asm volatile("xor %0, %0\n\trdsspd %0" : "=r" (ssp));
++  return ssp;
++}
++#else
++static unsigned long long
++_get_ssp(void)
++{
++  unsigned long long ssp;
++  asm volatile("xor %0, %0\n\trdsspq %0" : "=r" (ssp));
++  return ssp;
++}
++#endif
++
++void
++test_main(void)
++{
++   /* NB: This test should trigger SIGSEGV on CET platforms.  _get_ssp
++      returns the address of shadow stack pointer.  If the address of
++      shadow stack pointer is 0, SHSTK is disabled and we assume that
++      IBT is also disabled.  */
++  if (_get_ssp() == 0)
++    {
++      ibt_violation();
++      SKIP();
++    }
++
++  signal(SIGSEGV, segfault_handler);
++  ibt_violation();
++  FAIL();
++}
++#else
++void
++test_main(void)
++{
++  SKIP();
++}
++#endif
+-- 
+2.25.4
+

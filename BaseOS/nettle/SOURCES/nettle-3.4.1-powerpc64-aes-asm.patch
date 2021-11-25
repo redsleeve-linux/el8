@@ -1,0 +1,1142 @@
+diff --git a/Makefile.in b/Makefile.in
+index b43e494f..ec46a9df 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -189,7 +189,7 @@ hogweed_SOURCES = sexp.c sexp-format.c \
+ 		  ed25519-sha512-pubkey.c \
+ 		  ed25519-sha512-sign.c ed25519-sha512-verify.c
+ 
+-OPT_SOURCES = fat-x86_64.c fat-arm.c mini-gmp.c
++OPT_SOURCES = fat-arm.c fat-ppc.c fat-x86_64.c mini-gmp.c
+ 
+ HEADERS = aes.h arcfour.h arctwo.h asn1.h blowfish.h \
+ 	  base16.h base64.h bignum.h buffer.h camellia.h cast128.h \
+@@ -573,7 +573,8 @@ distdir: $(DISTFILES)
+ 	done
+ 	set -e; for d in sparc32 sparc64 x86 \
+ 		x86_64 x86_64/aesni x86_64/fat \
+-		arm arm/neon arm/v6 arm/fat ; do \
++		arm arm/neon arm/v6 arm/fat \
++		powerpc64 powerpc64/p8 powerpc64/fat ; do \
+ 	  mkdir "$(distdir)/$$d" ; \
+ 	  find "$(srcdir)/$$d" -maxdepth 1 '(' -name '*.asm' -o -name '*.m4' ')' \
+ 	    -exec cp '{}' "$(distdir)/$$d" ';' ; \
+diff --git a/aes-decrypt-internal.c b/aes-decrypt-internal.c
+index 709c52f9..9e8cf34a 100644
+--- a/aes-decrypt-internal.c
++++ b/aes-decrypt-internal.c
+@@ -40,6 +40,16 @@
+ #include "aes-internal.h"
+ #include "macros.h"
+ 
++/* For fat builds */
++#if HAVE_NATIVE_aes_decrypt
++void
++_nettle_aes_decrypt_c(unsigned rounds, const uint32_t *keys,
++    const struct aes_table *T,
++    size_t length, uint8_t *dst,
++    const uint8_t *src);
++#define _nettle_aes_decrypt _nettle_aes_decrypt_c
++#endif
++
+ void
+ _nettle_aes_decrypt(unsigned rounds, const uint32_t *keys,
+ 		    const struct aes_table *T,
+diff --git a/aes-encrypt-internal.c b/aes-encrypt-internal.c
+index 9f61386d..ad17e6c1 100644
+--- a/aes-encrypt-internal.c
++++ b/aes-encrypt-internal.c
+@@ -40,6 +40,16 @@
+ #include "aes-internal.h"
+ #include "macros.h"
+ 
++/* For fat builds */
++#if HAVE_NATIVE_aes_encrypt
++void
++_nettle_aes_encrypt_c(unsigned rounds, const uint32_t *keys,
++    const struct aes_table *T,
++    size_t length, uint8_t *dst,
++    const uint8_t *src);
++#define _nettle_aes_encrypt _nettle_aes_encrypt_c
++#endif
++
+ void
+ _nettle_aes_encrypt(unsigned rounds, const uint32_t *keys,
+ 		    const struct aes_table *T,
+diff --git a/asm.m4 b/asm.m4
+index ee377a78..59d64098 100644
+--- a/asm.m4
++++ b/asm.m4
+@@ -51,6 +51,14 @@ define(<ALIGN>,
+ <.align ifelse(ALIGN_LOG,yes,<m4_log2($1)>,$1)
+ >)
+ 
++define(<IF_BE>, <ifelse(
++WORDS_BIGENDIAN,yes,<$1>,
++WORDS_BIGENDIAN,no,<$2>,
++<errprint(<Unsupported endianness value>,WORDS_BIGENDIAN,<
++>)
++  m4exit(1)>)>)
++define(<IF_LE>, <IF_BE(<$2>, <$1>)>)
++
+ dnl Struct defining macros
+ 
+ dnl STRUCTURE(prefix) 
+diff --git a/config.m4.in b/config.m4.in
+index 666e34b8..e480334d 100644
+--- a/config.m4.in
++++ b/config.m4.in
+@@ -9,6 +9,7 @@ define(<W64_ABI>, <@W64_ABI@>)dnl
+ define(<RODATA>, <@ASM_RODATA@>)dnl
+ define(<ASM_X86_ENDBR>,<@ASM_X86_ENDBR@>)dnl
+ define(<ASM_X86_MARK_CET_ALIGN>,<@ASM_X86_MARK_CET_ALIGN@>)dnl
++define(<WORDS_BIGENDIAN>, <@ASM_WORDS_BIGENDIAN@>)dnl
+ divert(1)
+ @ASM_X86_MARK_CET@
+ @ASM_MARK_NOEXEC_STACK@
+diff --git a/configure.ac b/configure.ac
+index 090e43a4..788e6842 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -85,6 +85,10 @@ AC_ARG_ENABLE(x86-aesni,
+   AC_HELP_STRING([--enable-x86-aesni], [Enable x86_64 aes instructions. (default=no)]),,
+   [enable_x86_aesni=no])
+ 
++AC_ARG_ENABLE(power-crypto-ext,
++  AC_HELP_STRING([--enable-power-crypto-ext], [Enable POWER crypto extensions. (default=no)]),,
++  [enable_power_crypto_ext=no])
++
+ AC_ARG_ENABLE(mini-gmp,
+   AC_HELP_STRING([--enable-mini-gmp], [Enable mini-gmp, used instead of libgmp.]),,
+   [enable_mini_gmp=no])
+@@ -201,7 +205,11 @@ LSH_FUNC_STRERROR
+ # getenv_secure is used for fat overrides,
+ # getline is used in the testsuite
+ AC_CHECK_FUNCS(secure_getenv getline)
+-AC_C_BIGENDIAN
++
++ASM_WORDS_BIGENDIAN=unknown
++AC_C_BIGENDIAN([AC_DEFINE([WORDS_BIGENDIAN], 1)
++		ASM_WORDS_BIGENDIAN=yes],
++	[ASM_WORDS_BIGENDIAN=no])
+ 
+ LSH_GCC_ATTRIBUTES
+ 
+@@ -310,6 +318,17 @@ case "$host_cpu" in
+     AC_TRY_COMPILE([
+ #if defined(__sgi) && defined(__LP64__)
+ #error 64-bit mips
++#endif
++    ], [], [
++      ABI=32
++    ], [
++      ABI=64
++    ])
++    ;;
++  *powerpc64*)
++    AC_TRY_COMPILE([
++#if defined(__PPC64__)
++#error 64-bit powerpc
+ #endif
+     ], [], [
+       ABI=32
+@@ -422,6 +441,18 @@ if test "x$enable_assembler" = xyes ; then
+ 	esac
+       fi
+       ;;
++    *powerpc64*)
++      if test "$ABI" = 64 ; then
++	asm_path="powerpc64"
++	if test "x$enable_fat" = xyes ; then
++	  asm_path="powerpc64/fat $asm_path"
++	  OPT_NETTLE_SOURCES="fat-ppc.c $OPT_NETTLE_SOURCES"
++	elif test "x$enable_power_crypto_ext" = xyes ; then
++          asm_path="powerpc64/p8 $asm_path"
++	fi
++      fi
++      ;;
++
+     *)
+       enable_assembler=no
+       ;;
+@@ -544,6 +575,8 @@ AC_SUBST([IF_ASM])
+ AH_VERBATIM([HAVE_NATIVE],
+ [/* Define to 1 each of the following for which a native (ie. CPU specific)
+     implementation of the corresponding routine exists.  */
++#undef HAVE_NATIVE_aes_decrypt
++#undef HAVE_NATIVE_aes_encrypt
+ #undef HAVE_NATIVE_ecc_192_modp
+ #undef HAVE_NATIVE_ecc_192_redc
+ #undef HAVE_NATIVE_ecc_224_modp
+@@ -857,6 +890,7 @@ AC_SUBST(ASM_TYPE_PROGBITS)
+ AC_SUBST(ASM_MARK_NOEXEC_STACK)
+ AC_SUBST(ASM_ALIGN_LOG)
+ AC_SUBST(W64_ABI)
++AC_SUBST(ASM_WORDS_BIGENDIAN)
+ AC_SUBST(EMULATOR)
+ AC_SUBST(ASM_X86_ENDBR)
+ AC_SUBST(ASM_X86_MARK_CET)
+diff --git a/fat-ppc.c b/fat-ppc.c
+new file mode 100644
+index 00000000..7198e2dd
+--- /dev/null
++++ b/fat-ppc.c
+@@ -0,0 +1,129 @@
++/* fat-ppc.c
++
++   Copyright (C) 2020 Mamone Tarsha
++
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++*/
++
++#define _GNU_SOURCE
++
++#if HAVE_CONFIG_H
++# include "config.h"
++#endif
++
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#if defined(__FreeBSD__) && __FreeBSD__ < 12
++#include <sys/sysctl.h>
++#else
++#include <sys/auxv.h>
++#endif
++
++#include "nettle-types.h"
++
++#include "aes-internal.h"
++#include "gcm.h"
++#include "fat-setup.h"
++
++/* Define from arch/powerpc/include/uapi/asm/cputable.h in Linux kernel */
++#ifndef PPC_FEATURE2_VEC_CRYPTO
++#define PPC_FEATURE2_VEC_CRYPTO 0x02000000
++#endif
++
++struct ppc_features
++{
++  int have_crypto_ext;
++};
++
++static void
++get_ppc_features (struct ppc_features *features)
++{
++  unsigned long hwcap2 = 0;
++#if defined(__FreeBSD__)
++#if __FreeBSD__ < 12
++  size_t len = sizeof(hwcap2);
++  sysctlbyname("hw.cpu_features2", &hwcap2, &len, NULL, 0);
++#else
++  elf_aux_info(AT_HWCAP2, &hwcap2, sizeof(hwcap2));
++#endif
++#else
++  hwcap2 = getauxval(AT_HWCAP2);
++#endif
++  features->have_crypto_ext =
++   (hwcap2 & PPC_FEATURE2_VEC_CRYPTO) == PPC_FEATURE2_VEC_CRYPTO ? 1 : 0;
++}
++
++DECLARE_FAT_FUNC(_nettle_aes_encrypt, aes_crypt_internal_func)
++DECLARE_FAT_FUNC_VAR(aes_encrypt, aes_crypt_internal_func, c)
++DECLARE_FAT_FUNC_VAR(aes_encrypt, aes_crypt_internal_func, ppc64)
++
++DECLARE_FAT_FUNC(_nettle_aes_decrypt, aes_crypt_internal_func)
++DECLARE_FAT_FUNC_VAR(aes_decrypt, aes_crypt_internal_func, c)
++DECLARE_FAT_FUNC_VAR(aes_decrypt, aes_crypt_internal_func, ppc64)
++
++static void CONSTRUCTOR
++fat_init (void)
++{
++  struct ppc_features features;
++  int verbose;
++
++  get_ppc_features (&features);
++
++  verbose = getenv (ENV_VERBOSE) != NULL;
++  if (verbose)
++    fprintf (stderr, "libnettle: cpu features: %s\n",
++     features.have_crypto_ext ? "crypto extensions" : "");
++
++  if (features.have_crypto_ext)
++  {
++     if (verbose)
++        fprintf (stderr, "libnettle: enabling arch 2.07 code.\n");
++     _nettle_aes_encrypt_vec = _nettle_aes_encrypt_ppc64;
++     _nettle_aes_decrypt_vec = _nettle_aes_decrypt_ppc64;
++  }
++  else
++  {
++     _nettle_aes_encrypt_vec = _nettle_aes_encrypt_c;
++     _nettle_aes_decrypt_vec = _nettle_aes_decrypt_c;
++  }
++}
++
++DEFINE_FAT_FUNC(_nettle_aes_encrypt, void,
++ (unsigned rounds, const uint32_t *keys,
++ const struct aes_table *T,
++ size_t length, uint8_t *dst,
++ const uint8_t *src),
++ (rounds, keys, T, length, dst, src))
++
++DEFINE_FAT_FUNC(_nettle_aes_decrypt, void,
++ (unsigned rounds, const uint32_t *keys,
++ const struct aes_table *T,
++ size_t length, uint8_t *dst,
++ const uint8_t *src),
++ (rounds, keys, T, length, dst, src))
+diff --git a/powerpc64/fat/aes-decrypt-internal-2.asm b/powerpc64/fat/aes-decrypt-internal-2.asm
+new file mode 100644
+index 00000000..3a4e08c2
+--- /dev/null
++++ b/powerpc64/fat/aes-decrypt-internal-2.asm
+@@ -0,0 +1,37 @@
++C powerpc64/fat/aes-decrypt-internal-2.asm
++
++
++ifelse(<
++   Copyright (C) 2020 Mamone Tarsha
++
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++>)
++
++dnl PROLOGUE(_nettle_aes_decrypt) picked up by configure
++
++define(<fat_transform>, <$1_ppc64>)
++include_src(<powerpc64/p8/aes-decrypt-internal.asm>)
+diff --git a/powerpc64/fat/aes-encrypt-internal-2.asm b/powerpc64/fat/aes-encrypt-internal-2.asm
+new file mode 100644
+index 00000000..42126e4f
+--- /dev/null
++++ b/powerpc64/fat/aes-encrypt-internal-2.asm
+@@ -0,0 +1,37 @@
++C powerpc64/fat/aes-encrypt-internal-2.asm
++
++
++ifelse(<
++   Copyright (C) 2020 Mamone Tarsha
++
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++>)
++
++dnl PROLOGUE(_nettle_aes_encrypt) picked up by configure
++
++define(<fat_transform>, <$1_ppc64>)
++include_src(<powerpc64/p8/aes-encrypt-internal.asm>)
+diff --git a/powerpc64/machine.m4 b/powerpc64/machine.m4
+new file mode 100644
+index 00000000..b76bb8b1
+--- /dev/null
++++ b/powerpc64/machine.m4
+@@ -0,0 +1,36 @@
++define(<PROLOGUE>,
++<.globl C_NAME($1)
++DECLARE_FUNC(C_NAME($1))
++ifelse(WORDS_BIGENDIAN,no,
++<ifdef(<FUNC_ALIGN>,<.align FUNC_ALIGN>)
++C_NAME($1):
++addis 2,12,(.TOC.-C_NAME($1))@ha
++addi 2,2,(.TOC.-C_NAME($1))@l
++.localentry C_NAME($1), .-C_NAME($1)>,
++<.section ".opd","aw"
++.align 3
++C_NAME($1):
++.quad .C_NAME($1),.TOC.@tocbase,0
++.previous
++ifdef(<FUNC_ALIGN>,<.align FUNC_ALIGN>)
++.C_NAME($1):>)
++undefine(<FUNC_ALIGN>)>)
++
++define(<EPILOGUE>,
++<ifelse(WORDS_BIGENDIAN,no,
++<.size C_NAME($1), . - C_NAME($1)>,
++<.size .C_NAME($1), . - .C_NAME($1)
++.size C_NAME($1), . - .C_NAME($1)>)>)
++
++C Get vector-scalar register from vector register
++C VSR(VR)
++define(<VSR>,<32+$1>)
++
++C Load the quadword in DATA_SRC storage into
++C VEC_DST. GPR is general-purpose register
++C used to obtain the effective address of
++C DATA_SRC storage.
++C DATA_LOAD_VEC(VEC_DST, DATA_SRC, GPR)
++define(<DATA_LOAD_VEC>,
++<ld $3,$2@got(2)
++lvx $1,0,$3>)
+diff --git a/powerpc64/p8/aes-decrypt-internal.asm b/powerpc64/p8/aes-decrypt-internal.asm
+new file mode 100644
+index 00000000..bfedb32b
+--- /dev/null
++++ b/powerpc64/p8/aes-decrypt-internal.asm
+@@ -0,0 +1,356 @@
++C powerpc64/p8/aes-decrypt-internal.asm
++
++ifelse(<
++   Copyright (C) 2020 Mamone Tarsha
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++>)
++
++C Register usage:
++
++define(<SP>, <1>)
++define(<TOCP>, <2>)
++
++define(<ROUNDS>, <3>)
++define(<KEYS>, <4>)
++define(<LENGTH>, <6>)
++define(<DST>, <7>)
++define(<SRC>, <8>)
++
++define(<swap_mask>, <0>)
++
++define(<K>, <1>)
++define(<S0>, <2>)
++define(<S1>, <3>)
++define(<S2>, <4>)
++define(<S3>, <5>)
++define(<S4>, <6>)
++define(<S5>, <7>)
++define(<S6>, <8>)
++define(<S7>, <9>)
++
++C ZERO vector register is used in place of RoundKey
++C for vncipher instruction because the order of InvMixColumns
++C and Xor processes are flipped in that instruction.
++C The Xor process with RoundKey is executed afterward.
++define(<ZERO>, <10>)
++
++.file "aes-decrypt-internal.asm"
++
++.text
++
++ C _aes_decrypt(unsigned rounds, const uint32_t *keys,
++ C       const struct aes_table *T,
++ C       size_t length, uint8_t *dst,
++ C       uint8_t *src)
++
++define(<FUNC_ALIGN>, <5>)
++PROLOGUE(_nettle_aes_decrypt)
++ vxor ZERO,ZERO,ZERO
++
++ DATA_LOAD_VEC(swap_mask,.swap_mask,5)
++
++ subi ROUNDS,ROUNDS,1
++ srdi LENGTH,LENGTH,4
++
++ srdi 5,LENGTH,3 #8x loop count
++ cmpldi 5,0
++ beq L4x
++
++ std 25,-56(SP);
++ std 26,-48(SP);
++ std 27,-40(SP);
++ std 28,-32(SP);
++ std 29,-24(SP);
++ std 30,-16(SP);
++ std 31,-8(SP);
++
++ li 25,0x10
++ li 26,0x20
++ li 27,0x30
++ li 28,0x40
++ li 29,0x50
++ li 30,0x60
++ li 31,0x70
++
++.align 5
++Lx8_loop:
++ lxvd2x VSR(K),0,KEYS
++ vperm   K,K,K,swap_mask
++
++ lxvd2x VSR(S0),0,SRC
++ lxvd2x VSR(S1),25,SRC
++ lxvd2x VSR(S2),26,SRC
++ lxvd2x VSR(S3),27,SRC
++ lxvd2x VSR(S4),28,SRC
++ lxvd2x VSR(S5),29,SRC
++ lxvd2x VSR(S6),30,SRC
++ lxvd2x VSR(S7),31,SRC
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask
++ vperm S2,S2,S2,swap_mask
++ vperm S3,S3,S3,swap_mask
++ vperm S4,S4,S4,swap_mask
++ vperm S5,S5,S5,swap_mask
++ vperm S6,S6,S6,swap_mask
++ vperm S7,S7,S7,swap_mask>)
++
++ vxor S0,S0,K
++ vxor S1,S1,K
++ vxor S2,S2,K
++ vxor S3,S3,K
++ vxor S4,S4,K
++ vxor S5,S5,K
++ vxor S6,S6,K
++ vxor S7,S7,K
++
++ mtctr ROUNDS
++ li 10,0x10
++.align 5
++L8x_round_loop:
++ lxvd2x VSR(K),10,KEYS
++ vperm   K,K,K,swap_mask
++ vncipher S0,S0,ZERO
++ vncipher S1,S1,ZERO
++ vncipher S2,S2,ZERO
++ vncipher S3,S3,ZERO
++ vncipher S4,S4,ZERO
++ vncipher S5,S5,ZERO
++ vncipher S6,S6,ZERO
++ vncipher S7,S7,ZERO
++ vxor S0,S0,K
++ vxor S1,S1,K
++ vxor S2,S2,K
++ vxor S3,S3,K
++ vxor S4,S4,K
++ vxor S5,S5,K
++ vxor S6,S6,K
++ vxor S7,S7,K
++ addi 10,10,0x10
++ bdnz L8x_round_loop
++
++ lxvd2x VSR(K),10,KEYS
++ vperm   K,K,K,swap_mask
++ vncipherlast S0,S0,K
++ vncipherlast S1,S1,K
++ vncipherlast S2,S2,K
++ vncipherlast S3,S3,K
++ vncipherlast S4,S4,K
++ vncipherlast S5,S5,K
++ vncipherlast S6,S6,K
++ vncipherlast S7,S7,K
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask
++ vperm S2,S2,S2,swap_mask
++ vperm S3,S3,S3,swap_mask
++ vperm S4,S4,S4,swap_mask
++ vperm S5,S5,S5,swap_mask
++ vperm S6,S6,S6,swap_mask
++ vperm S7,S7,S7,swap_mask>)
++
++ stxvd2x VSR(S0),0,DST
++ stxvd2x VSR(S1),25,DST
++ stxvd2x VSR(S2),26,DST
++ stxvd2x VSR(S3),27,DST
++ stxvd2x VSR(S4),28,DST
++ stxvd2x VSR(S5),29,DST
++ stxvd2x VSR(S6),30,DST
++ stxvd2x VSR(S7),31,DST
++
++ addi SRC,SRC,0x80
++ addi DST,DST,0x80
++ subic. 5,5,1
++ bne Lx8_loop
++
++ ld 25,-56(SP);
++ ld 26,-48(SP);
++ ld 27,-40(SP);
++ ld 28,-32(SP);
++ ld 29,-24(SP);
++ ld 30,-16(SP);
++ ld 31,-8(SP);
++
++ clrldi LENGTH,LENGTH,61
++
++L4x:
++ srdi   5,LENGTH,2
++ cmpldi   5,0
++ beq   L2x
++
++ lxvd2x   VSR(K),0,KEYS
++ vperm   K,K,K,swap_mask
++
++ lxvd2x VSR(S0),0,SRC
++ li  9,0x10
++ lxvd2x VSR(S1),9,SRC
++ addi   9,9,0x10
++ lxvd2x VSR(S2),9,SRC
++ addi   9,9,0x10
++ lxvd2x VSR(S3),9,SRC
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask
++ vperm S2,S2,S2,swap_mask
++ vperm S3,S3,S3,swap_mask>)
++
++ vxor S0,S0,K
++ vxor S1,S1,K
++ vxor S2,S2,K
++ vxor S3,S3,K
++
++ mtctr ROUNDS
++ li 10,0x10
++.align 5
++L4x_round_loop:
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vncipher S0,S0,ZERO
++ vncipher S1,S1,ZERO
++ vncipher S2,S2,ZERO
++ vncipher S3,S3,ZERO
++ vxor   S0,S0,K
++ vxor  S1,S1,K
++ vxor   S2,S2,K
++ vxor   S3,S3,K
++ addi   10,10,0x10
++ bdnz  L4x_round_loop
++
++ lxvd2x VSR(K),10,KEYS
++ vperm   K,K,K,swap_mask
++ vncipherlast S0,S0,K
++ vncipherlast S1,S1,K
++ vncipherlast S2,S2,K
++ vncipherlast S3,S3,K
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask
++ vperm S2,S2,S2,swap_mask
++ vperm S3,S3,S3,swap_mask>)
++
++ stxvd2x VSR(S0),0,DST
++ li  9,0x10
++ stxvd2x VSR(S1),9,DST
++ addi   9,9,0x10
++ stxvd2x VSR(S2),9,DST
++ addi  9,9,0x10
++ stxvd2x VSR(S3),9,DST
++
++ addi   SRC,SRC,0x40
++ addi   DST,DST,0x40
++
++ clrldi LENGTH,LENGTH,62
++
++L2x:
++ srdi  5,LENGTH,1
++ cmpldi  5,0
++ beq   L1x
++
++ lxvd2x VSR(K),0,KEYS
++ vperm K,K,K,swap_mask
++
++ lxvd2x VSR(S0),0,SRC
++ li   9,0x10
++ lxvd2x VSR(S1),9,SRC
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask>)
++
++ vxor  S0,S0,K
++ vxor   S1,S1,K
++
++ mtctr   ROUNDS
++ li  10,0x10
++.align 5
++L2x_round_loop:
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vncipher S0,S0,ZERO
++ vncipher S1,S1,ZERO
++ vxor  S0,S0,K
++ vxor  S1,S1,K
++ addi   10,10,0x10
++ bdnz   L2x_round_loop
++
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vncipherlast S0,S0,K
++ vncipherlast S1,S1,K
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask>)
++
++ stxvd2x VSR(S0),0,DST
++ li  9,0x10
++ stxvd2x VSR(S1),9,DST
++
++ addi   SRC,SRC,0x20
++ addi   DST,DST,0x20
++
++ clrldi LENGTH,LENGTH,63
++
++L1x:
++ cmpldi LENGTH,0
++ beq   Ldone
++
++ lxvd2x VSR(K),0,KEYS
++ vperm   K,K,K,swap_mask
++
++ lxvd2x VSR(S0),0,SRC
++
++IF_LE(<vperm S0,S0,S0,swap_mask>)
++
++ vxor   S0,S0,K
++
++ mtctr   ROUNDS
++ li   10,0x10
++.align 5
++L1x_round_loop:
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vncipher S0,S0,ZERO
++ vxor   S0,S0,K
++ addi   10,10,0x10
++ bdnz   L1x_round_loop
++
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vncipherlast S0,S0,K
++
++IF_LE(<vperm S0,S0,S0,swap_mask>)
++
++ stxvd2x VSR(S0),0,DST
++
++Ldone:
++ blr
++EPILOGUE(_nettle_aes_decrypt)
++
++ .data
++ .align 4
++.swap_mask:
++IF_LE(<.byte 8,9,10,11,12,13,14,15,0,1,2,3,4,5,6,7>)
++IF_BE(<.byte 3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12>)
+diff --git a/powerpc64/p8/aes-encrypt-internal.asm b/powerpc64/p8/aes-encrypt-internal.asm
+new file mode 100644
+index 00000000..67c7e597
+--- /dev/null
++++ b/powerpc64/p8/aes-encrypt-internal.asm
+@@ -0,0 +1,333 @@
++C powerpc64/p8/aes-encrypt-internal.asm
++
++ifelse(<
++   Copyright (C) 2020 Mamone Tarsha
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++>)
++
++C Register usage:
++
++define(<SP>, <1>)
++define(<TOCP>, <2>)
++
++define(<ROUNDS>, <3>)
++define(<KEYS>, <4>)
++define(<LENGTH>, <6>)
++define(<DST>, <7>)
++define(<SRC>, <8>)
++
++define(<swap_mask>, <0>)
++
++define(<K>, <1>)
++define(<S0>, <2>)
++define(<S1>, <3>)
++define(<S2>, <4>)
++define(<S3>, <5>)
++define(<S4>, <6>)
++define(<S5>, <7>)
++define(<S6>, <8>)
++define(<S7>, <9>)
++
++.file "aes-encrypt-internal.asm"
++
++.text
++
++ C _aes_encrypt(unsigned rounds, const uint32_t *keys,
++ C       const struct aes_table *T,
++ C       size_t length, uint8_t *dst,
++ C       uint8_t *src)
++
++define(<FUNC_ALIGN>, <5>)
++PROLOGUE(_nettle_aes_encrypt)
++ DATA_LOAD_VEC(swap_mask,.swap_mask,5)
++
++ subi ROUNDS,ROUNDS,1
++ srdi LENGTH,LENGTH,4
++
++ srdi 5,LENGTH,3 #8x loop count
++ cmpldi 5,0
++ beq L4x
++
++ std 25,-56(SP);
++ std 26,-48(SP);
++ std 27,-40(SP);
++ std 28,-32(SP);
++ std 29,-24(SP);
++ std 30,-16(SP);
++ std 31,-8(SP);
++
++ li 25,0x10
++ li 26,0x20
++ li 27,0x30
++ li 28,0x40
++ li 29,0x50
++ li 30,0x60
++ li 31,0x70
++
++.align 5
++Lx8_loop:
++ lxvd2x VSR(K),0,KEYS
++ vperm   K,K,K,swap_mask
++
++ lxvd2x VSR(S0),0,SRC
++ lxvd2x VSR(S1),25,SRC
++ lxvd2x VSR(S2),26,SRC
++ lxvd2x VSR(S3),27,SRC
++ lxvd2x VSR(S4),28,SRC
++ lxvd2x VSR(S5),29,SRC
++ lxvd2x VSR(S6),30,SRC
++ lxvd2x VSR(S7),31,SRC
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask
++ vperm S2,S2,S2,swap_mask
++ vperm S3,S3,S3,swap_mask
++ vperm S4,S4,S4,swap_mask
++ vperm S5,S5,S5,swap_mask
++ vperm S6,S6,S6,swap_mask
++ vperm S7,S7,S7,swap_mask>)
++
++ vxor S0,S0,K
++ vxor S1,S1,K
++ vxor S2,S2,K
++ vxor S3,S3,K
++ vxor S4,S4,K
++ vxor S5,S5,K
++ vxor S6,S6,K
++ vxor S7,S7,K
++
++ mtctr ROUNDS
++ li 10,0x10
++.align 5
++L8x_round_loop:
++ lxvd2x VSR(K),10,KEYS
++ vperm   K,K,K,swap_mask
++ vcipher S0,S0,K
++ vcipher S1,S1,K
++ vcipher S2,S2,K
++ vcipher S3,S3,K
++ vcipher S4,S4,K
++ vcipher S5,S5,K
++ vcipher S6,S6,K
++ vcipher S7,S7,K
++ addi 10,10,0x10
++ bdnz L8x_round_loop
++
++ lxvd2x VSR(K),10,KEYS
++ vperm   K,K,K,swap_mask
++ vcipherlast S0,S0,K
++ vcipherlast S1,S1,K
++ vcipherlast S2,S2,K
++ vcipherlast S3,S3,K
++ vcipherlast S4,S4,K
++ vcipherlast S5,S5,K
++ vcipherlast S6,S6,K
++ vcipherlast S7,S7,K
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask
++ vperm S2,S2,S2,swap_mask
++ vperm S3,S3,S3,swap_mask
++ vperm S4,S4,S4,swap_mask
++ vperm S5,S5,S5,swap_mask
++ vperm S6,S6,S6,swap_mask
++ vperm S7,S7,S7,swap_mask>)
++
++ stxvd2x VSR(S0),0,DST
++ stxvd2x VSR(S1),25,DST
++ stxvd2x VSR(S2),26,DST
++ stxvd2x VSR(S3),27,DST
++ stxvd2x VSR(S4),28,DST
++ stxvd2x VSR(S5),29,DST
++ stxvd2x VSR(S6),30,DST
++ stxvd2x VSR(S7),31,DST
++
++ addi SRC,SRC,0x80
++ addi DST,DST,0x80
++ subic. 5,5,1
++ bne Lx8_loop
++
++ ld 25,-56(SP);
++ ld 26,-48(SP);
++ ld 27,-40(SP);
++ ld 28,-32(SP);
++ ld 29,-24(SP);
++ ld 30,-16(SP);
++ ld 31,-8(SP);
++
++ clrldi LENGTH,LENGTH,61
++
++L4x:
++ srdi   5,LENGTH,2
++ cmpldi   5,0
++ beq   L2x
++
++ lxvd2x   VSR(K),0,KEYS
++ vperm   K,K,K,swap_mask
++
++ lxvd2x VSR(S0),0,SRC
++ li  9,0x10
++ lxvd2x VSR(S1),9,SRC
++ addi   9,9,0x10
++ lxvd2x VSR(S2),9,SRC
++ addi   9,9,0x10
++ lxvd2x VSR(S3),9,SRC
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask
++ vperm S2,S2,S2,swap_mask
++ vperm S3,S3,S3,swap_mask>)
++
++ vxor S0,S0,K
++ vxor S1,S1,K
++ vxor S2,S2,K
++ vxor S3,S3,K
++
++ mtctr ROUNDS
++ li 10,0x10
++.align 5
++L4x_round_loop:
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vcipher S0,S0,K
++ vcipher S1,S1,K
++ vcipher S2,S2,K
++ vcipher S3,S3,K
++ addi   10,10,0x10
++ bdnz  L4x_round_loop
++
++ lxvd2x VSR(K),10,KEYS
++ vperm   K,K,K,swap_mask
++ vcipherlast S0,S0,K
++ vcipherlast S1,S1,K
++ vcipherlast S2,S2,K
++ vcipherlast S3,S3,K
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask
++ vperm S2,S2,S2,swap_mask
++ vperm S3,S3,S3,swap_mask>)
++
++ stxvd2x VSR(S0),0,DST
++ li  9,0x10
++ stxvd2x VSR(S1),9,DST
++ addi   9,9,0x10
++ stxvd2x VSR(S2),9,DST
++ addi  9,9,0x10
++ stxvd2x VSR(S3),9,DST
++
++ addi   SRC,SRC,0x40
++ addi   DST,DST,0x40
++
++ clrldi LENGTH,LENGTH,62
++
++L2x:
++ srdi  5,LENGTH,1
++ cmpldi  5,0
++ beq   L1x
++
++ lxvd2x VSR(K),0,KEYS
++ vperm K,K,K,swap_mask
++
++ lxvd2x VSR(S0),0,SRC
++ li   9,0x10
++ lxvd2x VSR(S1),9,SRC
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask>)
++
++ vxor  S0,S0,K
++ vxor   S1,S1,K
++
++ mtctr   ROUNDS
++ li  10,0x10
++.align 5
++L2x_round_loop:
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vcipher S0,S0,K
++ vcipher S1,S1,K
++ addi   10,10,0x10
++ bdnz   L2x_round_loop
++
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vcipherlast S0,S0,K
++ vcipherlast S1,S1,K
++
++IF_LE(<vperm S0,S0,S0,swap_mask
++ vperm S1,S1,S1,swap_mask>)
++
++ stxvd2x VSR(S0),0,DST
++ li  9,0x10
++ stxvd2x VSR(S1),9,DST
++
++ addi   SRC,SRC,0x20
++ addi   DST,DST,0x20
++
++ clrldi LENGTH,LENGTH,63
++
++L1x:
++ cmpldi LENGTH,0
++ beq   Ldone
++
++ lxvd2x VSR(K),0,KEYS
++ vperm   K,K,K,swap_mask
++
++ lxvd2x VSR(S0),0,SRC
++
++IF_LE(<vperm S0,S0,S0,swap_mask>)
++
++ vxor   S0,S0,K
++
++ mtctr   ROUNDS
++ li   10,0x10
++.align 5
++L1x_round_loop:
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vcipher S0,S0,K
++ addi   10,10,0x10
++ bdnz   L1x_round_loop
++
++ lxvd2x VSR(K),10,KEYS
++ vperm  K,K,K,swap_mask
++ vcipherlast S0,S0,K
++
++IF_LE(<vperm S0,S0,S0,swap_mask>)
++
++ stxvd2x VSR(S0),0,DST
++
++Ldone:
++ blr
++EPILOGUE(_nettle_aes_encrypt)
++
++ .data
++ .align 4
++.swap_mask:
++IF_LE(<.byte 8,9,10,11,12,13,14,15,0,1,2,3,4,5,6,7>)
++IF_BE(<.byte 3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12>)

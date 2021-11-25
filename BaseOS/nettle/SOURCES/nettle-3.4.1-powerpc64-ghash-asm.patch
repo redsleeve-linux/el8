@@ -1,0 +1,1519 @@
+diff -up ./configure.ac.ghash ./configure.ac
+--- ./configure.ac.ghash	2021-07-14 14:11:58.126891572 +0200
++++ ./configure.ac	2021-07-14 14:11:58.130891552 +0200
+@@ -211,6 +211,22 @@ AC_C_BIGENDIAN([AC_DEFINE([WORDS_BIGENDI
+ 		ASM_WORDS_BIGENDIAN=yes],
+ 	[ASM_WORDS_BIGENDIAN=no])
+ 
++AC_CACHE_CHECK([for __builtin_bswap64],
++		nettle_cv_c_builtin_bswap64,
++[AC_TRY_LINK([
++#include <stdint.h>
++],[
++uint64_t x = 17;
++uint64_t y = __builtin_bswap64(x);
++],
++nettle_cv_c_builtin_bswap64=yes,
++nettle_cv_c_builtin_bswap64=no)])
++
++AH_TEMPLATE([HAVE_BUILTIN_BSWAP64], [Define if __builtin_bswap64 is available])
++if test "x$nettle_cv_c_builtin_bswap64" = "xyes" ; then
++  AC_DEFINE(HAVE_BUILTIN_BSWAP64)
++fi
++
+ LSH_GCC_ATTRIBUTES
+ 
+ # According to Simon Josefsson, looking for uint32_t and friends in
+@@ -472,7 +488,7 @@ asm_replace_list="aes-encrypt-internal.a
+ 		sha3-permute.asm umac-nh.asm umac-nh-n.asm machine.m4"
+ 
+ # Assembler files which generate additional object files if they are used.
+-asm_nettle_optional_list="gcm-hash8.asm cpuid.asm \
++asm_nettle_optional_list="gcm-hash.asm gcm-hash8.asm cpuid.asm \
+   aes-encrypt-internal-2.asm aes-decrypt-internal-2.asm memxor-2.asm \
+   salsa20-core-internal-2.asm sha1-compress-2.asm sha256-compress-2.asm \
+   sha3-permute-2.asm sha512-compress-2.asm \
+@@ -588,6 +604,10 @@ AH_VERBATIM([HAVE_NATIVE],
+ #undef HAVE_NATIVE_ecc_384_redc
+ #undef HAVE_NATIVE_ecc_521_modp
+ #undef HAVE_NATIVE_ecc_521_redc
++#undef HAVE_NATIVE_gcm_init_key
++#undef HAVE_NATIVE_fat_gcm_init_key
++#undef HAVE_NATIVE_gcm_hash
++#undef HAVE_NATIVE_fat_gcm_hash
+ #undef HAVE_NATIVE_gcm_hash8
+ #undef HAVE_NATIVE_salsa20_core
+ #undef HAVE_NATIVE_sha1_compress
+diff -up ./ctr16.c.ghash ./ctr16.c
+--- ./ctr16.c.ghash	2021-07-14 14:11:58.130891552 +0200
++++ ./ctr16.c	2021-07-14 14:11:58.130891552 +0200
+@@ -0,0 +1,106 @@
++/* ctr16.c
++
++   Cipher counter mode, optimized for 16-byte blocks.
++
++   Copyright (C) 2005-2018 Niels Möller
++   Copyright (C) 2018 Red Hat, Inc.
++
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++*/
++
++#if HAVE_CONFIG_H
++# include "config.h"
++#endif
++
++#include <assert.h>
++
++#include "ctr.h"
++
++#include "ctr-internal.h"
++#include "memxor.h"
++#include "nettle-internal.h"
++
++#define MIN(a,b) (((a) < (b)) ? (a) : (b))
++
++void
++_ctr_crypt16(const void *ctx, nettle_cipher_func *f,
++	     nettle_fill16_func *fill, uint8_t *ctr,
++	     size_t length, uint8_t *dst,
++	     const uint8_t *src)
++{
++  if (dst != src && !((uintptr_t) dst % sizeof(uint64_t)))
++    {
++      size_t blocks = length / 16u;
++      size_t done;
++      fill (ctr, blocks, (union nettle_block16 *) dst);
++
++      done = blocks * 16;
++      f(ctx, done, dst, dst);
++      memxor (dst, src, done);
++
++      length -= done;
++      if (length > 0)
++	{ /* Left-over partial block */
++	  union nettle_block16 block;
++	  dst += done;
++	  src += done;
++	  assert (length < 16);
++	  /* Use fill, to update ctr value in the same way in all cases. */
++	  fill (ctr, 1, &block);
++	  f (ctx, 16, block.b, block.b);
++	  memxor3 (dst, src, block.b, length);
++	}
++    }
++  else
++    {
++      /* Construct an aligned buffer of consecutive counter values, of
++	 size at most CTR_BUFFER_LIMIT. */
++      TMP_DECL(buffer, union nettle_block16, CTR_BUFFER_LIMIT / 16);
++      size_t blocks = (length + 15) / 16u;
++      size_t i;
++      TMP_ALLOC(buffer, MIN(blocks, CTR_BUFFER_LIMIT / 16));
++
++      for (i = 0; blocks >= CTR_BUFFER_LIMIT / 16;
++	   i += CTR_BUFFER_LIMIT, blocks -= CTR_BUFFER_LIMIT / 16)
++	{
++	  fill (ctr, CTR_BUFFER_LIMIT / 16, buffer);
++	  f(ctx, CTR_BUFFER_LIMIT, buffer->b, buffer->b);
++	  if (length - i < CTR_BUFFER_LIMIT)
++	    goto done;
++	  memxor3 (dst + i, src + i, buffer->b, CTR_BUFFER_LIMIT);
++	}
++
++      if (blocks > 0)
++	{
++	  assert (length - i < CTR_BUFFER_LIMIT);
++	  fill (ctr, blocks, buffer);
++	  f(ctx, blocks * 16, buffer->b, buffer->b);
++	done:
++	  memxor3 (dst + i, src + i, buffer->b, length - i);
++	}
++    }
++}
+diff -up ./ctr.c.ghash ./ctr.c
+--- ./ctr.c.ghash	2018-12-04 21:56:05.000000000 +0100
++++ ./ctr.c	2021-07-14 14:13:07.714539484 +0200
+@@ -41,11 +41,83 @@
+ 
+ #include "ctr.h"
+ 
++#include "ctr-internal.h"
+ #include "macros.h"
+ #include "memxor.h"
+ #include "nettle-internal.h"
+ 
+-#define NBLOCKS 4
++#define MIN(a,b) (((a) < (b)) ? (a) : (b))
++
++/* The 'u64' member has been added in the public header
++   (nettle-types.h).  Check that the alignment is not affected with
++   it using _Static_assert. */
++union nettle_block16_
++{
++  uint8_t b[16];
++  unsigned long w[16 / sizeof(unsigned long)];
++};
++_Static_assert(__alignof(union nettle_block16_) == __alignof(union nettle_block16),
++	       "nettle_block16 alignment should be preserved");
++
++static size_t
++ctr_fill (size_t block_size, uint8_t *ctr, size_t length, uint8_t *buffer)
++{
++  size_t i;
++  for (i = 0; i + block_size <= length; i += block_size)
++    {
++      memcpy (buffer + i, ctr, block_size);
++      INCREMENT(block_size, ctr);
++    }
++  return i;
++}
++
++#if WORDS_BIGENDIAN
++# define USE_CTR_CRYPT16 1
++static nettle_fill16_func ctr_fill16;
++static void
++ctr_fill16(uint8_t *ctr, size_t blocks, union nettle_block16 *buffer)
++{
++  uint64_t hi, lo;
++  size_t i;
++  hi = READ_UINT64(ctr);
++  lo = READ_UINT64(ctr + 8);
++
++  for (i = 0; i < blocks; i++)
++    {
++      buffer[i].u64[0] = hi;
++      buffer[i].u64[1] = lo;
++      hi += !(++lo);
++    }
++  WRITE_UINT64(ctr, hi);
++  WRITE_UINT64(ctr + 8, lo);
++}
++#else /* !WORDS_BIGENDIAN */
++# if HAVE_BUILTIN_BSWAP64
++#  define USE_CTR_CRYPT16 1
++static nettle_fill16_func ctr_fill16;
++static void
++ctr_fill16(uint8_t *ctr, size_t blocks, union nettle_block16 *buffer)
++{
++  uint64_t hi, lo;
++  size_t i;
++  /* Read hi in native endianness */
++  hi = LE_READ_UINT64(ctr);
++  lo = READ_UINT64(ctr + 8);
++
++  for (i = 0; i < blocks; i++)
++    {
++      buffer[i].u64[0] = hi;
++      buffer[i].u64[1] = __builtin_bswap64(lo);
++      if (!++lo)
++	hi = __builtin_bswap64(__builtin_bswap64(hi) + 1);
++    }
++  LE_WRITE_UINT64(ctr, hi);
++  WRITE_UINT64(ctr + 8, lo);
++}
++# else /* ! HAVE_BUILTIN_BSWAP64 */
++#  define USE_CTR_CRYPT16 0
++# endif
++#endif /* !WORDS_BIGENDIAN */
+ 
+ void
+ ctr_crypt(const void *ctx, nettle_cipher_func *f,
+@@ -53,84 +125,64 @@ ctr_crypt(const void *ctx, nettle_cipher
+ 	  size_t length, uint8_t *dst,
+ 	  const uint8_t *src)
+ {
+-  if (src != dst)
++#if USE_CTR_CRYPT16
++  if (block_size == 16)
+     {
+-      if (length == block_size)
+-	{
+-	  f(ctx, block_size, dst, ctr);
+-	  INCREMENT(block_size, ctr);
+-	  memxor(dst, src, block_size);
+-	}
+-      else
++      _ctr_crypt16(ctx, f, ctr_fill16, ctr, length, dst, src);
++      return;
++    }
++#endif
++
++  if(src != dst)
++    {
++      size_t filled = ctr_fill (block_size, ctr, length, dst);
++
++      f(ctx, filled, dst, dst);
++      memxor(dst, src, filled);
++
++      if (filled < length)
+ 	{
+-	  size_t left;
+-	  uint8_t *p;	  
++	  TMP_DECL(block, uint8_t, NETTLE_MAX_CIPHER_BLOCK_SIZE);
++	  TMP_ALLOC(block, block_size);
+ 
+-	  for (p = dst, left = length;
+-	       left >= block_size;
+-	       left -= block_size, p += block_size)
+-	    {
+-	      memcpy (p, ctr, block_size);
+-	      INCREMENT(block_size, ctr);
+-	    }
+-
+-	  f(ctx, length - left, dst, dst);
+-	  memxor(dst, src, length - left);
+-
+-	  if (left)
+-	    {
+-	      TMP_DECL(buffer, uint8_t, NETTLE_MAX_CIPHER_BLOCK_SIZE);
+-	      TMP_ALLOC(buffer, block_size);
+-
+-	      f(ctx, block_size, buffer, ctr);
+-	      INCREMENT(block_size, ctr);
+-	      memxor3(dst + length - left, src + length - left, buffer, left);
+-	    }
++	  f(ctx, block_size, block, ctr);
++	  INCREMENT(block_size, ctr);
++	  memxor3(dst + filled, src + filled, block, length - filled);
+ 	}
+     }
+   else
+     {
+-      if (length > block_size)
+-	{
+-	  TMP_DECL(buffer, uint8_t, NBLOCKS * NETTLE_MAX_CIPHER_BLOCK_SIZE);
+-	  size_t chunk = NBLOCKS * block_size;
++      /* For in-place CTR, construct a buffer of consecutive counter
++	 values, of size at most CTR_BUFFER_LIMIT. */
++      TMP_DECL(buffer, uint8_t, CTR_BUFFER_LIMIT);
++
++      size_t buffer_size;
++      if (length < block_size)
++	buffer_size = block_size;
++      else if (length <= CTR_BUFFER_LIMIT)
++	buffer_size = length;
++      else
++	buffer_size = CTR_BUFFER_LIMIT;
+ 
+-	  TMP_ALLOC(buffer, chunk);
++      TMP_ALLOC(buffer, buffer_size);
+ 
+-	  for (; length >= chunk;
+-	       length -= chunk, src += chunk, dst += chunk)
+-	    {
+-	      unsigned n;
+-	      uint8_t *p;	  
+-	      for (n = 0, p = buffer; n < NBLOCKS; n++, p += block_size)
+-		{
+-		  memcpy (p, ctr, block_size);
+-		  INCREMENT(block_size, ctr);
+-		}
+-	      f(ctx, chunk, buffer, buffer);
+-	      memxor(dst, buffer, chunk);
+-	    }
+-
+-	  if (length > 0)
+-	    {
+-	      /* Final, possibly partial, blocks */
+-	      for (chunk = 0; chunk < length; chunk += block_size)
+-		{
+-		  memcpy (buffer + chunk, ctr, block_size);
+-		  INCREMENT(block_size, ctr);
+-		}
+-	      f(ctx, chunk, buffer, buffer);
+-	      memxor3(dst, src, buffer, length);
+-	    }
++      while (length >= block_size)
++	{
++	  size_t filled
++	    = ctr_fill (block_size, ctr, MIN(buffer_size, length), buffer);
++	  assert (filled > 0);
++	  f(ctx, filled, buffer, buffer);
++	  memxor(dst, buffer, filled);
++	  length -= filled;
++	  dst += filled;
+ 	}
+-      else if (length > 0)
+-      	{
+-	  TMP_DECL(buffer, uint8_t, NETTLE_MAX_CIPHER_BLOCK_SIZE);
+-	  TMP_ALLOC(buffer, block_size);
+ 
++      /* Final, possibly partial, block. */
++      if (length > 0)
++	{
+ 	  f(ctx, block_size, buffer, ctr);
+ 	  INCREMENT(block_size, ctr);
+-	  memxor3(dst, src, buffer, length);
++	  memxor(dst, buffer, length);
+ 	}
+     }
+ }
+diff -up ./ctr-internal.h.ghash ./ctr-internal.h
+--- ./ctr-internal.h.ghash	2021-07-14 14:11:58.130891552 +0200
++++ ./ctr-internal.h	2021-07-14 14:11:58.130891552 +0200
+@@ -0,0 +1,56 @@
++/* ctr-internal.h
++
++   Copyright (C) 2018 Niels Möller
++
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++*/
++
++#ifndef NETTLE_CTR_INTERNAL_H_INCLUDED
++#define NETTLE_CTR_INTERNAL_H_INCLUDED
++
++#include "nettle-types.h"
++
++/* Name mangling */
++#define _ctr_crypt16 _nettle_ctr_crypt16
++
++/* Size limit for temporary stack buffers. */
++#define CTR_BUFFER_LIMIT 512
++
++/* Fill BUFFER (n blocks) with incrementing CTR values. It would be
++   nice if CTR was always 64-bit aligned, but it isn't when called
++   from ctr_crypt. */
++typedef void
++nettle_fill16_func(uint8_t *ctr, size_t n, union nettle_block16 *buffer);
++
++void
++_ctr_crypt16(const void *ctx, nettle_cipher_func *f,
++	     nettle_fill16_func *fill, uint8_t *ctr,
++	     size_t length, uint8_t *dst,
++	     const uint8_t *src);
++
++
++#endif /* NETTLE_CTR_INTERNAL_H_INCLUDED */
+diff -up ./fat-ppc.c.ghash ./fat-ppc.c
+--- ./fat-ppc.c.ghash	2021-07-14 14:11:58.126891572 +0200
++++ ./fat-ppc.c	2021-07-14 14:11:58.130891552 +0200
+@@ -49,6 +49,7 @@
+ 
+ #include "aes-internal.h"
+ #include "gcm.h"
++#include "gcm-internal.h"
+ #include "fat-setup.h"
+ 
+ /* Define from arch/powerpc/include/uapi/asm/cputable.h in Linux kernel */
+@@ -87,6 +88,16 @@ DECLARE_FAT_FUNC(_nettle_aes_decrypt, ae
+ DECLARE_FAT_FUNC_VAR(aes_decrypt, aes_crypt_internal_func, c)
+ DECLARE_FAT_FUNC_VAR(aes_decrypt, aes_crypt_internal_func, ppc64)
+ 
++#if GCM_TABLE_BITS == 8
++DECLARE_FAT_FUNC(_nettle_gcm_init_key, gcm_init_key_func)
++DECLARE_FAT_FUNC_VAR(gcm_init_key, gcm_init_key_func, c)
++DECLARE_FAT_FUNC_VAR(gcm_init_key, gcm_init_key_func, ppc64)
++
++DECLARE_FAT_FUNC(_nettle_gcm_hash, gcm_hash_func)
++DECLARE_FAT_FUNC_VAR(gcm_hash, gcm_hash_func, c)
++DECLARE_FAT_FUNC_VAR(gcm_hash, gcm_hash_func, ppc64)
++#endif /* GCM_TABLE_BITS == 8 */
++
+ static void CONSTRUCTOR
+ fat_init (void)
+ {
+@@ -101,17 +112,29 @@ fat_init (void)
+      features.have_crypto_ext ? "crypto extensions" : "");
+ 
+   if (features.have_crypto_ext)
+-  {
+-     if (verbose)
+-        fprintf (stderr, "libnettle: enabling arch 2.07 code.\n");
+-     _nettle_aes_encrypt_vec = _nettle_aes_encrypt_ppc64;
+-     _nettle_aes_decrypt_vec = _nettle_aes_decrypt_ppc64;
+-  }
++    {
++      if (verbose)
++	fprintf (stderr, "libnettle: enabling arch 2.07 code.\n");
++      _nettle_aes_encrypt_vec = _nettle_aes_encrypt_ppc64;
++      _nettle_aes_decrypt_vec = _nettle_aes_decrypt_ppc64;
++#if GCM_TABLE_BITS == 8
++      /* Make sure _nettle_gcm_init_key_vec function is compatible
++         with _nettle_gcm_hash_vec function e.g. _nettle_gcm_init_key_c()
++         fills gcm_key table with values that are incompatible with
++         _nettle_gcm_hash_ppc64() */
++      _nettle_gcm_init_key_vec = _nettle_gcm_init_key_ppc64;
++      _nettle_gcm_hash_vec = _nettle_gcm_hash_ppc64;
++#endif /* GCM_TABLE_BITS == 8 */
++    }
+   else
+-  {
+-     _nettle_aes_encrypt_vec = _nettle_aes_encrypt_c;
+-     _nettle_aes_decrypt_vec = _nettle_aes_decrypt_c;
+-  }
++    {
++      _nettle_aes_encrypt_vec = _nettle_aes_encrypt_c;
++      _nettle_aes_decrypt_vec = _nettle_aes_decrypt_c;
++#if GCM_TABLE_BITS == 8
++      _nettle_gcm_init_key_vec = _nettle_gcm_init_key_c;
++      _nettle_gcm_hash_vec = _nettle_gcm_hash_c;
++#endif /* GCM_TABLE_BITS == 8 */
++    }
+ }
+ 
+ DEFINE_FAT_FUNC(_nettle_aes_encrypt, void,
+@@ -127,3 +150,14 @@ DEFINE_FAT_FUNC(_nettle_aes_decrypt, voi
+  size_t length, uint8_t *dst,
+  const uint8_t *src),
+  (rounds, keys, T, length, dst, src))
++
++#if GCM_TABLE_BITS == 8
++DEFINE_FAT_FUNC(_nettle_gcm_init_key, void,
++		(union nettle_block16 *table),
++		(table))
++
++DEFINE_FAT_FUNC(_nettle_gcm_hash, void,
++		(const struct gcm_key *key, union nettle_block16 *x,
++		 size_t length, const uint8_t *data),
++		(key, x, length, data))
++#endif /* GCM_TABLE_BITS == 8 */
+diff -up ./fat-setup.h.ghash ./fat-setup.h
+--- ./fat-setup.h.ghash	2018-12-04 21:56:06.000000000 +0100
++++ ./fat-setup.h	2021-07-14 14:11:58.130891552 +0200
+@@ -159,6 +159,11 @@ typedef void aes_crypt_internal_func (un
+ 				      size_t length, uint8_t *dst,
+ 				      const uint8_t *src);
+ 
++typedef void gcm_init_key_func (union nettle_block16 *table);
++
++typedef void gcm_hash_func (const struct gcm_key *key, union nettle_block16 *x,
++			    size_t length, const uint8_t *data);
++
+ typedef void *(memxor_func)(void *dst, const void *src, size_t n);
+ 
+ typedef void salsa20_core_func (uint32_t *dst, const uint32_t *src, unsigned rounds);
+diff -up ./gcm.c.ghash ./gcm.c
+--- ./gcm.c.ghash	2018-12-04 21:56:05.000000000 +0100
++++ ./gcm.c	2021-07-14 14:11:58.131891547 +0200
+@@ -6,8 +6,9 @@
+    See also the gcm paper at
+    http://www.cryptobarn.com/papers/gcm-spec.pdf.
+ 
+-   Copyright (C) 2011, 2013 Niels Möller
+    Copyright (C) 2011 Katholieke Universiteit Leuven
++   Copyright (C) 2011, 2013, 2018 Niels Möller
++   Copyright (C) 2018 Red Hat, Inc.
+    
+    Contributed by Nikos Mavrogiannopoulos
+ 
+@@ -48,9 +49,11 @@
+ 
+ #include "gcm.h"
+ 
++#include "gcm-internal.h"
+ #include "memxor.h"
+ #include "nettle-internal.h"
+ #include "macros.h"
++#include "ctr-internal.h"
+ 
+ #define GHASH_POLYNOMIAL 0xE1UL
+ 
+@@ -112,7 +115,17 @@ gcm_gf_shift (union nettle_block16 *r, c
+ #endif /* ! WORDS_BIGENDIAN */
+ }
+ 
+-#if GCM_TABLE_BITS == 0
++#if GCM_TABLE_BITS != 8
++/* The native implementations (currently ppc64 only) depend on the
++   GCM_TABLE_BITS == 8 layout */
++#undef HAVE_NATIVE_gcm_hash
++#undef HAVE_NATIVE_gcm_init_key
++#undef HAVE_NATIVE_fat_gcm_hash
++#undef HAVE_NATIVE_fat_gcm_init_key
++#endif
++
++#if !HAVE_NATIVE_gcm_hash
++# if GCM_TABLE_BITS == 0
+ /* Sets x <- x * y mod r, using the plain bitwise algorithm from the
+    specification. y may be shorter than a full block, missing bytes
+    are assumed zero. */
+@@ -140,15 +153,15 @@ gcm_gf_mul (union nettle_block16 *x, con
+     }
+   memcpy (x->b, Z.b, sizeof(Z));
+ }
+-#else /* GCM_TABLE_BITS != 0 */
++# else /* GCM_TABLE_BITS != 0 */
+ 
+-# if WORDS_BIGENDIAN
+-#  define W(left,right) (0x##left##right)
+-# else
+-#  define W(left,right) (0x##right##left)
+-# endif
++#  if WORDS_BIGENDIAN
++#   define W(left,right) (0x##left##right)
++#  else
++#   define W(left,right) (0x##right##left)
++#  endif
+ 
+-# if GCM_TABLE_BITS == 4
++#  if GCM_TABLE_BITS == 4
+ static const uint16_t
+ shift_table[0x10] = {
+   W(00,00),W(1c,20),W(38,40),W(24,60),W(70,80),W(6c,a0),W(48,c0),W(54,e0),
+@@ -177,26 +190,13 @@ gcm_gf_shift_4(union nettle_block16 *x)
+ #  error Unsupported word size. */
+ #endif
+ #else /* ! WORDS_BIGENDIAN */
+-# if SIZEOF_LONG == 4
+-#define RSHIFT_WORD(x) \
+-  ((((x) & 0xf0f0f0f0UL) >> 4)			\
+-   | (((x) & 0x000f0f0f) << 12))
+-  reduce = shift_table[(w[3] >> 24) & 0xf];
+-  w[3] = RSHIFT_WORD(w[3]) | ((w[2] >> 20) & 0xf0);
+-  w[2] = RSHIFT_WORD(w[2]) | ((w[1] >> 20) & 0xf0);
+-  w[1] = RSHIFT_WORD(w[1]) | ((w[0] >> 20) & 0xf0);
+-  w[0] = RSHIFT_WORD(w[0]) ^ reduce;
+-# elif SIZEOF_LONG == 8
+-#define RSHIFT_WORD(x) \
+-  ((((x) & 0xf0f0f0f0f0f0f0f0UL) >> 4) \
+-   | (((x) & 0x000f0f0f0f0f0f0fUL) << 12))
+-  reduce = shift_table[(w[1] >> 56) & 0xf];
+-  w[1] = RSHIFT_WORD(w[1]) | ((w[0] >> 52) & 0xf0);
+-  w[0] = RSHIFT_WORD(w[0]) ^ reduce;
+-# else
+-#  error Unsupported word size. */
+-# endif
+-# undef RSHIFT_WORD
++# define RSHIFT_WORD_4(x) \
++  ((((x) & UINT64_C(0xf0f0f0f0f0f0f0f0)) >> 4) \
++   | (((x) & UINT64_C(0x000f0f0f0f0f0f0f)) << 12))
++  reduce = shift_table[(u64[1] >> 56) & 0xf];
++  u64[1] = RSHIFT_WORD_4(u64[1]) | ((u64[0] >> 52) & 0xf0);
++  u64[0] = RSHIFT_WORD_4(u64[0]) ^ reduce;
++# undef RSHIFT_WORD_4
+ #endif /* ! WORDS_BIGENDIAN */
+ }
+ 
+@@ -219,10 +219,10 @@ gcm_gf_mul (union nettle_block16 *x, con
+     }
+   memcpy (x->b, Z.b, sizeof(Z));
+ }
+-# elif GCM_TABLE_BITS == 8
+-#  if HAVE_NATIVE_gcm_hash8
++#  elif GCM_TABLE_BITS == 8
++#   if HAVE_NATIVE_gcm_hash8
+ 
+-#define gcm_hash _nettle_gcm_hash8
++#define _nettle_gcm_hash _nettle_gcm_hash8
+ void
+ _nettle_gcm_hash8 (const struct gcm_key *key, union nettle_block16 *x,
+ 		   size_t length, const uint8_t *data);
+@@ -317,18 +317,46 @@ gcm_gf_mul (union nettle_block16 *x, con
+   gcm_gf_shift_8(&Z);
+   gcm_gf_add(x, &Z, &table[x->b[0]]);
+ }
+-#  endif /* ! HAVE_NATIVE_gcm_hash8 */
+-# else /* GCM_TABLE_BITS != 8 */
+-#  error Unsupported table size. 
+-# endif /* GCM_TABLE_BITS != 8 */
++#   endif /* ! HAVE_NATIVE_gcm_hash8 */
++#  else /* GCM_TABLE_BITS != 8 */
++#   error Unsupported table size.
++#  endif /* GCM_TABLE_BITS != 8 */
++
++#  undef W
++# endif /* GCM_TABLE_BITS != 0 */
++#endif /* !HAVE_NATIVE_gcm_hash */
+ 
+-#undef W
+-
+-#endif /* GCM_TABLE_BITS */
+ 
+ /* Increment the rightmost 32 bits. */
+ #define INC32(block) INCREMENT(4, (block.b) + GCM_BLOCK_SIZE - 4)
+ 
++#if !HAVE_NATIVE_gcm_init_key
++# if !HAVE_NATIVE_fat_gcm_hash
++#  define _nettle_gcm_init_key _nettle_gcm_init_key_c
++static
++# endif
++void
++_nettle_gcm_init_key_c(union nettle_block16 *table)
++{
++#if GCM_TABLE_BITS
++  /* Middle element if GCM_TABLE_BITS > 0, otherwise the first
++     element */
++  unsigned i = (1<<GCM_TABLE_BITS)/2;
++
++  /* Algorithm 3 from the gcm paper. First do powers of two, then do
++     the rest by adding. */
++  while (i /= 2)
++    gcm_gf_shift(&table[i], &table[2*i]);
++  for (i = 2; i < 1<<GCM_TABLE_BITS; i *= 2)
++    {
++      unsigned j;
++      for (j = 1; j < i; j++)
++        gcm_gf_add(&table[i+j], &table[i], &table[j]);
++    }
++#endif
++}
++#endif /* !HAVE_NATIVE_gcm_init_key */
++
+ /* Initialization of GCM.
+  * @ctx: The context of GCM
+  * @cipher: The context of the underlying block cipher
+@@ -345,25 +373,18 @@ gcm_set_key(struct gcm_key *key,
+   /* H */  
+   memset(key->h[0].b, 0, GCM_BLOCK_SIZE);
+   f (cipher, GCM_BLOCK_SIZE, key->h[i].b, key->h[0].b);
+-  
+-#if GCM_TABLE_BITS
+-  /* Algorithm 3 from the gcm paper. First do powers of two, then do
+-     the rest by adding. */
+-  while (i /= 2)
+-    gcm_gf_shift(&key->h[i], &key->h[2*i]);
+-  for (i = 2; i < 1<<GCM_TABLE_BITS; i *= 2)
+-    {
+-      unsigned j;
+-      for (j = 1; j < i; j++)
+-	gcm_gf_add(&key->h[i+j], &key->h[i],&key->h[j]);
+-    }
+-#endif
++
++  _nettle_gcm_init_key(key->h);
+ }
+ 
+-#ifndef gcm_hash
+-static void
+-gcm_hash(const struct gcm_key *key, union nettle_block16 *x,
+-	 size_t length, const uint8_t *data)
++#if !(HAVE_NATIVE_gcm_hash || HAVE_NATIVE_gcm_hash8)
++# if !HAVE_NATIVE_fat_gcm_hash
++#  define _nettle_gcm_hash _nettle_gcm_hash_c
++static
++# endif
++void
++_nettle_gcm_hash_c(const struct gcm_key *key, union nettle_block16 *x,
++		   size_t length, const uint8_t *data)
+ {
+   for (; length >= GCM_BLOCK_SIZE;
+        length -= GCM_BLOCK_SIZE, data += GCM_BLOCK_SIZE)
+@@ -377,7 +398,7 @@ gcm_hash(const struct gcm_key *key, unio
+       gcm_gf_mul (x, key->h);
+     }
+ }
+-#endif /* !gcm_hash */
++#endif /* !(HAVE_NATIVE_gcm_hash || HAVE_NATIVE_gcm_hash8) */
+ 
+ static void
+ gcm_hash_sizes(const struct gcm_key *key, union nettle_block16 *x,
+@@ -391,7 +412,7 @@ gcm_hash_sizes(const struct gcm_key *key
+   WRITE_UINT64 (buffer, auth_size);
+   WRITE_UINT64 (buffer + 8, data_size);
+ 
+-  gcm_hash(key, x, GCM_BLOCK_SIZE, buffer);
++  _nettle_gcm_hash(key, x, GCM_BLOCK_SIZE, buffer);
+ }
+ 
+ /* NOTE: The key is needed only if length != GCM_IV_SIZE */
+@@ -410,7 +431,7 @@ gcm_set_iv(struct gcm_ctx *ctx, const st
+   else
+     {
+       memset(ctx->iv.b, 0, GCM_BLOCK_SIZE);
+-      gcm_hash(key, &ctx->iv, length, iv);
++      _nettle_gcm_hash(key, &ctx->iv, length, iv);
+       gcm_hash_sizes(key, &ctx->iv, 0, length);
+     }
+ 
+@@ -429,47 +450,68 @@ gcm_update(struct gcm_ctx *ctx, const st
+   assert(ctx->auth_size % GCM_BLOCK_SIZE == 0);
+   assert(ctx->data_size == 0);
+ 
+-  gcm_hash(key, &ctx->x, length, data);
++  _nettle_gcm_hash(key, &ctx->x, length, data);
+ 
+   ctx->auth_size += length;
+ }
+ 
++static nettle_fill16_func gcm_fill;
++#if WORDS_BIGENDIAN
+ static void
+-gcm_crypt(struct gcm_ctx *ctx, const void *cipher, nettle_cipher_func *f,
+-	  size_t length, uint8_t *dst, const uint8_t *src)
++gcm_fill(uint8_t *ctr, size_t blocks, union nettle_block16 *buffer)
+ {
+-  uint8_t buffer[GCM_BLOCK_SIZE];
++  uint64_t hi, mid;
++  uint32_t lo;
++  size_t i;
++  hi = READ_UINT64(ctr);
++  mid = (uint64_t) READ_UINT32(ctr + 8) << 32;
++  lo = READ_UINT32(ctr + 12);
+ 
+-  if (src != dst)
++  for (i = 0; i < blocks; i++)
+     {
+-      for (; length >= GCM_BLOCK_SIZE;
+-           (length -= GCM_BLOCK_SIZE,
+-	    src += GCM_BLOCK_SIZE, dst += GCM_BLOCK_SIZE))
+-        {
+-          f (cipher, GCM_BLOCK_SIZE, dst, ctx->ctr.b);
+-          memxor (dst, src, GCM_BLOCK_SIZE);
+-          INC32 (ctx->ctr);
+-        }
++      buffer[i].u64[0] = hi;
++      buffer[i].u64[1] = mid + lo++;
+     }
+-  else
++  WRITE_UINT32(ctr + 12, lo);
++
++}
++#elif HAVE_BUILTIN_BSWAP64
++/* Assume __builtin_bswap32 is also available */
++static void
++gcm_fill(uint8_t *ctr, size_t blocks, union nettle_block16 *buffer)
++{
++  uint64_t hi, mid;
++  uint32_t lo;
++  size_t i;
++  hi = LE_READ_UINT64(ctr);
++  mid = LE_READ_UINT32(ctr + 8);
++  lo = READ_UINT32(ctr + 12);
++
++  for (i = 0; i < blocks; i++)
+     {
+-      for (; length >= GCM_BLOCK_SIZE;
+-           (length -= GCM_BLOCK_SIZE,
+-	    src += GCM_BLOCK_SIZE, dst += GCM_BLOCK_SIZE))
+-        {
+-          f (cipher, GCM_BLOCK_SIZE, buffer, ctx->ctr.b);
+-          memxor3 (dst, src, buffer, GCM_BLOCK_SIZE);
+-          INC32 (ctx->ctr);
+-        }
++      buffer[i].u64[0] = hi;
++      buffer[i].u64[1] = mid + ((uint64_t)__builtin_bswap32(lo) << 32);
++      lo++;
+     }
+-  if (length > 0)
++  WRITE_UINT32(ctr + 12, lo);
++}
++#else
++static void
++gcm_fill(uint8_t *ctr, size_t blocks, union nettle_block16 *buffer)
++{
++  uint32_t c;
++
++  c = READ_UINT32(ctr + GCM_BLOCK_SIZE - 4);
++
++  for (; blocks-- > 0; buffer++, c++)
+     {
+-      /* A final partial block */
+-      f (cipher, GCM_BLOCK_SIZE, buffer, ctx->ctr.b);
+-      memxor3 (dst, src, buffer, length);
+-      INC32 (ctx->ctr);
++      memcpy(buffer->b, ctr, GCM_BLOCK_SIZE - 4);
++      WRITE_UINT32(buffer->b + GCM_BLOCK_SIZE - 4, c);
+     }
++
++  WRITE_UINT32(ctr + GCM_BLOCK_SIZE - 4, c);
+ }
++#endif
+ 
+ void
+ gcm_encrypt (struct gcm_ctx *ctx, const struct gcm_key *key,
+@@ -478,8 +520,8 @@ gcm_encrypt (struct gcm_ctx *ctx, const
+ {
+   assert(ctx->data_size % GCM_BLOCK_SIZE == 0);
+ 
+-  gcm_crypt(ctx, cipher, f, length, dst, src);
+-  gcm_hash(key, &ctx->x, length, dst);
++  _ctr_crypt16(cipher, f, gcm_fill, ctx->ctr.b, length, dst, src);
++  _nettle_gcm_hash(key, &ctx->x, length, dst);
+ 
+   ctx->data_size += length;
+ }
+@@ -491,8 +533,8 @@ gcm_decrypt(struct gcm_ctx *ctx, const s
+ {
+   assert(ctx->data_size % GCM_BLOCK_SIZE == 0);
+ 
+-  gcm_hash(key, &ctx->x, length, src);
+-  gcm_crypt(ctx, cipher, f, length, dst, src);
++  _nettle_gcm_hash(key, &ctx->x, length, src);
++  _ctr_crypt16(cipher, f, gcm_fill, ctx->ctr.b, length, dst, src);
+ 
+   ctx->data_size += length;
+ }
+diff -up ./gcm-internal.h.ghash ./gcm-internal.h
+--- ./gcm-internal.h.ghash	2021-07-14 14:11:58.131891547 +0200
++++ ./gcm-internal.h	2021-07-14 14:11:58.131891547 +0200
+@@ -0,0 +1,54 @@
++/* gcm-internal.h
++
++   Copyright (C) 2020 Niels Möller
++
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++*/
++
++#ifndef NETTLE_GCM_INTERNAL_H_INCLUDED
++#define NETTLE_GCM_INTERNAL_H_INCLUDED
++
++/* Functions available only in some configurations */
++void
++_nettle_gcm_init_key (union nettle_block16 *table);
++
++void
++_nettle_gcm_hash(const struct gcm_key *key, union nettle_block16 *x,
++		 size_t length, const uint8_t *data);
++
++#if HAVE_NATIVE_fat_gcm_init_key
++void
++_nettle_gcm_init_key_c (union nettle_block16 *table);
++#endif
++
++#if HAVE_NATIVE_fat_gcm_hash
++void
++_nettle_gcm_hash_c (const struct gcm_key *key, union nettle_block16 *x,
++		    size_t length, const uint8_t *data);
++#endif
++
++#endif /* NETTLE_GCM_INTERNAL_H_INCLUDED */
+diff -up ./Makefile.in.ghash ./Makefile.in
+--- ./Makefile.in.ghash	2021-07-14 14:11:58.124891582 +0200
++++ ./Makefile.in	2021-07-14 14:11:58.131891547 +0200
+@@ -96,7 +96,7 @@ nettle_SOURCES = aes-decrypt-internal.c
+ 		 chacha-crypt.c chacha-core-internal.c \
+ 		 chacha-poly1305.c chacha-poly1305-meta.c \
+ 		 chacha-set-key.c chacha-set-nonce.c \
+-		 ctr.c des.c des3.c des-compat.c \
++		 ctr.c ctr16.c des.c des3.c des-compat.c \
+ 		 eax.c eax-aes128.c eax-aes128-meta.c \
+ 		 gcm.c gcm-aes.c \
+ 		 gcm-aes128.c gcm-aes128-meta.c \
+@@ -233,6 +233,8 @@ DISTFILES = $(SOURCES) $(HEADERS) getopt
+ 	cast128_sboxes.h desinfo.h desCode.h \
+ 	memxor-internal.h nettle-internal.h nettle-write.h \
+ 	rsa-internal.h \
++	ctr-internal.h \
++	gcm-internal.h \
+ 	gmp-glue.h ecc-internal.h fat-setup.h \
+ 	mini-gmp.h asm.m4 \
+ 	nettle.texinfo nettle.info nettle.html nettle.pdf sha-example.c
+diff -up ./nettle-types.h.ghash ./nettle-types.h
+--- ./nettle-types.h.ghash	2018-12-04 21:56:06.000000000 +0100
++++ ./nettle-types.h	2021-07-14 14:11:58.131891547 +0200
+@@ -48,6 +48,7 @@ union nettle_block16
+ {
+   uint8_t b[16];
+   unsigned long w[16 / sizeof(unsigned long)];
++  uint64_t u64[2];
+ };
+ 
+ /* Randomness. Used by key generation and dsa signature creation. */
+diff -up ./powerpc64/fat/gcm-hash.asm.ghash ./powerpc64/fat/gcm-hash.asm
+--- ./powerpc64/fat/gcm-hash.asm.ghash	2021-07-14 14:11:58.131891547 +0200
++++ ./powerpc64/fat/gcm-hash.asm	2021-07-14 14:11:58.131891547 +0200
+@@ -0,0 +1,39 @@
++C powerpc64/fat/gcm-hash.asm
++
++
++ifelse(<
++   Copyright (C) 2020 Mamone Tarsha
++
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++>)
++
++dnl picked up by configure
++dnl PROLOGUE(_nettle_fat_gcm_init_key)
++dnl PROLOGUE(_nettle_fat_gcm_hash)
++
++define(<fat_transform>, <$1_ppc64>)
++include_src(<powerpc64/p8/gcm-hash.asm>)
+diff -up ./powerpc64/p8/gcm-hash.asm.ghash ./powerpc64/p8/gcm-hash.asm
+--- ./powerpc64/p8/gcm-hash.asm.ghash	2021-07-14 14:11:58.131891547 +0200
++++ ./powerpc64/p8/gcm-hash.asm	2021-07-14 14:11:58.131891547 +0200
+@@ -0,0 +1,499 @@
++C powerpc64/p8/gcm-hash.asm
++
++ifelse(<
++   Copyright (C) 2020 Niels Möller and Mamone Tarsha
++   This file is part of GNU Nettle.
++
++   GNU Nettle is free software: you can redistribute it and/or
++   modify it under the terms of either:
++
++     * the GNU Lesser General Public License as published by the Free
++       Software Foundation; either version 3 of the License, or (at your
++       option) any later version.
++
++   or
++
++     * the GNU General Public License as published by the Free
++       Software Foundation; either version 2 of the License, or (at your
++       option) any later version.
++
++   or both in parallel, as here.
++
++   GNU Nettle is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received copies of the GNU General Public License and
++   the GNU Lesser General Public License along with this program.  If
++   not, see http://www.gnu.org/licenses/.
++>)
++
++C gcm_set_key() assigns H value in the middle element of the table
++define(<H_Idx>, <128>)
++
++C Register usage:
++
++define(<SP>, <1>)
++define(<TOCP>, <2>)
++
++define(<TABLE>, <3>)
++
++define(<ZERO>, <0>)
++define(<B1>, <1>)
++define(<EMSB>, <16>)
++define(<POLY>, <17>)
++define(<POLY_L>, <1>)
++
++define(<H>, <2>)
++define(<H2>, <3>)
++define(<H3>, <4>)
++define(<H4>, <5>)
++define(<H1M>, <6>)
++define(<H1L>, <7>)
++define(<H2M>, <8>)
++define(<H2L>, <9>)
++define(<Hl>, <10>)
++define(<Hm>, <11>)
++define(<Hp>, <12>)
++define(<Hl2>, <13>)
++define(<Hm2>, <14>)
++define(<Hp2>, <15>)
++define(<R>, <13>)
++define(<F>, <14>)
++define(<T>, <15>)
++define(<R2>, <16>)
++define(<F2>, <17>)
++define(<T2>, <18>)
++
++define(<LE_TEMP>, <18>)
++define(<LE_MASK>, <19>)
++
++.file "gcm-hash.asm"
++
++.text
++
++    C void gcm_init_key (union gcm_block *table)
++
++C This function populates the gcm table as the following layout
++C *******************************************************************************
++C | H1M = (H1 div x⁶⁴)||((H1 mod x⁶⁴) × (x⁶⁴+x⁶³+x⁶²+x⁵⁷)) div x⁶⁴              |
++C | H1L = (H1 mod x⁶⁴)||(((H1 mod x⁶⁴) × (x⁶³+x⁶²+x⁵⁷)) mod x⁶⁴) + (H1 div x⁶⁴) |
++C |                                                                             |
++C | H2M = (H2 div x⁶⁴)||((H2 mod x⁶⁴) × (x⁶⁴+x⁶³+x⁶²+x⁵⁷)) div x⁶⁴              |
++C | H2L = (H2 mod x⁶⁴)||(((H2 mod x⁶⁴) × (x⁶³+x⁶²+x⁵⁷)) mod x⁶⁴) + (H2 div x⁶⁴) |
++C |                                                                             |
++C | H3M = (H3 div x⁶⁴)||((H3 mod x⁶⁴) × (x⁶⁴+x⁶³+x⁶²+x⁵⁷)) div x⁶⁴              |
++C | H3L = (H3 mod x⁶⁴)||(((H3 mod x⁶⁴) × (x⁶³+x⁶²+x⁵⁷)) mod x⁶⁴) + (H3 div x⁶⁴) |
++C |                                                                             |
++C | H4M = (H3 div x⁶⁴)||((H4 mod x⁶⁴) × (x⁶⁴+x⁶³+x⁶²+x⁵⁷)) div x⁶⁴              |
++C | H4L = (H3 mod x⁶⁴)||(((H4 mod x⁶⁴) × (x⁶³+x⁶²+x⁵⁷)) mod x⁶⁴) + (H4 div x⁶⁴) |
++C *******************************************************************************
++
++define(<FUNC_ALIGN>, <5>)
++PROLOGUE(_nettle_gcm_init_key)
++    DATA_LOAD_VEC(POLY,.polynomial,7)           C 0xC2000000000000000000000000000001
++IF_LE(<
++    li             8,0
++    lvsl           LE_MASK,0,8                  C 0x000102030405060708090A0B0C0D0E0F
++    vspltisb       LE_TEMP,0x07                  C 0x07070707070707070707070707070707
++    vxor           LE_MASK,LE_MASK,LE_TEMP       C 0x07060504030201000F0E0D0C0B0A0908
++>)
++
++    C 'H' is assigned by gcm_set_key() to the middle element of the table
++    li             10,H_Idx*16
++    lxvd2x         VSR(H),10,TABLE              C load 'H'
++    C byte-reverse of each doubleword permuting on little-endian mode
++IF_LE(<
++    vperm          H,H,H,LE_MASK
++>)
++
++    C --- calculate H = H << 1 mod P(X), P(X) = (x¹²⁸+x¹²⁷+x¹²⁶+x¹²¹+1) ---
++
++    vupkhsb        EMSB,H                        C extend most significant bit to first byte
++    vspltisb       B1,1                          C 0x01010101010101010101010101010101
++    vspltb         EMSB,EMSB,0                   C first byte quadword-extend
++    vsl            H,H,B1                        C H = H << 1
++    vand           EMSB,EMSB,POLY                C EMSB &= 0xC2000000000000000000000000000001
++    vxor           ZERO,ZERO,ZERO                C 0x00000000000000000000000000000000
++    vxor           H,H,EMSB                      C H ^= EMSB
++
++    C --- calculate H^2 = H*H ---
++
++    xxmrghd        VSR(POLY_L),VSR(ZERO),VSR(POLY) C 0x0000000000000000C200000000000000
++
++    C --- Hp = (H mod x⁶⁴) / x⁶⁴ mod P(X) ---
++    C --- Hp = (H mod x⁶⁴) × (x⁶⁴+x⁶³+x⁶²+x⁵⁷) mod P(X), deg(Hp) ≤ 127 ---
++    C --- Hp = (H mod x⁶⁴) × (x⁶⁴+x⁶³+x⁶²+x⁵⁷) ---
++    vpmsumd        Hp,H,POLY_L                   C Hp = (H mod x⁶⁴) × (x⁶³+x⁶²+x⁵⁷)
++    xxswapd        VSR(Hm),VSR(H)
++    xxmrgld        VSR(Hl),VSR(H),VSR(ZERO)      C Hl = (H mod x⁶⁴) × x⁶⁴
++    vxor           Hm,Hm,Hp                      C Hm = Hm + Hp
++    vxor           Hl,Hl,Hp                      C Hl = Hl + Hp
++    xxmrgld        VSR(H1L),VSR(H),VSR(Hm)       C H1L = (H mod x⁶⁴)||(Hl mod x⁶⁴)
++    xxmrghd        VSR(H1M),VSR(H),VSR(Hl)       C H1M = (H div x⁶⁴)||(Hl div x⁶⁴)
++
++    vpmsumd        F,H1L,H                       C F = (H1Lh × Hh) + (H1Ll × Hl)
++    vpmsumd        R,H1M,H                       C R = (H1Mh × Hh) + (H1Ml × Hl)
++
++    C --- rduction ---
++    vpmsumd        T,F,POLY_L                    C T = (F mod x⁶⁴) × (x⁶³+x⁶²+x⁵⁷)
++    xxswapd        VSR(H2),VSR(F)
++    vxor           R,R,T                         C R = R + T
++    vxor           H2,R,H2
++
++    xxmrgld        VSR(Hl),VSR(H2),VSR(ZERO)
++    xxswapd        VSR(Hm),VSR(H2)
++    vpmsumd        Hp,H2,POLY_L
++    vxor           Hl,Hl,Hp
++    vxor           Hm,Hm,Hp
++    xxmrghd        VSR(H2M),VSR(H2),VSR(Hl)
++    xxmrgld        VSR(H2L),VSR(H2),VSR(Hm)
++
++    C store H1M, H1L, H2M, H2L
++    li             8,1*16
++    li             9,2*16
++    li             10,3*16
++    stxvd2x        VSR(H1M),0,TABLE
++    stxvd2x        VSR(H1L),8,TABLE
++    stxvd2x        VSR(H2M),9,TABLE
++    stxvd2x        VSR(H2L),10,TABLE
++
++    C --- calculate H^3 = H^1*H^2, H^4 = H^2*H^2 ---
++
++    vpmsumd        F,H1L,H2
++    vpmsumd        F2,H2L,H2
++    vpmsumd        R,H1M,H2
++    vpmsumd        R2,H2M,H2
++
++    vpmsumd        T,F,POLY_L
++    vpmsumd        T2,F2,POLY_L
++    xxswapd        VSR(H3),VSR(F)
++    xxswapd        VSR(H4),VSR(F2)
++    vxor           R,R,T
++    vxor           R2,R2,T2
++    vxor           H3,R,H3
++    vxor           H4,R2,H4
++
++    xxmrgld        VSR(Hl),VSR(H3),VSR(ZERO)
++    xxmrgld        VSR(Hl2),VSR(H4),VSR(ZERO)
++    xxswapd        VSR(Hm),VSR(H3)
++    xxswapd        VSR(Hm2),VSR(H4)
++    vpmsumd        Hp,H3,POLY_L
++    vpmsumd        Hp2,H4,POLY_L
++    vxor           Hl,Hl,Hp
++    vxor           Hl2,Hl2,Hp2
++    vxor           Hm,Hm,Hp
++    vxor           Hm2,Hm2,Hp2
++    xxmrghd        VSR(H1M),VSR(H3),VSR(Hl)
++    xxmrghd        VSR(H2M),VSR(H4),VSR(Hl2)
++    xxmrgld        VSR(H1L),VSR(H3),VSR(Hm)
++    xxmrgld        VSR(H2L),VSR(H4),VSR(Hm2)
++
++    C store H3M, H3L, H4M, H4L
++    li             7,4*16
++    li             8,5*16
++    li             9,6*16
++    li             10,7*16
++    stxvd2x        VSR(H1M),7,TABLE
++    stxvd2x        VSR(H1L),8,TABLE
++    stxvd2x        VSR(H2M),9,TABLE
++    stxvd2x        VSR(H2L),10,TABLE
++
++    blr
++EPILOGUE(_nettle_gcm_init_key)
++
++define(<TABLE>, <3>)
++define(<X>, <4>)
++define(<LENGTH>, <5>)
++define(<DATA>, <6>)
++
++define(<ZERO>, <16>)
++define(<POLY>, <17>)
++define(<POLY_L>, <0>)
++
++define(<D>, <1>)
++define(<C0>, <2>)
++define(<C1>, <3>)
++define(<C2>, <4>)
++define(<C3>, <5>)
++define(<H1M>, <6>)
++define(<H1L>, <7>)
++define(<H2M>, <8>)
++define(<H2L>, <9>)
++define(<H3M>, <10>)
++define(<H3L>, <11>)
++define(<H4M>, <12>)
++define(<H4L>, <13>)
++define(<R>, <14>)
++define(<F>, <15>)
++define(<R2>, <16>)
++define(<F2>, <17>)
++define(<T>, <18>)
++define(<R3>, <20>)
++define(<F3>, <21>)
++define(<R4>, <22>)
++define(<F4>, <23>)
++
++define(<LE_TEMP>, <18>)
++define(<LE_MASK>, <19>)
++
++    C void gcm_hash (const struct gcm_key *key, union gcm_block *x,
++    C                size_t length, const uint8_t *data)
++
++define(<FUNC_ALIGN>, <5>)
++PROLOGUE(_nettle_gcm_hash)
++    vxor           ZERO,ZERO,ZERO
++    DATA_LOAD_VEC(POLY,.polynomial,7)
++IF_LE(<
++    li             8,0
++    lvsl           LE_MASK,0,8
++    vspltisb       LE_TEMP,0x07
++    vxor           LE_MASK,LE_MASK,LE_TEMP
++>)
++    xxmrghd        VSR(POLY_L),VSR(ZERO),VSR(POLY)
++
++    lxvd2x         VSR(D),0,X                    C load 'X' pointer
++    C byte-reverse of each doubleword permuting on little-endian mode
++IF_LE(<
++    vperm          D,D,D,LE_MASK
++>)
++
++    C --- process 4 blocks '128-bit each' per one loop ---
++
++    srdi.          7,LENGTH,6                   C 4-blocks loop count 'LENGTH / (4 * 16)'
++    beq            L2x
++
++    mtctr          7                            C assign counter register to loop count
++
++    C store non-volatile vector registers
++    addi           8,SP,-64
++    stvx           20,0,8
++    addi           8,8,16
++    stvx           21,0,8
++    addi           8,8,16
++    stvx           22,0,8
++    addi           8,8,16
++    stvx           23,0,8
++
++    C load table elements
++    li             8,1*16
++    li             9,2*16
++    li             10,3*16
++    lxvd2x         VSR(H1M),0,TABLE
++    lxvd2x         VSR(H1L),8,TABLE
++    lxvd2x         VSR(H2M),9,TABLE
++    lxvd2x         VSR(H2L),10,TABLE
++    li             7,4*16
++    li             8,5*16
++    li             9,6*16
++    li             10,7*16
++    lxvd2x         VSR(H3M),7,TABLE
++    lxvd2x         VSR(H3L),8,TABLE
++    lxvd2x         VSR(H4M),9,TABLE
++    lxvd2x         VSR(H4L),10,TABLE
++
++    li             8,0x10
++    li             9,0x20
++    li             10,0x30
++.align 5
++L4x_loop:
++    C input loading
++    lxvd2x         VSR(C0),0,DATA                C load C0
++    lxvd2x         VSR(C1),8,DATA               C load C1
++    lxvd2x         VSR(C2),9,DATA               C load C2
++    lxvd2x         VSR(C3),10,DATA              C load C3
++
++IF_LE(<
++    vperm          C0,C0,C0,LE_MASK
++    vperm          C1,C1,C1,LE_MASK
++    vperm          C2,C2,C2,LE_MASK
++    vperm          C3,C3,C3,LE_MASK
++>)
++
++    C previous digest combining
++    vxor           C0,C0,D
++
++    C polynomial multiplication
++    vpmsumd        F2,H3L,C1
++    vpmsumd        R2,H3M,C1
++    vpmsumd        F3,H2L,C2
++    vpmsumd        R3,H2M,C2
++    vpmsumd        F4,H1L,C3
++    vpmsumd        R4,H1M,C3
++    vpmsumd        F,H4L,C0
++    vpmsumd        R,H4M,C0
++
++    C deferred recombination of partial products
++    vxor           F3,F3,F4
++    vxor           R3,R3,R4
++    vxor           F,F,F2
++    vxor           R,R,R2
++    vxor           F,F,F3
++    vxor           R,R,R3
++
++    C reduction
++    vpmsumd        T,F,POLY_L
++    xxswapd        VSR(D),VSR(F)
++    vxor           R,R,T
++    vxor           D,R,D
++
++    addi           DATA,DATA,0x40
++    bdnz           L4x_loop
++
++    C restore non-volatile vector registers
++    addi           8,SP,-64
++    lvx            20,0,8
++    addi           8,8,16
++    lvx            21,0,8
++    addi           8,8,16
++    lvx            22,0,8
++    addi           8,8,16
++    lvx            23,0,8
++
++    clrldi         LENGTH,LENGTH,58              C 'set the high-order 58 bits to zeros'
++L2x:
++    C --- process 2 blocks ---
++
++    srdi.          7,LENGTH,5                   C 'LENGTH / (2 * 16)'
++    beq            L1x
++
++    C load table elements
++    li             8,1*16
++    li             9,2*16
++    li             10,3*16
++    lxvd2x         VSR(H1M),0,TABLE
++    lxvd2x         VSR(H1L),8,TABLE
++    lxvd2x         VSR(H2M),9,TABLE
++    lxvd2x         VSR(H2L),10,TABLE
++
++    C input loading
++    li             10,0x10
++    lxvd2x         VSR(C0),0,DATA                C load C0
++    lxvd2x         VSR(C1),10,DATA              C load C1
++
++IF_LE(<
++    vperm          C0,C0,C0,LE_MASK
++    vperm          C1,C1,C1,LE_MASK
++>)
++
++    C previous digest combining
++    vxor           C0,C0,D
++
++    C polynomial multiplication
++    vpmsumd        F2,H1L,C1
++    vpmsumd        R2,H1M,C1
++    vpmsumd        F,H2L,C0
++    vpmsumd        R,H2M,C0
++
++    C deferred recombination of partial products
++    vxor           F,F,F2
++    vxor           R,R,R2
++
++    C reduction
++    vpmsumd        T,F,POLY_L
++    xxswapd        VSR(D),VSR(F)
++    vxor           R,R,T
++    vxor           D,R,D
++
++    addi           DATA,DATA,0x20
++    clrldi         LENGTH,LENGTH,59              C 'set the high-order 59 bits to zeros'
++L1x:
++    C --- process 1 block ---
++
++    srdi.          7,LENGTH,4                   C 'LENGTH / (1 * 16)'
++    beq            Lmod
++
++    C load table elements
++    li             8,1*16
++    lxvd2x         VSR(H1M),0,TABLE
++    lxvd2x         VSR(H1L),8,TABLE
++
++    C input loading
++    lxvd2x         VSR(C0),0,DATA                C load C0
++
++IF_LE(<
++    vperm          C0,C0,C0,LE_MASK
++>)
++
++    C previous digest combining
++    vxor           C0,C0,D
++
++    C polynomial multiplication
++    vpmsumd        F,H1L,C0
++    vpmsumd        R,H1M,C0
++
++    C reduction
++    vpmsumd        T,F,POLY_L
++    xxswapd        VSR(D),VSR(F)
++    vxor           R,R,T
++    vxor           D,R,D
++
++    addi           DATA,DATA,0x10
++    clrldi         LENGTH,LENGTH,60              C 'set the high-order 60 bits to zeros'
++Lmod:
++    C --- process the modulo bytes, padding the low-order bytes with zeros ---
++
++    cmpldi         LENGTH,0
++    beq            Ldone
++
++    C load table elements
++    li             8,1*16
++    lxvd2x         VSR(H1M),0,TABLE
++    lxvd2x         VSR(H1L),8,TABLE
++
++    C push every modulo byte to the stack and load them with padding into vector register
++    vxor           ZERO,ZERO,ZERO
++    addi           8,SP,-16
++    stvx           ZERO,0,8
++Lstb_loop:
++    subic.         LENGTH,LENGTH,1
++    lbzx           7,LENGTH,DATA
++    stbx           7,LENGTH,8
++    bne            Lstb_loop
++    lxvd2x         VSR(C0),0,8
++
++IF_LE(<
++    vperm          C0,C0,C0,LE_MASK
++>)
++
++    C previous digest combining
++    vxor           C0,C0,D
++
++    C polynomial multiplication
++    vpmsumd        F,H1L,C0
++    vpmsumd        R,H1M,C0
++
++    C reduction
++    vpmsumd        T,F,POLY_L
++    xxswapd        VSR(D),VSR(F)
++    vxor           R,R,T
++    vxor           D,R,D
++
++Ldone:
++    C byte-reverse of each doubleword permuting on little-endian mode
++IF_LE(<
++    vperm          D,D,D,LE_MASK
++>)
++    stxvd2x        VSR(D),0,X                    C store digest 'D'
++
++    blr
++EPILOGUE(_nettle_gcm_hash)
++
++.data
++    C 0xC2000000000000000000000000000001
++.polynomial:
++.align 4
++IF_BE(<
++.byte 0xC2
++.rept 14
++.byte 0x00
++.endr
++.byte 0x01
++>,<
++.byte 0x01
++.rept 14
++.byte 0x00
++.endr
++.byte 0xC2
++>)
