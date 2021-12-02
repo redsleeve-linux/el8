@@ -1,7 +1,7 @@
 Summary: Lightweight library to easily extract data from zip files
 Name: zziplib
 Version: 0.13.68
-Release: 8%{?dist}
+Release: 9%{?dist}
 License: LGPLv2+ or MPLv1.1
 Group: Applications/Archiving
 URL: http://zziplib.sourceforge.net/
@@ -24,6 +24,8 @@ Patch9: CVE-2018-16548.part3.patch
 
 Patch10: CVE-2018-17828.patch
 Patch11: CVE-2018-17828-singlez.patch
+
+Patch12: CVE-2020-18442.patch
 
 BuildRequires: perl-interpreter
 BuildRequires: python3-devel
@@ -89,6 +91,7 @@ zziplib library.
 %patch9 -p1
 %patch10 -p1
 %patch11 -p1
+%patch12 -p1
 
 pathfix.py -i %{__python3} -pn docs
 
@@ -140,6 +143,10 @@ make install DESTDIR=%{buildroot}
 %{_mandir}/man3/*
 
 %changelog
+* Mon Aug 02 2021 Jakub Martisko <jamartis@redhat.com> - 0.13.68-9
+- Fix CVE-2020-18442
+- Resolves: CVE-2020-18442
+
 * Tue Oct 16 2018 Jakub Martisko <jamartis@redhat.com> - 0.13.68-8
 - Fix CVE-2018-17828 in the "single z" binaries
 - Resolves: #1772447
