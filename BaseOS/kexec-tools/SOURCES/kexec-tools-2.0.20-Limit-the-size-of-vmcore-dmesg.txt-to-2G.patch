@@ -1,0 +1,55 @@
+From fa3f0ed47f3e6dbee485722d13713ad495571b7e Mon Sep 17 00:00:00 2001
+From: Lianbo Jiang <lijiang@redhat.com>
+Date: Fri, 23 Aug 2019 20:05:39 +0800
+Subject: [PATCH 4/5] Limit the size of vmcore-dmesg.txt to 2G
+
+With some corrupted vmcore files, the vmcore-dmesg.txt file may grow
+forever till the kdump disk becomes full, and also probably causes
+the disk error messages as follow:
+...
+sd 0:0:0:0: [sda] tag#6 FAILED Result: hostbyte=DID_BAD_TARGET driverbyte=DRIVER_OK
+sd 0:0:0:0: [sda] tag#6 CDB: Read(10) 28 00 08 06 4c 98 00 00 08 00
+blk_update_request: I/O error, dev sda, sector 134630552
+sd 0:0:0:0: [sda] tag#7 FAILED Result: hostbyte=DID_BAD_TARGET driverbyte=DRIVER_OK
+sd 0:0:0:0: [sda] tag#7 CDB: Read(10) 28 00 08 06 4c 98 00 00 08 00
+blk_update_request: I/O error, dev sda, sector 134630552
+...
+
+If vmcore-dmesg.txt occupies the whole disk, the vmcore can not be
+saved, this is also a problem.
+
+Lets limit the size of vmcore-dmesg.txt to avoid such problems.
+
+Signed-off-by: Lianbo Jiang <lijiang@redhat.com>
+Signed-off-by: Simon Horman <horms@verge.net.au>
+---
+ vmcore-dmesg/vmcore-dmesg.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/vmcore-dmesg/vmcore-dmesg.c b/vmcore-dmesg/vmcore-dmesg.c
+index fe7df8ec372c..81c2a58c9d86 100644
+--- a/vmcore-dmesg/vmcore-dmesg.c
++++ b/vmcore-dmesg/vmcore-dmesg.c
+@@ -5,9 +5,19 @@ typedef Elf32_Nhdr Elf_Nhdr;
+ 
+ extern const char *fname;
+ 
++/* stole this macro from kernel printk.c */
++#define LOG_BUF_LEN_MAX (uint32_t)(1 << 31)
++
+ static void write_to_stdout(char *buf, unsigned int nr)
+ {
+ 	ssize_t ret;
++	static uint32_t n_bytes = 0;
++
++	n_bytes += nr;
++	if (n_bytes > LOG_BUF_LEN_MAX) {
++		fprintf(stderr, "The vmcore-dmesg.txt over 2G in size is not supported.\n");
++		exit(53);
++	}
+ 
+ 	ret = write(STDOUT_FILENO, buf, nr);
+ 	if (ret != nr) {
+-- 
+2.17.1
+

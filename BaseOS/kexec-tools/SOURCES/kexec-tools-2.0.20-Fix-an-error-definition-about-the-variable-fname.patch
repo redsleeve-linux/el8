@@ -1,0 +1,47 @@
+From 14ad054e7baa788a6629385ffe5e0f1996b7de02 Mon Sep 17 00:00:00 2001
+From: Lianbo Jiang <lijiang@redhat.com>
+Date: Fri, 23 Aug 2019 20:05:37 +0800
+Subject: [PATCH 2/5] Fix an error definition about the variable 'fname'
+
+The variable 'fname' is mistakenly defined two twice, the first definition
+is in the vmcore-dmesg.c, and the second definition is in the elf_info.c.
+That is confused and incorrect although it's a static type, because the
+value of variable 'fname' is not assigned(set) in elf_info.c. Anyway, its
+value will be always 'null' when printing an error information.
+
+Signed-off-by: Lianbo Jiang <lijiang@redhat.com>
+Signed-off-by: Simon Horman <horms@verge.net.au>
+---
+ util_lib/elf_info.c         | 2 +-
+ vmcore-dmesg/vmcore-dmesg.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/util_lib/elf_info.c b/util_lib/elf_info.c
+index d9397ecd8626..5d0efaafab53 100644
+--- a/util_lib/elf_info.c
++++ b/util_lib/elf_info.c
+@@ -20,7 +20,7 @@
+ /* The 32bit and 64bit note headers make it clear we don't care */
+ typedef Elf32_Nhdr Elf_Nhdr;
+ 
+-static const char *fname;
++const char *fname;
+ static Elf64_Ehdr ehdr;
+ static Elf64_Phdr *phdr;
+ static int num_pt_loads;
+diff --git a/vmcore-dmesg/vmcore-dmesg.c b/vmcore-dmesg/vmcore-dmesg.c
+index 7a386b380291..bebc348a657e 100644
+--- a/vmcore-dmesg/vmcore-dmesg.c
++++ b/vmcore-dmesg/vmcore-dmesg.c
+@@ -3,7 +3,7 @@
+ /* The 32bit and 64bit note headers make it clear we don't care */
+ typedef Elf32_Nhdr Elf_Nhdr;
+ 
+-static const char *fname;
++extern const char *fname;
+ 
+ int main(int argc, char **argv)
+ {
+-- 
+2.17.1
+

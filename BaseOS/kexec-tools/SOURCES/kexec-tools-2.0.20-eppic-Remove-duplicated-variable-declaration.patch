@@ -1,0 +1,25 @@
+From f54ad866c428ecd64a01cfdf7fc6b0a64f5e0fe5 Mon Sep 17 00:00:00 2001
+From: Pingfan Liu <piliu@redhat.com>
+Date: Tue, 15 Dec 2020 14:13:13 +0800
+Subject: [PATCH] fix
+
+---
+ eppic/libeppic/eppic.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/eppic/libeppic/eppic.h b/eppic/libeppic/eppic.h
+index 06320f2..74a3c1c 100644
+--- a/eppic/libeppic/eppic.h
++++ b/eppic/libeppic/eppic.h
+@@ -467,7 +467,7 @@ type_t  *eppic_addstorage(type_t *t1, type_t *t2);
+ type_t  *eppic_getvoidstruct(int ctype);
+ 
+ extern int lineno, needvar, instruct, nomacs, eppic_legacy;
+-node_t *lastv;
++extern node_t *lastv;
+ 
+ #define NULLNODE ((node_t*)0)
+ 
+-- 
+2.29.2
+

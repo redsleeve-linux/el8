@@ -1,0 +1,84 @@
+From 545c811050a375f79e0fa0e107cb35b9ae3a1599 Mon Sep 17 00:00:00 2001
+From: Lianbo Jiang <lijiang@redhat.com>
+Date: Fri, 23 Aug 2019 20:05:36 +0800
+Subject: [PATCH 1/5] Cleanup: remove the read_elf_kcore()
+
+Here, no need to wrap the read_elf() again, lets invoke it directly.
+So remove the read_elf_kcore() and clean up redundant code.
+
+Signed-off-by: Lianbo Jiang <lijiang@redhat.com>
+Signed-off-by: Simon Horman <horms@verge.net.au>
+---
+ kexec/arch/arm64/kexec-arm64.c |  2 +-
+ util_lib/elf_info.c            | 15 ++-------------
+ util_lib/include/elf_info.h    |  2 +-
+ 3 files changed, 4 insertions(+), 15 deletions(-)
+
+diff --git a/kexec/arch/arm64/kexec-arm64.c b/kexec/arch/arm64/kexec-arm64.c
+index eb3a3a37307c..6ad3b0a134b3 100644
+--- a/kexec/arch/arm64/kexec-arm64.c
++++ b/kexec/arch/arm64/kexec-arm64.c
+@@ -889,7 +889,7 @@ int get_phys_base_from_pt_load(unsigned long *phys_offset)
+ 		return EFAILED;
+ 	}
+ 
+-	read_elf_kcore(fd);
++	read_elf(fd);
+ 
+ 	for (i = 0; get_pt_load(i,
+ 		    &phys_start, NULL, &virt_start, NULL);
+diff --git a/util_lib/elf_info.c b/util_lib/elf_info.c
+index 90a3b21662e7..d9397ecd8626 100644
+--- a/util_lib/elf_info.c
++++ b/util_lib/elf_info.c
+@@ -764,7 +764,7 @@ static void dump_dmesg(int fd)
+ 		dump_dmesg_legacy(fd);
+ }
+ 
+-static int read_elf(int fd)
++int read_elf(int fd)
+ {
+ 	int ret;
+ 
+@@ -824,24 +824,13 @@ int read_elf_vmcore(int fd)
+ 	return 0;
+ }
+ 
+-int read_elf_kcore(int fd)
+-{
+-	int ret;
+-
+-	ret = read_elf(fd);
+-	if (ret != 0)
+-		return ret;
+-
+-	return 0;
+-}
+-
+ int read_phys_offset_elf_kcore(int fd, unsigned long *phys_off)
+ {
+ 	int ret;
+ 
+ 	*phys_off = UINT64_MAX;
+ 
+-	ret = read_elf_kcore(fd);
++	ret = read_elf(fd);
+ 	if (!ret) {
+ 		/* If we have a valid 'PHYS_OFFSET' by now,
+ 		 * return it to the caller now.
+diff --git a/util_lib/include/elf_info.h b/util_lib/include/elf_info.h
+index 1a4debd2d4ba..c328a1b0ecf2 100644
+--- a/util_lib/include/elf_info.h
++++ b/util_lib/include/elf_info.h
+@@ -29,7 +29,7 @@ int get_pt_load(int idx,
+ 	unsigned long long *virt_start,
+ 	unsigned long long *virt_end);
+ int read_phys_offset_elf_kcore(int fd, unsigned long *phys_off);
+-int read_elf_kcore(int fd);
++int read_elf(int fd);
+ int read_elf_vmcore(int fd);
+ 
+ #endif /* ELF_INFO_H */
+-- 
+2.17.1
+

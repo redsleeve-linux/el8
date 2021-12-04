@@ -1,0 +1,38 @@
+From a46c686f615a86933134c0924c3391ba598a02b8 Mon Sep 17 00:00:00 2001
+From: Bhupesh Sharma <bhsharma@redhat.com>
+Date: Tue, 10 Sep 2019 15:51:49 +0530
+Subject: [PATCH 5/5] vmcore-dmesg/vmcore-dmesg.c: Fix shifting error reported
+ by cppcheck
+
+Running 'cppcheck' static code analyzer (see cppcheck(1))
+ on 'vmcore-dmesg/vmcore-dmesg.c' shows the following
+shifting error:
+
+$ cppcheck  --enable=all  vmcore-dmesg/vmcore-dmesg.c
+Checking vmcore-dmesg/vmcore-dmesg.c ...
+[vmcore-dmesg/vmcore-dmesg.c:17]: (error) Shifting signed 32-bit value by 31 bits is undefined behaviour
+
+Fix the same via this patch.
+
+Signed-off-by: Bhupesh Sharma <bhsharma@redhat.com>
+Signed-off-by: Simon Horman <horms@verge.net.au>
+---
+ vmcore-dmesg/vmcore-dmesg.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vmcore-dmesg/vmcore-dmesg.c b/vmcore-dmesg/vmcore-dmesg.c
+index 81c2a58c9d86..122e53672e01 100644
+--- a/vmcore-dmesg/vmcore-dmesg.c
++++ b/vmcore-dmesg/vmcore-dmesg.c
+@@ -6,7 +6,7 @@ typedef Elf32_Nhdr Elf_Nhdr;
+ extern const char *fname;
+ 
+ /* stole this macro from kernel printk.c */
+-#define LOG_BUF_LEN_MAX (uint32_t)(1 << 31)
++#define LOG_BUF_LEN_MAX (uint32_t)(1U << 31)
+ 
+ static void write_to_stdout(char *buf, unsigned int nr)
+ {
+-- 
+2.17.1
+

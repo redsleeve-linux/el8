@@ -1,0 +1,85 @@
+From 16028a119c85ed73944bcf6ca310a7ee4d2e64fe Mon Sep 17 00:00:00 2001
+From: Pingfan Liu <piliu@redhat.com>
+Date: Mon, 21 Dec 2020 13:35:38 +0800
+Subject: [PATCH] RHEL-only
+
+---
+ arch/arm64.c   | 14 +++++++++++++-
+ makedumpfile.c |  2 ++
+ makedumpfile.h |  1 +
+ 3 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/makedumpfile-1.6.8/arch/arm64.c b/makedumpfile-1.6.8/arch/arm64.c
+index 3d7b416..c8e7f62 100644
+--- a/makedumpfile-1.6.8/arch/arm64.c
++++ b/makedumpfile-1.6.8/arch/arm64.c
+@@ -48,6 +48,7 @@ static int lpa_52_bit_support_available;
+ static int pgtable_level;
+ static int va_bits;
+ static unsigned long kimage_voffset;
++static int max_user_va_bits;
+ 
+ #define SZ_4K			4096
+ #define SZ_16K			16384
+@@ -107,7 +108,7 @@ typedef unsigned long pgdval_t;
+ #define PGDIR_SHIFT		ARM64_HW_PGTABLE_LEVEL_SHIFT(4 - (pgtable_level))
+ #define PGDIR_SIZE		(_AC(1, UL) << PGDIR_SHIFT)
+ #define PGDIR_MASK		(~(PGDIR_SIZE-1))
+-#define PTRS_PER_PGD		(1 << ((va_bits) - PGDIR_SHIFT))
++#define PTRS_PER_PGD           (1 << ((max_user_va_bits) - PGDIR_SHIFT))
+ 
+ /*
+  * Section address mask and size definitions.
+@@ -366,6 +367,17 @@ get_machdep_info_arm64(void)
+ 		ERRMSG("Can't determine platform config values\n");
+ 		return FALSE;
+ 	}
++	if (NUMBER(MAX_USER_VA_BITS) != NOT_FOUND_NUMBER) {
++		max_user_va_bits = NUMBER(MAX_USER_VA_BITS);
++		DEBUG_MSG("max_user_va_bits : %d (vmcoreinfo)\n",
++		                max_user_va_bits);
++	}
++	if (!max_user_va_bits) {
++		max_user_va_bits = va_bits;
++		DEBUG_MSG("max_user_va_bits : %d (default = va_bits)\n",
++		                max_user_va_bits);
++	}
++
+ 
+ 	kimage_voffset = NUMBER(kimage_voffset);
+ 	info->section_size_bits = SECTIONS_SIZE_BITS;
+diff --git a/makedumpfile-1.6.8/makedumpfile.c b/makedumpfile-1.6.8/makedumpfile.c
+index cdde040..9fd3ae9 100644
+--- a/makedumpfile-1.6.8/makedumpfile.c
++++ b/makedumpfile-1.6.8/makedumpfile.c
+@@ -2322,6 +2322,7 @@ write_vmcoreinfo_data(void)
+ 
+ 	WRITE_NUMBER("HUGETLB_PAGE_DTOR", HUGETLB_PAGE_DTOR);
+ #ifdef __aarch64__
++	WRITE_NUMBER("MAX_USER_VA_BITS", MAX_USER_VA_BITS);
+ 	WRITE_NUMBER("VA_BITS", VA_BITS);
+ 	WRITE_NUMBER_UNSIGNED("PHYS_OFFSET", PHYS_OFFSET);
+ 	WRITE_NUMBER_UNSIGNED("kimage_voffset", kimage_voffset);
+@@ -2728,6 +2729,7 @@ read_vmcoreinfo(void)
+ 	READ_NUMBER("phys_base", phys_base);
+ 	READ_NUMBER("KERNEL_IMAGE_SIZE", KERNEL_IMAGE_SIZE);
+ #ifdef __aarch64__
++	READ_NUMBER("MAX_USER_VA_BITS", MAX_USER_VA_BITS);
+ 	READ_NUMBER("VA_BITS", VA_BITS);
+ 	READ_NUMBER_UNSIGNED("PHYS_OFFSET", PHYS_OFFSET);
+ 	READ_NUMBER_UNSIGNED("kimage_voffset", kimage_voffset);
+diff --git a/makedumpfile-1.6.8/makedumpfile.h b/makedumpfile-1.6.8/makedumpfile.h
+index 698c054..2763a47 100644
+--- a/makedumpfile-1.6.8/makedumpfile.h
++++ b/makedumpfile-1.6.8/makedumpfile.h
+@@ -1937,6 +1937,7 @@ struct number_table {
+ 	long	phys_base;
+ 	long	KERNEL_IMAGE_SIZE;
+ #ifdef __aarch64__
++	long    MAX_USER_VA_BITS;
+ 	long 	VA_BITS;
+ 	unsigned long	PHYS_OFFSET;
+ 	unsigned long	kimage_voffset;
+-- 
+2.21.0
+
