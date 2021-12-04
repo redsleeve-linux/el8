@@ -104,7 +104,7 @@ Summary: An interpreted, interactive, object-oriented programming language
 Name: %{python}
 # Remember to also rebase python2-docs when changing this:
 Version: 2.7.18
-Release: 4%{?dist}
+Release: 7%{?dist}
 License: Python
 Group: Development/Languages
 Requires: %{python}-libs%{?_isa} = %{version}-%{release}
@@ -172,10 +172,10 @@ BuildRequires: python2-setuptools-wheel
 BuildRequires: python2-pip-wheel
 %endif
 
-# Runtime require alternatives
-Requires:         /usr/sbin/alternatives
-Requires(post):   /usr/sbin/alternatives
-Requires(postun): /usr/sbin/alternatives
+# Require alternatives version that implements the --keep-foreign flag
+Requires:         alternatives >= 1.19.1-1
+Requires(post):   alternatives >= 1.19.1-1
+Requires(postun): alternatives >= 1.19.1-1
 
 # Previously, this was required for our rewheel patch to work.
 # This is technically no longer needed, but we keep it recommended
@@ -710,11 +710,24 @@ Patch351: 00351-cve-2019-20907-fix-infinite-loop-in-tarfile.patch
 # - https://bugs.python.org/issue39603
 Patch354: 00354-cve-2020-26116-http-request-method-crlf-injection-in-httplib.patch
 
+# 00355 #
+# No longer call eval() on content received via HTTP in the CJK codec tests
+# Backported from the python3 branches upstream: https://bugs.python.org/issue41944
+# Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1889886
+Patch355: 00355-CVE-2020-27619.patch
+
 # 00357 #
 # Security fix for CVE-2021-3177
 # Stack-based buffer overflow in PyCArg_repr in _ctypes/callproc.c
 # Backported from the upstream python3 branches: https://bugs.python.org/issue42938
 Patch357: 00357-CVE-2021-3177.patch
+
+# 00359 #
+# CVE-2021-23336 python: Web Cache Poisoning via urllib.parse.parse_qsl and
+# urllib.parse.parse_qs by using a semicolon in query parameters
+# Upstream: https://bugs.python.org/issue42967
+# Main BZ: https://bugzilla.redhat.com/show_bug.cgi?id=1928904
+Patch359: 00359-CVE-2021-23336.patch
 
 # (New patches go here ^^^)
 #
@@ -1040,7 +1053,9 @@ rm Lib/ensurepip/_bundled/*.whl
 git apply %{PATCH351}
 
 %patch354 -p1
+%patch355 -p1
 %patch357 -p1
+%patch359 -p1
 
 # This shouldn't be necesarry, but is right now (2.2a3)
 find -name "*~" |xargs rm -f
@@ -1595,7 +1610,7 @@ alternatives --install %{_bindir}/unversioned-python \
 %postun
 # Do this only during uninstall process (not during update)
 if [ $1 -eq 0 ]; then
-    alternatives --remove python \
+    alternatives --keep-foreign --remove python \
                         %{_bindir}/python2
 fi
 
@@ -1979,6 +1994,18 @@ fi
 # ======================================================
 
 %changelog
+* Thu Aug 05 2021 Tomas Orsava <torsava@redhat.com> - 2.7.18-7
+- Adjusted the postun scriptlets to enable upgrading to RHEL 9
+- Resolves: rhbz#1933055
+
+* Wed May 12 2021 Charalampos Stratakis <cstratak@redhat.com> - 2.7.18-6
+- Security fix for CVE-2020-27619: eval() call on content received via HTTP in the CJK codec tests
+Resolves: rhbz#1889886
+
+* Fri Apr 16 2021 Charalampos Stratakis <cstratak@redhat.com> - 2.7.18-5
+- Fix for CVE-2021-23336
+Resolves: rhbz#1928904
+
 * Fri Jan 22 2021 Charalampos Stratakis <cstratak@redhat.com> - 2.7.18-4
 - Security fix for CVE-2021-3177
 Resolves: rhbz#1919163
