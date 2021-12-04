@@ -1,7 +1,7 @@
 %global __remake_config 1
 
 Name:    opensm
-Version: 3.3.23
+Version: 3.3.24
 Release: 1%{?dist}
 Summary: OpenIB InfiniBand Subnet Manager and management utilities
 Group:   System Environment/Daemons
@@ -125,6 +125,22 @@ fi
 %{_libdir}/lib*.a
 
 %changelog
+* Tue Jun 15 2021 Honggang Li <honli@redhat.com> - 3.3.24-1
+- Rebase to latest upstream release 3.3.24
+- Resolves: bz1961961
+
+* Thu Dec 10 2020 Honggang Li <honli@redhat.com> - 3.3.23-4
+- opensm service should after rdma-hw.target
+- Resolves: bz1906252
+
+* Fri Nov 20 2020 Honggang Li <honli@redhat.com> - 3.3.23-3
+- Allow MCMR requests with default subnet prefix
+- Resolves: bz1898872
+
+* Thu Nov 05 2020 Honggang Li <honli@redhat.com> - 3.3.23-2
+- Update opensm service file
+- Resolves: bz1892502
+
 * Wed Apr 15 2020 Honggang Li <honli@redhat.com> - 3.3.23-1
 - Rebase to latest upstream release 3.3.23
 - Resolves: bz1815960
