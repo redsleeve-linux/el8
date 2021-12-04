@@ -1,11 +1,7 @@
 Name: rdma-core
-Version: 26.0
-Release: 8%{?dist}
+Version: 35.0
+Release: 1%{?dist}
 Summary: RDMA core userspace libraries and daemons
-
-%ifnarch %{arm}
-%define dma_coherent 1
-%endif
 
 # Almost everything is licensed under the OFA dual GPLv2, 2 Clause BSD license
 #  providers/ipathverbs/ Dual licensed using a BSD license with an extra patent clause
@@ -15,29 +11,20 @@ License: GPLv2 or BSD
 Url: https://github.com/linux-rdma/rdma-core
 Source: https://github.com/linux-rdma/rdma-core/releases/download/v%{version}/%{name}-%{version}.tar.gz
 Source1: ibdev2netdev
-Patch1: redhat-kernel-init-libi40iw-no-longer-tech-preview.patch
-Patch2: i40iw-autoload-breaks-suspend.patch
+# Upstream had removed rxe_cfg from upstream git repo. RHEL-8.X has
+# to keep it for backward compatibility. 'rxe_cfg' and 'rxe_cfg.8.gz'
+# are extracted from libibverbs-26.0-8.el8 .
+Source2: rxe_cfg
+Source3: rxe_cfg.8.gz
 Patch3: udev-keep-NAME_KERNEL-as-default-interface-naming-co.patch
-# stable-vX patches
-Patch101: 0001-ABI-Files.patch
-Patch102: 0002-build-Do-not-enable-Wredundant-decls-twice.patch
-Patch103: 0003-man-Fix-wrong-field-in-ibv_wr_post-s-man-page.patch
-Patch104: 0004-pyverbs-Fix-WC-creation-process.patch
-Patch105: 0005-pyverbs-Fix-CQ-and-PD-assignment-in-QPAttr.patch
-Patch106: 0006-verbs-Set-missing-errno-in-ibv_cmd_reg_mr.patch
-Patch107: 0007-mlx5-Allow-insertion-of-duplicate-rules-using-DR-API.patch
-Patch108: 0008-cxgb4-free-appropriate-pointer-in-error-case.patch
-Patch109: 0009-cxgb4-always-query-device-before-initializing-chip-v.patch
-Patch110: 0010-buildlib-Remove-travis-CI.patch
-Patch111: 0011-build-Run-CI-builds-on-the-stable-branches-with-azp-.patch
-Patch112: 0012-build-Update-ABI-files.patch
-# libbnxt_re support for some new device ids and generation id
-Patch201: 0001-bnxt_re-lib-Add-remaining-pci-ids-for-gen-P5-devices.patch
-Patch202: 0002-bnxt_re-lib-Recognize-additional-5750x-device-ID-s.patch
-# Fix an ibacm segment fault issue
-Patch301: 0001-ibacm-Do-not-open-non-InfiniBand-device.patch
+# RHEL specific patch for OPA ibacm plugin
+Patch300: 0001-ibacm-acm.c-load-plugin-while-it-is-soft-link.patch
+Patch301: 0001-Only-load-i40iw-for-i40e-device-with-specific-PCI-ID.patch
 # Do not build static libs by default.
 %define with_static %{?_with_static: 1} %{?!_with_static: 0}
+
+# 32-bit arm is missing required arch-specific memory barriers,
+ExcludeArch: %{arm}
 
 BuildRequires: binutils
 BuildRequires: cmake >= 2.8.11
@@ -51,13 +38,27 @@ BuildRequires: python3-docutils
 BuildRequires: valgrind-devel
 %endif
 BuildRequires: systemd
-BuildRequires: python3-devel
-BuildRequires: sed
-
-Requires: dracut, kmod, systemd
-%if 0%{?fedora} >= 24
-Requires: systemd-udev
+BuildRequires: systemd-devel
+%if 0%{?fedora} >= 32 || 0%{?rhel} >= 8
+%define with_pyverbs %{?_with_pyverbs: 1} %{?!_with_pyverbs: %{?!_without_pyverbs: 1} %{?_without_pyverbs: 0}}
+%else
+%define with_pyverbs %{?_with_pyverbs: 1} %{?!_with_pyverbs: 0}
 %endif
+%if %{with_pyverbs}
+BuildRequires: python3-devel
+BuildRequires: python3-Cython
+%else
+%if 0%{?rhel} >= 8 || 0%{?fedora} >= 30
+BuildRequires: python3
+%else
+BuildRequires: python
+%endif
+%endif
+
+BuildRequires: sed
+BuildRequires: perl-generators
+
+Requires: pciutils
 # Red Hat/Fedora previously shipped redhat/ as a stand-alone
 # package called 'rdma', which we're supplanting here.
 Provides: rdma = %{version}-%{release}
@@ -66,9 +67,6 @@ Provides: rdma-ndd = %{version}-%{release}
 Obsoletes: rdma-ndd < %{version}-%{release}
 # the ndd utility moved from infiniband-diags to rdma-core
 Conflicts: infiniband-diags <= 1.6.7
-Requires: pciutils
-# 32-bit arm is missing required arch-specific memory barriers,
-ExcludeArch: %{arm}
 
 # Since we recommend developers use Ninja, so should packagers, for consistency.
 %define CMAKE_FLAGS %{nil}
@@ -81,7 +79,7 @@ BuildRequires: ninja-build
 %else
 # Fallback to make otherwise
 BuildRequires: make
-%define make_jobs make -v %{?_smp_mflags}
+%define make_jobs make VERBOSE=1 %{?_smp_mflags}
 %define cmake_install DESTDIR=%{buildroot} make install
 %endif
 
@@ -95,48 +93,30 @@ dracut rules, and the rdma-ndd utility.
 %package devel
 Summary: RDMA core development libraries and headers
 Requires: %{name}%{?_isa} = %{version}-%{release}
-Requires: libibverbs = %{version}-%{release}
+Requires: libibverbs%{?_isa} = %{version}-%{release}
 Provides: libibverbs-devel = %{version}-%{release}
 Obsoletes: libibverbs-devel < %{version}-%{release}
-Provides: libibverbs-devel-static = %{version}-%{release}
-Obsoletes: libibverbs-devel-static < %{version}-%{release}
-Requires: libibumad = %{version}-%{release}
+Requires: libibumad%{?_isa} = %{version}-%{release}
 Provides: libibumad-devel = %{version}-%{release}
 Obsoletes: libibumad-devel < %{version}-%{release}
-Provides: libibumad-static = %{version}-%{release}
-Obsoletes: libibumad-static < %{version}-%{release}
-Requires: librdmacm = %{version}-%{release}
+Requires: librdmacm%{?_isa} = %{version}-%{release}
 Provides: librdmacm-devel = %{version}-%{release}
 Obsoletes: librdmacm-devel < %{version}-%{release}
-Provides: librdmacm-static = %{version}-%{release}
-Obsoletes: librdmacm-static < %{version}-%{release}
-Requires: ibacm = %{version}-%{release}
+Requires: ibacm%{?_isa} = %{version}-%{release}
 Provides: ibacm-devel = %{version}-%{release}
 Obsoletes: ibacm-devel < %{version}-%{release}
-Requires: infiniband-diags = %{version}-%{release}
+Requires: infiniband-diags%{?_isa} = %{version}-%{release}
 Provides: infiniband-diags-devel = %{version}-%{release}
 Obsoletes: infiniband-diags-devel < %{version}-%{release}
 Provides: libibmad-devel = %{version}-%{release}
 Obsoletes: libibmad-devel < %{version}-%{release}
-Provides: libcxgb4-static = %{version}-%{release}
-Obsoletes: libcxgb4-static < %{version}-%{release}
-Provides: libhfi1-static = %{version}-%{release}
-Obsoletes: libhfi1-static < %{version}-%{release}
-%if 0%{?dma_coherent}
-Provides: libmlx4-static = %{version}-%{release}
-Obsoletes: libmlx4-static < %{version}-%{release}
-Provides: libmlx5-static = %{version}-%{release}
-Obsoletes: libmlx5-static < %{version}-%{release}
-%endif
-Provides: libi40iw-devel-static = %{version}-%{release}
-Obsoletes: libi40iw-devel-static < %{version}-%{release}
 
 %description devel
 RDMA core development libraries and headers.
 
 %package -n infiniband-diags
 Summary: InfiniBand Diagnostic Tools
-Requires: libibumad = %{version}-%{release}
+Requires: libibumad%{?_isa} = %{version}-%{release}
 Provides: perl(IBswcountlimits)
 Provides: libibmad = %{version}-%{release}
 Obsoletes: libibmad < %{version}-%{release}
@@ -153,22 +133,20 @@ Summary: A library and drivers for direct userspace use of RDMA (InfiniBand/iWAR
 Requires: %{name}%{?_isa} = %{version}-%{release}
 Provides: libcxgb4 = %{version}-%{release}
 Obsoletes: libcxgb4 < %{version}-%{release}
+Provides: libefa = %{version}-%{release}
+Obsoletes: libefa < %{version}-%{release}
 Provides: libhfi1 = %{version}-%{release}
 Obsoletes: libhfi1 < %{version}-%{release}
 Provides: libi40iw = %{version}-%{release}
 Obsoletes: libi40iw < %{version}-%{release}
-%if 0%{?dma_coherent}
 Provides: libmlx4 = %{version}-%{release}
 Obsoletes: libmlx4 < %{version}-%{release}
 %ifnarch s390
 Provides: libmlx5 = %{version}-%{release}
 Obsoletes: libmlx5 < %{version}-%{release}
 %endif
-%endif
 Provides: librxe = %{version}-%{release}
 Obsoletes: librxe < %{version}-%{release}
-Provides: libusnic_verbs = %{version}-%{release}
-Obsoletes: libusnic_verbs < %{version}-%{release}
 
 %description -n libibverbs
 libibverbs is a library that allows userspace processes to use RDMA
@@ -181,6 +159,7 @@ Device-specific plug-in ibverbs userspace drivers are included:
 
 - libbxnt_re: Broadcom NetXtreme-E RoCE HCA
 - libcxgb4: Chelsio T4 iWARP HCA
+- libefa: Amazon Elastic Fabric Adapter
 - libhfi1: Intel Omni-Path HFI
 - libhns: HiSilicon Hip06 SoC
 - libi40iw: Intel Ethernet Connection X722 RDMA
@@ -188,11 +167,15 @@ Device-specific plug-in ibverbs userspace drivers are included:
 - libmlx5: Mellanox Connect-IB/X-4+ InfiniBand HCA
 - libqedr: QLogic QL4xxx RoCE HCA
 - librxe: A software implementation of the RoCE protocol
+- libsiw: A software implementation of the iWarp protocol
 - libvmw_pvrdma: VMware paravirtual RDMA device
 
 %package -n libibverbs-utils
 Summary: Examples for the libibverbs library
 Requires: libibverbs%{?_isa} = %{version}-%{release}
+# rxe_cfg uses commands provided by these packages
+Requires: iproute
+Requires: ethtool
 
 %description -n libibverbs-utils
 Useful libibverbs example programs such as ibv_devinfo, which
@@ -239,7 +222,7 @@ Requires: %{name}%{?_isa} = %{version}-%{release}
 Requires: libibverbs%{?_isa} = %{version}-%{release}
 
 %description -n librdmacm
-librdmacm provides a userspace RDMA Communication Managment API.
+librdmacm provides a userspace RDMA Communication Management API.
 
 %package -n librdmacm-utils
 Summary: Examples for the librdmacm library
@@ -263,25 +246,22 @@ Requires: libibverbs%{?_isa} = %{version}-%{release}
 In conjunction with the kernel ib_srp driver, srp_daemon allows you to
 discover and use SCSI devices via the SCSI RDMA Protocol over InfiniBand.
 
+%if %{with_pyverbs}
+%package -n python3-pyverbs
+Summary: Python3 API over IB verbs
+%{?python_provide:%python_provide python3-pyverbs}
+Requires: librdmacm%{?_isa} = %{version}-%{release}
+Requires: libibverbs%{?_isa} = %{version}-%{release}
+
+%description -n python3-pyverbs
+Pyverbs is a Cython-based Python API over libibverbs, providing an
+easy, object-oriented access to IB verbs.
+%endif
+
 %prep
-%setup
-%patch1 -p1
-%patch2 -p1
+%setup -q
 %patch3 -p1
-%patch101 -p1
-%patch102 -p1
-%patch103 -p1
-%patch104 -p1
-%patch105 -p1
-%patch106 -p1
-%patch107 -p1
-%patch108 -p1
-%patch109 -p1
-%patch110 -p1
-%patch111 -p1
-%patch112 -p1
-%patch201 -p1
-%patch202 -p1
+%patch300 -p1
 %patch301 -p1
 
 %build
@@ -310,14 +290,23 @@ discover and use SCSI devices via the SCSI RDMA Protocol over InfiniBand.
          -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR:PATH=%{_unitdir} \
          -DCMAKE_INSTALL_INITDDIR:PATH=%{_initrddir} \
          -DCMAKE_INSTALL_RUNDIR:PATH=%{_rundir} \
-         -DCMAKE_INSTALL_DOCDIR:PATH=%{_docdir}/%{name}-%{version} \
+         -DCMAKE_INSTALL_DOCDIR:PATH=%{_docdir}/%{name} \
          -DCMAKE_INSTALL_UDEV_RULESDIR:PATH=%{_udevrulesdir} \
          -DCMAKE_INSTALL_PERLDIR:PATH=%{perl_vendorlib} \
          -DWITH_IBDIAGS_COMPAT:BOOL=False \
 %if %{with_static}
          -DENABLE_STATIC=1 \
 %endif
-         %{EXTRA_CMAKE_FLAGS}
+         %{EXTRA_CMAKE_FLAGS} \
+%if %{defined __python3}
+         -DPYTHON_EXECUTABLE:PATH=%{__python3} \
+         -DCMAKE_INSTALL_PYTHON_ARCH_LIB:PATH=%{python3_sitearch} \
+%endif
+%if %{with_pyverbs}
+         -DNO_PYVERBS=0
+%else
+         -DNO_PYVERBS=1
+%endif
 %make_jobs
 
 %install
@@ -333,25 +322,18 @@ mkdir -p %{buildroot}%{_libexecdir}
 mkdir -p %{buildroot}%{_udevrulesdir}
 mkdir -p %{buildroot}%{dracutlibdir}/modules.d/05rdma
 mkdir -p %{buildroot}%{sysmodprobedir}
-install -D -m0644 redhat/rdma.conf %{buildroot}/%{_sysconfdir}/rdma/rdma.conf
-install -D -m0644 redhat/rdma.sriov-vfs %{buildroot}/%{_sysconfdir}/rdma/sriov-vfs
-%if 0%{?dma_coherent}
 install -D -m0644 redhat/rdma.mlx4.conf %{buildroot}/%{_sysconfdir}/rdma/mlx4.conf
-%endif
-install -D -m0644 redhat/rdma.service %{buildroot}%{_unitdir}/rdma.service
 install -D -m0755 redhat/rdma.modules-setup.sh %{buildroot}%{dracutlibdir}/modules.d/05rdma/module-setup.sh
-install -D -m0644 redhat/rdma.udev-rules %{buildroot}%{_udevrulesdir}/98-rdma.rules
-%if 0%{?dma_coherent}
 install -D -m0644 redhat/rdma.mlx4.sys.modprobe %{buildroot}%{sysmodprobedir}/libmlx4.conf
-%endif
-install -D -m0755 redhat/rdma.kernel-init %{buildroot}%{_libexecdir}/rdma-init-kernel
-install -D -m0755 redhat/rdma.sriov-init %{buildroot}%{_libexecdir}/rdma-set-sriov-vf
-%if 0%{?dma_coherent}
 install -D -m0755 redhat/rdma.mlx4-setup.sh %{buildroot}%{_libexecdir}/mlx4-setup.sh
-%endif
-
+rm -f %{buildroot}%{_sysconfdir}/rdma/modules/rdma.conf
+install -D -m0644 redhat/rdma.conf %{buildroot}%{_sysconfdir}/rdma/modules/rdma.conf
 # ibdev2netdev helper script
 install -D -m0755 %{SOURCE1} %{buildroot}%{_bindir}/
+
+# rxe_cfg
+install -D -m0755 %{SOURCE2} %{buildroot}%{_bindir}/
+install -D -m0644 %{SOURCE3} %{buildroot}%{_mandir}/man8/
 
 # ibacm
 bin/ib_acme -D . -O
@@ -374,29 +356,30 @@ rm -f %{buildroot}/%{_libdir}/libibverbs/libmthca-rdmav*.so
 rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/mthca.driver
 rm -f %{buildroot}/%{_libdir}/libibverbs/libipathverbs-rdmav*.so
 rm -f %{buildroot}/%{_sysconfdir}/libibverbs.d/ipathverbs.driver
-find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 
-# infiniband-diags
+%post -n rdma-core
+if [ -x /sbin/udevadm ]; then
+/sbin/udevadm trigger --subsystem-match=infiniband --action=change || true
+/sbin/udevadm trigger --subsystem-match=net --action=change || true
+/sbin/udevadm trigger --subsystem-match=infiniband_mad --action=change || true
+fi
+
 %post -n infiniband-diags -p /sbin/ldconfig
 %postun -n infiniband-diags
 %ldconfig_postun
 
-# libibverbs
 %post -n libibverbs -p /sbin/ldconfig
 %postun -n libibverbs
 %ldconfig_postun
 
-# libibumad
 %post -n libibumad -p /sbin/ldconfig
 %postun -n libibumad
 %ldconfig_postun
 
-# librdmacm
 %post -n librdmacm -p /sbin/ldconfig
 %postun -n librdmacm
 %ldconfig_postun
 
-# ibacm
 %post -n ibacm
 %systemd_post ibacm.service
 %preun -n ibacm
@@ -404,7 +387,6 @@ find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 %postun -n ibacm
 %systemd_postun_with_restart ibacm.service
 
-# srp_daemon
 %post -n srp_daemon
 %systemd_post srp_daemon.service
 %preun -n srp_daemon
@@ -412,7 +394,6 @@ find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 %postun -n srp_daemon
 %systemd_postun_with_restart srp_daemon.service
 
-# iwpmd
 %post -n iwpmd
 %systemd_post iwpmd.service
 %preun -n iwpmd
@@ -422,41 +403,48 @@ find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 
 %files
 %dir %{_sysconfdir}/rdma
-%dir %{_docdir}/%{name}-%{version}
-%doc %{_docdir}/%{name}-%{version}/README.md
-%doc %{_docdir}/%{name}-%{version}/udev.md
-%config(noreplace) %{_sysconfdir}/rdma/*
+%dir %{_docdir}/%{name}
+%doc %{_docdir}/%{name}/README.md
+%doc %{_docdir}/%{name}/udev.md
+%config(noreplace) %{_sysconfdir}/rdma/mlx4.conf
+%config(noreplace) %{_sysconfdir}/rdma/modules/infiniband.conf
+%config(noreplace) %{_sysconfdir}/rdma/modules/iwarp.conf
+%config(noreplace) %{_sysconfdir}/rdma/modules/opa.conf
+%config(noreplace) %{_sysconfdir}/rdma/modules/rdma.conf
+%config(noreplace) %{_sysconfdir}/rdma/modules/roce.conf
 %config(noreplace) %{_sysconfdir}/udev/rules.d/*
-%if 0%{?dma_coherent}
+%dir %{_sysconfdir}/modprobe.d
 %ifnarch s390
 %config(noreplace) %{_sysconfdir}/modprobe.d/mlx4.conf
-%endif
 %endif
 %config(noreplace) %{_sysconfdir}/modprobe.d/truescale.conf
 %{_unitdir}/rdma-hw.target
 %{_unitdir}/rdma-load-modules@.service
-%{_unitdir}/rdma.service
+%dir %{dracutlibdir}
+%dir %{dracutlibdir}/modules.d
 %dir %{dracutlibdir}/modules.d/05rdma
 %{dracutlibdir}/modules.d/05rdma/module-setup.sh
+%dir %{_udevrulesdir}
 %{_udevrulesdir}/../rdma_rename
-%{_udevrulesdir}/*
-%if 0%{?dma_coherent}
+%{_udevrulesdir}/60-rdma-ndd.rules
+%{_udevrulesdir}/60-rdma-persistent-naming.rules
+%{_udevrulesdir}/75-rdma-description.rules
+%{_udevrulesdir}/90-rdma-hw-modules.rules
+%{_udevrulesdir}/90-rdma-ulp-modules.rules
+%{_udevrulesdir}/90-rdma-umad.rules
+%dir %{sysmodprobedir}
 %{sysmodprobedir}/libmlx4.conf
-%endif
-%{_libexecdir}/rdma-init-kernel
-%{_libexecdir}/rdma-set-sriov-vf
-%if 0%{?dma_coherent}
 %{_libexecdir}/mlx4-setup.sh
-%endif
 %{_libexecdir}/truescale-serdes.cmds
 %{_sbindir}/rdma-ndd
 %{_bindir}/ibdev2netdev
 %{_unitdir}/rdma-ndd.service
+%{_mandir}/man7/rxe*
 %{_mandir}/man8/rdma-ndd.*
 %license COPYING.*
 
 %files devel
-%doc %{_docdir}/%{name}-%{version}/MAINTAINERS
+%doc %{_docdir}/%{name}/MAINTAINERS
 %dir %{_includedir}/infiniband
 %dir %{_includedir}/rdma
 %{_includedir}/infiniband/*
@@ -466,62 +454,85 @@ find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 %endif
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/*.pc
+%{_mandir}/man3/efadv*
 %{_mandir}/man3/ibv_*
 %{_mandir}/man3/rdma*
 %{_mandir}/man3/umad*
 %{_mandir}/man3/*_to_ibv_rate.*
-%if 0%{?dma_coherent}
-%ifnarch s390
-%{_mandir}/man3/mlx4dv*
-%{_mandir}/man3/mlx5dv*
-%{_mandir}/man7/mlx5dv*
-%endif
-%endif
 %{_mandir}/man7/rdma_cm.*
+%ifnarch s390
+%{_mandir}/man3/mlx5dv*
+%{_mandir}/man3/mlx4dv*
+%{_mandir}/man7/efadv*
+%{_mandir}/man7/mlx5dv*
+%{_mandir}/man7/mlx4dv*
+%endif
 %{_mandir}/man3/ibnd_*
 
 %files -n infiniband-diags
 %{_sbindir}/ibaddr
+%{_mandir}/man8/ibaddr*
 %{_sbindir}/ibnetdiscover
+%{_mandir}/man8/ibnetdiscover*
 %{_sbindir}/ibping
+%{_mandir}/man8/ibping*
 %{_sbindir}/ibportstate
+%{_mandir}/man8/ibportstate*
 %{_sbindir}/ibroute
+%{_mandir}/man8/ibroute.*
 %{_sbindir}/ibstat
+%{_mandir}/man8/ibstat.*
 %{_sbindir}/ibsysstat
+%{_mandir}/man8/ibsysstat*
 %{_sbindir}/ibtracert
+%{_mandir}/man8/ibtracert*
 %{_sbindir}/perfquery
+%{_mandir}/man8/perfquery*
 %{_sbindir}/sminfo
+%{_mandir}/man8/sminfo*
 %{_sbindir}/smpdump
+%{_mandir}/man8/smpdump*
 %{_sbindir}/smpquery
+%{_mandir}/man8/smpquery*
 %{_sbindir}/saquery
+%{_mandir}/man8/saquery*
 %{_sbindir}/vendstat
+%{_mandir}/man8/vendstat*
 %{_sbindir}/iblinkinfo
+%{_mandir}/man8/iblinkinfo*
 %{_sbindir}/ibqueryerrors
+%{_mandir}/man8/ibqueryerrors*
 %{_sbindir}/ibcacheedit
+%{_mandir}/man8/ibcacheedit*
 %{_sbindir}/ibccquery
+%{_mandir}/man8/ibccquery*
 %{_sbindir}/ibccconfig
+%{_mandir}/man8/ibccconfig*
 %{_sbindir}/dump_fts
+%{_mandir}/man8/dump_fts*
 %{_sbindir}/ibhosts
+%{_mandir}/man8/ibhosts*
 %{_sbindir}/ibswitches
+%{_mandir}/man8/ibswitches*
 %{_sbindir}/ibnodes
+%{_mandir}/man8/ibnodes*
 %{_sbindir}/ibrouters
+%{_mandir}/man8/ibrouters*
 %{_sbindir}/ibfindnodesusing.pl
+%{_mandir}/man8/ibfindnodesusing*
 %{_sbindir}/ibidsverify.pl
+%{_mandir}/man8/ibidsverify*
 %{_sbindir}/check_lft_balance.pl
+%{_mandir}/man8/check_lft_balance*
 %{_sbindir}/dump_lfts.sh
+%{_mandir}/man8/dump_lfts*
 %{_sbindir}/dump_mfts.sh
+%{_mandir}/man8/dump_mfts*
 %{_sbindir}/ibstatus
+%{_mandir}/man8/ibstatus*
+%{_mandir}/man8/infiniband-diags*
 %{_libdir}/libibmad*.so.*
 %{_libdir}/libibnetdisc*.so.*
-%{_mandir}/man8/infiniband-diags*
-%{_mandir}/man8/check_lft_balance*
-%{_mandir}/man8/dump*
-%{_mandir}/man8/ib*
-%{_mandir}/man8/perfquery*
-%{_mandir}/man8/saquery*
-%{_mandir}/man8/sminfo*
-%{_mandir}/man8/smp*
-%{_mandir}/man8/vendstat*
 %{perl_vendorlib}/IBswcountlimits.pm
 %config(noreplace) %{_sysconfdir}/infiniband-diags/error_thresholds
 %config(noreplace) %{_sysconfdir}/infiniband-diags/ibdiag.conf
@@ -529,50 +540,49 @@ find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 %files -n libibverbs
 %dir %{_sysconfdir}/libibverbs.d
 %dir %{_libdir}/libibverbs
+%{_libdir}/libefa.so.*
 %{_libdir}/libibverbs*.so.*
 %{_libdir}/libibverbs/*.so
-%if 0%{?dma_coherent}
 %ifnarch s390
-%{_libdir}/libmlx4.so.*
 %{_libdir}/libmlx5.so.*
-%endif
+%{_libdir}/libmlx4.so.*
 %endif
 %config(noreplace) %{_sysconfdir}/libibverbs.d/*.driver
-%doc %{_docdir}/%{name}-%{version}/libibverbs.md
-%doc %{_docdir}/%{name}-%{version}/rxe.md
-%doc %{_docdir}/%{name}-%{version}/tag_matching.md
-%{_bindir}/rxe_cfg
+%doc %{_docdir}/%{name}/libibverbs.md
+%doc %{_docdir}/%{name}/rxe.md
+%doc %{_docdir}/%{name}/tag_matching.md
 %{_mandir}/man7/rxe*
-%if 0%{?dma_coherent}
 %ifnarch s390
 %{_mandir}/man7/mlx4dv*
 %{_mandir}/man7/mlx5dv*
 %endif
-%endif
-%{_mandir}/man8/rxe*
 
 %files -n libibverbs-utils
 %{_bindir}/ibv_*
 %{_mandir}/man1/ibv_*
+%{_bindir}/rxe_cfg
+%{_mandir}/man8/rxe*
 
 %files -n ibacm
 %config(noreplace) %{_sysconfdir}/rdma/ibacm_opts.cfg
 %{_bindir}/ib_acme
 %{_sbindir}/ibacm
-%{_mandir}/man1/ibacm.*
 %{_mandir}/man1/ib_acme.*
 %{_mandir}/man7/ibacm.*
 %{_mandir}/man7/ibacm_prov.*
+%{_mandir}/man8/ibacm.*
 %{_unitdir}/ibacm.service
 %{_unitdir}/ibacm.socket
 %dir %{_libdir}/ibacm
 %{_libdir}/ibacm/*
-%doc %{_docdir}/%{name}-%{version}/ibacm.md
+%doc %{_docdir}/%{name}/ibacm.md
 
 %files -n iwpmd
 %{_sbindir}/iwpmd
 %{_unitdir}/iwpmd.service
+%config(noreplace) %{_sysconfdir}/rdma/modules/iwpmd.conf
 %config(noreplace) %{_sysconfdir}/iwpmd.conf
+%{_udevrulesdir}/90-iwpmd.rules
 %{_mandir}/man8/iwpmd.*
 %{_mandir}/man5/iwpmd.*
 
@@ -583,7 +593,7 @@ find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 %{_libdir}/librdmacm*.so.*
 %dir %{_libdir}/rsocket
 %{_libdir}/rsocket/librspreload.so*
-%doc %{_docdir}/%{name}-%{version}/librdmacm.md
+%doc %{_docdir}/%{name}/librdmacm.md
 %{_mandir}/man7/rsocket.*
 
 %files -n librdmacm-utils
@@ -616,6 +626,7 @@ find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 
 %files -n srp_daemon
 %config(noreplace) %{_sysconfdir}/srp_daemon.conf
+%config(noreplace) %{_sysconfdir}/rdma/modules/srp_daemon.conf
 %{_libexecdir}/srp_daemon/start_on_all_ports
 %{_unitdir}/srp_daemon.service
 %{_unitdir}/srp_daemon_port@.service
@@ -623,13 +634,58 @@ find %{buildroot}  -name '*efa*' -exec rm -fv {} \;
 %{_sbindir}/srp_daemon
 %{_sbindir}/srp_daemon.sh
 %{_sbindir}/run_srp_daemon
-%{_mandir}/man1/ibsrpdm.1*
-%{_mandir}/man1/srp_daemon.1*
+%{_udevrulesdir}/60-srp_daemon.rules
 %{_mandir}/man5/srp_daemon.service.5*
 %{_mandir}/man5/srp_daemon_port@.service.5*
-%doc %{_docdir}/%{name}-%{version}/ibsrpdm.md
+%{_mandir}/man8/ibsrpdm.8*
+%{_mandir}/man8/srp_daemon.8*
+%doc %{_docdir}/%{name}/ibsrpdm.md
+
+%if %{with_pyverbs}
+%files -n python3-pyverbs
+%{python3_sitearch}/pyverbs
+%{_docdir}/%{name}/tests/*.py
+%endif
 
 %changelog
+* Fri May 14 2021 Honggang Li <honli@redhat.com> - 35.0-1
+- Update to upstream v35 release for features and fixes
+- Resolves: bz1915311
+
+* Thu Jan 28 2021 Honggang Li <honli@redhat.com> - 32.0-4
+- Update to upstream stable release v32.1
+- Fix mlx5 pyverbs CQ test
+- Resolves: bz1915745, bz1907377
+
+* Tue Dec 22 2020 Honggang Li <honli@redhat.com> - 32.0-3
+- libqedr: Set XRC functions only in RoCE mode
+- Resolves: bz1894516
+
+* Tue Dec 08 2020 Honggang Li <honli@redhat.com> - 32.0-2
+- Backport bug fixes applied after upstream v32.0
+- Resolves: bz1902613, bz1875265
+
+* Tue Nov 03 2020 Honggang Li <honli@redhat.com> - 32.0-1
+- Update to upstream v32 release for features and fixes
+- Support Amazon Elastic Fabric Adapter
+- Enable pyverbs
+- Add a check for udevadm in the specfile
+- Resolves: bz1851721, bz1856076, bz1887396, bz1868804
+
+* Tue Jun 09 2020 Honggang Li <honli@redhat.com> - 29.0-3
+- BuildRequires perl-generators
+- Backport upstream stable-v29 commits
+- Resolves: bz1845420
+
+* Mon May 18 2020 Honggang Li <honli@redhat.com> - 29.0-2
+- Suppress ibdev2netdev warning messgae
+- Unversioned documentation directory
+- Resolves: bz1794904, bz1824853
+
+* Tue Apr 14 2020 Honggang Li <honli@redhat.com> - 29.0-1
+- Update to upstream v29 release for features and fixes
+- Resolves: bz1790624
+
 * Fri Feb 07 2020 Honggang Li <honli@redhat.com> - 26.0-8
 - Fix an ibacm segfault issue for dual port HCA support IB and Ethernet
 - Resolves: bz1793736

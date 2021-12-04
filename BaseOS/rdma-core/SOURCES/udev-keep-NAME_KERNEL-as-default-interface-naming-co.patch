@@ -1,24 +1,31 @@
-From fd9b3596cb1a21e54ffb102392178b6bd5d14c78 Mon Sep 17 00:00:00 2001
+From 538cd05b34bf15076ce40273926d7580d421a670 Mon Sep 17 00:00:00 2001
 From: Jarod Wilson <jarod@redhat.com>
 Date: Wed, 21 Aug 2019 17:09:13 -0400
-Subject: [PATCH rdma-core] udev: keep NAME_KERNEL as default interface
- naming convention
+Subject: [PATCH] udev: keep NAME_KERNEL as default interface naming convention
 
 Signed-off-by: Jarod Wilson <jarod@redhat.com>
 ---
- kernel-boot/rdma-persistent-naming.rules | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ kernel-boot/rdma-persistent-naming.rules | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/kernel-boot/rdma-persistent-naming.rules b/kernel-boot/rdma-persistent-naming.rules
-index 9b61e163..a561746b 100644
+index 6f9c53a5..b5413edb 100644
 --- a/kernel-boot/rdma-persistent-naming.rules
 +++ b/kernel-boot/rdma-persistent-naming.rules
-@@ -25,4 +25,4 @@
+@@ -26,10 +26,10 @@
  #   Device type = RoCE
  #   mlx5_0 -> rocex525400c0fe123455
  #
 -ACTION=="add", SUBSYSTEM=="infiniband", PROGRAM="rdma_rename %k NAME_FALLBACK"
 +ACTION=="add", SUBSYSTEM=="infiniband", PROGRAM="rdma_rename %k NAME_KERNEL"
+ 
+ # Example:
+ # * NAME_FIXED 
+ #   fixed name for specific board_id
+ #
+-#ACTION=="add", ATTR{board_id}=="MSF0010110035", SUBSYSTEM=="infiniband", PROGRAM="rdma_rename %k NAME_FIXED myib"
+\ No newline at end of file
++#ACTION=="add", ATTR{board_id}=="MSF0010110035", SUBSYSTEM=="infiniband", PROGRAM="rdma_rename %k NAME_FIXED myib"
 -- 
-2.20.1
+2.30.1
 

@@ -26,9 +26,13 @@ fi
 
 ibdevs=$(ls /sys/class/infiniband/)
 
-pushd /sys/class/net > /dev/null
-devs=$(ls -d e* i* 2> /dev/null)
-popd > /dev/null
+devs=''
+for netdev in $(/bin/ls /sys/class/net/); do
+  if [ -e /sys/class/net/${netdev}/device/infiniband ]; then
+    devs="${devs} ${netdev}"
+  fi
+done
+
 if [ "x$devs" == "x" ]; then
   # no relevant devices - quit immediately
   exit
@@ -161,7 +165,7 @@ if [ "x$oldstyle" == "xn" ]; then
               if [ -f $filepath_vpd ]; then
                 tmp=$ifs
                 ifs=":"
-                vpd_content=`cat $filepath_vpd`
+                vpd_content=`cat $filepath_vpd | tr -d '\0'`
                 devdesc=$(printf "%-15s" "$(echo $vpd_content | strings | head -1)")
                 partid=$(printf "%-11s" "$(echo $vpd_content | strings | head -4 | tail -1 | gawk '{print $1}')")
                 ifs=$tmp

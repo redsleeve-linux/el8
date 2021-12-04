@@ -1,0 +1,71 @@
+From 23408827f9f74062a43041154a78505bc9fa4ed8 Mon Sep 17 00:00:00 2001
+From: Honggang Li <honli@redhat.com>
+Date: Tue, 3 Nov 2020 20:21:33 +0800
+Subject: [PATCH] Only load i40iw for i40e device with specific PCI IDs
+
+This a redhat specific hack to handle i40iw huge memory consuming issue.
+
+rdma-core upstream maintainer believes this issue should be handled in
+kernel space with i40e/i40iw driver. Unfortunately, Intel does not care
+about this request.
+
+<snip>
+Just for the record, why is it a bad idea to use the original udev
+rule that contained "kmod load i40iw". Two reasons:
+a) for most i40e NICs i40iw is irrelevant and we have the memory issue
+that Intel won't fix.
+b) if i40iw is loaded you can no longer unload i40e by itself.
+$ modprobe i40iw
+$ modprobe -r i40e
+modprobe: FATAL: Module i40e is in use.
+
+Bad user experience and we may break existing user scripts!
+Even worse unloading i40iw unloads i40e implicitly.
+Also i40iw is going away upstream at some point.
+<snip>
+
+Resolves: bz1850462
+
+Signed-off-by: Honggang Li <honli@redhat.com>
+---
+ kernel-boot/rdma-hw-modules.rules | 20 +++++++++++++++++++-
+ 1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/kernel-boot/rdma-hw-modules.rules b/kernel-boot/rdma-hw-modules.rules
+index 95eaf7206702..541516eb98f4 100644
+--- a/kernel-boot/rdma-hw-modules.rules
++++ b/kernel-boot/rdma-hw-modules.rules
+@@ -11,11 +11,29 @@ ENV{ID_NET_DRIVER}=="be2net", RUN{builtin}+="kmod load ocrdma"
+ ENV{ID_NET_DRIVER}=="bnxt_en", RUN{builtin}+="kmod load bnxt_re"
+ ENV{ID_NET_DRIVER}=="cxgb4", RUN{builtin}+="kmod load iw_cxgb4"
+ ENV{ID_NET_DRIVER}=="hns", RUN{builtin}+="kmod load hns_roce"
+-ENV{ID_NET_DRIVER}=="i40e", RUN{builtin}+="kmod load i40iw"
+ ENV{ID_NET_DRIVER}=="mlx4_en", RUN{builtin}+="kmod load mlx4_ib"
+ ENV{ID_NET_DRIVER}=="mlx5_core", RUN{builtin}+="kmod load mlx5_ib"
+ ENV{ID_NET_DRIVER}=="qede", RUN{builtin}+="kmod load qedr"
+ 
++# Because most of X722 don't support RDMA, only load i40iw for X722 with specific device IDs.
++#define I40E_INTEL_VENDOR_ID            0x8086
++#define I40E_DEV_ID_X722                0x37CC
++#define I40E_DEV_ID_KX_X722             0x37CE
++#define I40E_DEV_ID_QSFP_X722           0x37CF
++#define I40E_DEV_ID_SFP_X722            0x37D0
++#define I40E_DEV_ID_1G_BASE_T_X722      0x37D1
++#define I40E_DEV_ID_10G_BASE_T_X722     0x37D2
++#define I40E_DEV_ID_SFP_I_X722          0x37D3
++#define I40E_DEV_ID_X722_VF             0x37CD
++ENV{ID_NET_DRIVER}=="i40e", ENV{ID_VENDOR_ID}=="0x8086", ENV{ID_MODEL_ID}=="0x37cc", RUN{builtin}+="kmod load i40iw"
++ENV{ID_NET_DRIVER}=="i40e", ENV{ID_VENDOR_ID}=="0x8086", ENV{ID_MODEL_ID}=="0x37ce", RUN{builtin}+="kmod load i40iw"
++ENV{ID_NET_DRIVER}=="i40e", ENV{ID_VENDOR_ID}=="0x8086", ENV{ID_MODEL_ID}=="0x37cf", RUN{builtin}+="kmod load i40iw"
++ENV{ID_NET_DRIVER}=="i40e", ENV{ID_VENDOR_ID}=="0x8086", ENV{ID_MODEL_ID}=="0x37d0", RUN{builtin}+="kmod load i40iw"
++ENV{ID_NET_DRIVER}=="i40e", ENV{ID_VENDOR_ID}=="0x8086", ENV{ID_MODEL_ID}=="0x37d1", RUN{builtin}+="kmod load i40iw"
++ENV{ID_NET_DRIVER}=="i40e", ENV{ID_VENDOR_ID}=="0x8086", ENV{ID_MODEL_ID}=="0x37d2", RUN{builtin}+="kmod load i40iw"
++ENV{ID_NET_DRIVER}=="i40e", ENV{ID_VENDOR_ID}=="0x8086", ENV{ID_MODEL_ID}=="0x37d3", RUN{builtin}+="kmod load i40iw"
++ENV{ID_NET_DRIVER}=="i40e", ENV{ID_VENDOR_ID}=="0x8086", ENV{ID_MODEL_ID}=="0x37cd", RUN{builtin}+="kmod load i40iw"
++
+ # The user must explicitly load these modules via /etc/modules-load.d/ or otherwise
+ # rxe
+ 
+-- 
+2.25.4
+
