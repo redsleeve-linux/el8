@@ -1,0 +1,143 @@
+diff --git a/modules/proxy/mod_proxy.c b/modules/proxy/mod_proxy.c
+index d13c249..f383996 100644
+--- a/modules/proxy/mod_proxy.c
++++ b/modules/proxy/mod_proxy.c
+@@ -1200,11 +1200,20 @@ static int proxy_handler(request_rec *r)
+                     /* handle the scheme */
+                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, APLOGNO(01142)
+                                   "Trying to run scheme_handler against proxy");
++
++                    if (ents[i].creds) {
++                        apr_table_set(r->notes, "proxy-basic-creds", ents[i].creds);
++                        ap_log_rerror(APLOG_MARK, APLOG_TRACE1, 0, r,
++                                      "Using proxy auth creds %s", ents[i].creds);
++                    }
++
+                     access_status = proxy_run_scheme_handler(r, worker,
+                                                              conf, url,
+                                                              ents[i].hostname,
+                                                              ents[i].port);
+ 
++                    if (ents[i].creds) apr_table_unset(r->notes, "proxy-basic-creds");
++
+                     /* Did the scheme handler process the request? */
+                     if (access_status != DECLINED) {
+                         const char *cl_a;
+@@ -1621,8 +1630,8 @@ static void *merge_proxy_dir_config(apr_pool_t *p, void *basev, void *addv)
+     return new;
+ }
+ 
+-static const char *
+-    add_proxy(cmd_parms *cmd, void *dummy, const char *f1, const char *r1, int regex)
++static const char *add_proxy(cmd_parms *cmd, void *dummy, const char *f1,
++                             const char *r1, const char *creds, int regex)
+ {
+     server_rec *s = cmd->server;
+     proxy_server_conf *conf =
+@@ -1680,19 +1689,24 @@ static const char *
+     new->port = port;
+     new->regexp = reg;
+     new->use_regex = regex;
++    if (creds) {
++        new->creds = apr_pstrcat(cmd->pool, "Basic ",
++                                 ap_pbase64encode(cmd->pool, (char *)creds),
++                                 NULL);
++    }
+     return NULL;
+ }
+ 
+-static const char *
+-    add_proxy_noregex(cmd_parms *cmd, void *dummy, const char *f1, const char *r1)
++static const char *add_proxy_noregex(cmd_parms *cmd, void *dummy, const char *f1,
++                                     const char *r1, const char *creds)
+ {
+-    return add_proxy(cmd, dummy, f1, r1, 0);
++    return add_proxy(cmd, dummy, f1, r1, creds, 0);
+ }
+ 
+-static const char *
+-    add_proxy_regex(cmd_parms *cmd, void *dummy, const char *f1, const char *r1)
++static const char *add_proxy_regex(cmd_parms *cmd, void *dummy, const char *f1,
++                                   const char *r1, const char *creds)
+ {
+-    return add_proxy(cmd, dummy, f1, r1, 1);
++    return add_proxy(cmd, dummy, f1, r1, creds, 1);
+ }
+ 
+ PROXY_DECLARE(const char *) ap_proxy_de_socketfy(apr_pool_t *p, const char *url)
+@@ -2638,9 +2652,9 @@ static const command_rec proxy_cmds[] =
+     "location, in regular expression syntax"),
+     AP_INIT_FLAG("ProxyRequests", set_proxy_req, NULL, RSRC_CONF,
+      "on if the true proxy requests should be accepted"),
+-    AP_INIT_TAKE2("ProxyRemote", add_proxy_noregex, NULL, RSRC_CONF,
++    AP_INIT_TAKE23("ProxyRemote", add_proxy_noregex, NULL, RSRC_CONF,
+      "a scheme, partial URL or '*' and a proxy server"),
+-    AP_INIT_TAKE2("ProxyRemoteMatch", add_proxy_regex, NULL, RSRC_CONF,
++    AP_INIT_TAKE23("ProxyRemoteMatch", add_proxy_regex, NULL, RSRC_CONF,
+      "a regex pattern and a proxy server"),
+     AP_INIT_FLAG("ProxyPassInterpolateEnv", ap_set_flag_slot_char,
+         (void*)APR_OFFSETOF(proxy_dir_conf, interpolate_env),
+diff --git a/modules/proxy/mod_proxy.h b/modules/proxy/mod_proxy.h
+index 288c5d4..57cc92f 100644
+--- a/modules/proxy/mod_proxy.h
++++ b/modules/proxy/mod_proxy.h
+@@ -116,6 +116,7 @@ struct proxy_remote {
+     const char *protocol;   /* the scheme used to talk to this proxy */
+     const char *hostname;   /* the hostname of this proxy */
+     ap_regex_t *regexp;     /* compiled regex (if any) for the remote */
++    const char *creds;      /* auth credentials (if any) for the proxy */
+     int use_regex;          /* simple boolean. True if we have a regex pattern */
+     apr_port_t  port;       /* the port for this proxy */
+ };
+diff --git a/modules/proxy/proxy_util.c b/modules/proxy/proxy_util.c
+index 0759dac..2bfc8f0 100644
+--- a/modules/proxy/proxy_util.c
++++ b/modules/proxy/proxy_util.c
+@@ -2446,11 +2446,14 @@ ap_proxy_determine_connection(apr_pool_t *p, request_rec *r,
+                      * So let's make it configurable by env.
+                      * The logic here is the same used in mod_proxy_http.
+                      */
+-                    proxy_auth = apr_table_get(r->headers_in, "Proxy-Authorization");
++                    proxy_auth = apr_table_get(r->notes, "proxy-basic-creds");
++                    if (proxy_auth == NULL)
++                        proxy_auth = apr_table_get(r->headers_in, "Proxy-Authorization");
++
+                     if (proxy_auth != NULL &&
+                         proxy_auth[0] != '\0' &&
+-                        r->user == NULL && /* we haven't yet authenticated */
+-                        apr_table_get(r->subprocess_env, "Proxy-Chain-Auth")) {
++                        (r->user == NULL  /* we haven't yet authenticated */
++                         || apr_table_get(r->subprocess_env, "Proxy-Chain-Auth"))) {
+                         forward->proxy_auth = apr_pstrdup(conn->pool, proxy_auth);
+                     }
+                 }
+@@ -2672,7 +2675,8 @@ static apr_status_t send_http_connect(proxy_conn_rec *backend,
+     nbytes = apr_snprintf(buffer, sizeof(buffer),
+                           "CONNECT %s:%d HTTP/1.0" CRLF,
+                           forward->target_host, forward->target_port);
+-    /* Add proxy authorization from the initial request if necessary */
++    /* Add proxy authorization from the configuration, or initial
++     * request if necessary */
+     if (forward->proxy_auth != NULL) {
+         nbytes += apr_snprintf(buffer + nbytes, sizeof(buffer) - nbytes,
+                                "Proxy-Authorization: %s" CRLF,
+@@ -3567,6 +3571,7 @@ PROXY_DECLARE(int) ap_proxy_create_hdrbrgd(apr_pool_t *p,
+     apr_bucket *e;
+     int do_100_continue;
+     conn_rec *origin = p_conn->connection;
++    const char *creds;
+     proxy_dir_conf *dconf = ap_get_module_config(r->per_dir_config, &proxy_module);
+ 
+     /*
+@@ -3743,6 +3748,11 @@ PROXY_DECLARE(int) ap_proxy_create_hdrbrgd(apr_pool_t *p,
+         return HTTP_BAD_REQUEST;
+     }
+ 
++    creds = apr_table_get(r->notes, "proxy-basic-creds");
++    if (creds) {
++        apr_table_mergen(r->headers_in, "Proxy-Authorization", creds);
++    }
++
+     /* send request headers */
+     headers_in_array = apr_table_elts(r->headers_in);
+     headers_in = (const apr_table_entry_t *) headers_in_array->elts;

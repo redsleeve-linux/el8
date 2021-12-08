@@ -1,0 +1,101 @@
+diff --git a/modules/ssl/ssl_engine_init.c b/modules/ssl/ssl_engine_init.c
+index 8b6c34f..3587fb5 100644
+--- a/modules/ssl/ssl_engine_init.c
++++ b/modules/ssl/ssl_engine_init.c
+@@ -1609,6 +1609,10 @@ static apr_status_t ssl_init_proxy_certs(server_rec *s,
+     STACK_OF(X509) *chain;
+     X509_STORE_CTX *sctx;
+     X509_STORE *store = SSL_CTX_get_cert_store(mctx->ssl_ctx);
++    int addl_chain = 0; /* non-zero if additional chain certs were
++                         * added to store */
++
++    ap_assert(store != NULL); /* safe to assume always non-NULL? */
+ 
+ #if OPENSSL_VERSION_NUMBER >= 0x1010100fL
+     /* For OpenSSL >=1.1.1, turn on client cert support which is
+@@ -1653,20 +1657,28 @@ static apr_status_t ssl_init_proxy_certs(server_rec *s,
+         }
+     }
+ 
+-    if ((ncerts = sk_X509_INFO_num(sk)) <= 0) {
+-        sk_X509_INFO_free(sk);
+-        ap_log_error(APLOG_MARK, APLOG_WARNING, 0, s, APLOGNO(02206)
+-                     "no client certs found for SSL proxy");
+-        return APR_SUCCESS;
+-    }
+-
+     /* Check that all client certs have got certificates and private
+-     * keys. */
+-    for (n = 0; n < ncerts; n++) {
++     * keys.  Note the number of certs in the stack may decrease
++     * during the loop. */
++    for (n = 0; n < sk_X509_INFO_num(sk); n++) {
+         X509_INFO *inf = sk_X509_INFO_value(sk, n);
++        int has_privkey = inf->x_pkey && inf->x_pkey->dec_pkey;
++
++        /* For a lone certificate in the file, trust it as a
++         * CA/intermediate certificate. */
++        if (inf->x509 && !has_privkey && !inf->enc_data) {
++            ssl_log_xerror(SSLLOG_MARK, APLOG_DEBUG, 0, ptemp, s, inf->x509,
++                           APLOGNO(10261) "Trusting non-leaf certificate");
++            X509_STORE_add_cert(store, inf->x509); /* increments inf->x509 */
++            /* Delete from the stack and iterate again. */
++            X509_INFO_free(inf);
++            sk_X509_INFO_delete(sk, n);
++            n--;
++            addl_chain = 1;
++            continue;
++        }
+ 
+-        if (!inf->x509 || !inf->x_pkey || !inf->x_pkey->dec_pkey ||
+-            inf->enc_data) {
++        if (!has_privkey || inf->enc_data) {
+             sk_X509_INFO_free(sk);
+             ap_log_error(APLOG_MARK, APLOG_STARTUP, 0, s, APLOGNO(02252)
+                          "incomplete client cert configured for SSL proxy "
+@@ -1683,13 +1695,21 @@ static apr_status_t ssl_init_proxy_certs(server_rec *s,
+         }
+     }
+ 
++    if ((ncerts = sk_X509_INFO_num(sk)) <= 0) {
++        sk_X509_INFO_free(sk);
++        ap_log_error(APLOG_MARK, APLOG_WARNING, 0, s, APLOGNO(02206)
++                     "no client certs found for SSL proxy");
++        return APR_SUCCESS;
++    }
++
+     ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s, APLOGNO(02207)
+                  "loaded %d client certs for SSL proxy",
+                  ncerts);
+     pkp->certs = sk;
+ 
+-
+-    if (!pkp->ca_cert_file || !store) {
++    /* If any chain certs are configured, build the ->ca_certs chains
++     * corresponding to the loaded keypairs. */
++    if (!pkp->ca_cert_file && !addl_chain) {
+         return APR_SUCCESS;
+     }
+ 
+diff --git a/modules/ssl/ssl_private.h b/modules/ssl/ssl_private.h
+index 2a08d1c..8055200 100644
+--- a/modules/ssl/ssl_private.h
++++ b/modules/ssl/ssl_private.h
+@@ -655,10 +655,13 @@ typedef struct {
+     const char  *cert_file;
+     const char  *cert_path;
+     const char  *ca_cert_file;
+-    STACK_OF(X509_INFO) *certs; /* Contains End Entity certs */
+-    STACK_OF(X509) **ca_certs; /* Contains ONLY chain certs for
+-                                * each item in certs.
+-                                * (ptr to array of ptrs) */
++    /* certs is a stack of configured cert, key pairs. */
++    STACK_OF(X509_INFO) *certs;
++    /* ca_certs contains ONLY chain certs for each item in certs.
++     * ca_certs[n] is a pointer to the (STACK_OF(X509) *) stack which
++     * holds the cert chain for the 'n'th cert in the certs stack, or
++     * NULL if no chain is configured. */
++    STACK_OF(X509) **ca_certs;
+ } modssl_pk_proxy_t;
+ 
+ /** stuff related to authentication that can also be per-dir */

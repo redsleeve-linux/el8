@@ -1,0 +1,48 @@
+diff --git a/modules/ssl/ssl_engine_init.c b/modules/ssl/ssl_engine_init.c
+index 70d151e..e4f5fc8 100644
+--- a/modules/ssl/ssl_engine_init.c
++++ b/modules/ssl/ssl_engine_init.c
+@@ -1095,7 +1095,9 @@ static apr_status_t ssl_init_ctx_crl(server_rec *s,
+ /*
+  * Read a file that optionally contains the server certificate in PEM
+  * format, possibly followed by a sequence of CA certificates that
+- * should be sent to the peer in the SSL Certificate message.
++ * should be sent to the peer in the SSL Certificate message.  Returns
++ * 0 on success, otherwise the OpenSSL error stack contents should be
++ * reported.
+  */
+ static int use_certificate_chain(
+     SSL_CTX *ctx, char *file, int skipfirst, pem_password_cb *cb)
+@@ -1128,8 +1130,10 @@ static int use_certificate_chain(
+         ctx->extra_certs = NULL;
+     }
+ #endif
++
+     /* create new extra chain by loading the certs */
+     n = 0;
++    ERR_clear_error();
+     while ((x509 = PEM_read_bio_X509(bio, NULL, cb, NULL)) != NULL) {
+         if (!SSL_CTX_add_extra_chain_cert(ctx, x509)) {
+             X509_free(x509);
+@@ -1190,6 +1194,7 @@ static apr_status_t ssl_init_ctx_cert_chain(server_rec *s,
+     if (n < 0) {
+         ap_log_error(APLOG_MARK, APLOG_EMERG, 0, s, APLOGNO(01903)
+                 "Failed to configure CA certificate chain!");
++        ssl_log_ssl_error(SSLLOG_MARK, APLOG_EMERG, s);
+         return ssl_die(s);
+     }
+ 
+diff --git a/modules/ssl/ssl_util_ocsp.c b/modules/ssl/ssl_util_ocsp.c
+index b11a6e9..b66e151 100644
+--- a/modules/ssl/ssl_util_ocsp.c
++++ b/modules/ssl/ssl_util_ocsp.c
+@@ -363,7 +363,9 @@ static STACK_OF(X509) *modssl_read_ocsp_certificates(const char *file)
+         BIO_free(bio);
+         return NULL;
+     }
++
+     /* create new extra chain by loading the certs */
++    ERR_clear_error();
+     while ((x509 = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL) {
+         if (!other_certs) {
+                 other_certs = sk_X509_new_null();

@@ -1,0 +1,40 @@
+--- a/modules/proxy/mod_proxy_hcheck.c	2019/07/30 13:01:08	1863999
++++ b/modules/proxy/mod_proxy_hcheck.c	2019/07/30 13:01:21	1864000
+@@ -110,6 +110,10 @@
+     if (!worker && !v) {
+         return "Bad call to set_worker_hc_param()";
+     }
++    if (!ctx) {
++        ctx = hc_create_config(p, s);
++        ap_set_module_config(s->module_config, &proxy_hcheck_module, ctx);
++    }
+     temp = (hc_template_t *)v;
+     if (!strcasecmp(key, "hctemplate")) {
+         hc_template_t *template;
+@@ -1059,6 +1063,8 @@
+     int i;
+     sctx_t *ctx = (sctx_t *) ap_get_module_config(r->server->module_config,
+                                                   &proxy_hcheck_module);
++    if (!ctx)
++        return;
+     if (apr_is_empty_table(ctx->conditions))
+         return;
+ 
+@@ -1088,6 +1094,8 @@
+     int i;
+     sctx_t *ctx = (sctx_t *) ap_get_module_config(r->server->module_config,
+                                                   &proxy_hcheck_module);
++    if (!ctx)
++        return;
+     if (apr_is_empty_table(ctx->conditions))
+         return;
+ 
+@@ -1111,6 +1119,8 @@
+     int i;
+     sctx_t *ctx = (sctx_t *) ap_get_module_config(r->server->module_config,
+                                                   &proxy_hcheck_module);
++    if (!ctx)
++        return 0;
+     if (apr_is_empty_table(ctx->conditions))
+         return 0;
+ 

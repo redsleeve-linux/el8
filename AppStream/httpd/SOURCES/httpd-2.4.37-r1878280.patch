@@ -1,0 +1,47 @@
+From ced24e032ebe185a2d885fa309d6de47668ba31e Mon Sep 17 00:00:00 2001
+From: Yann Ylavic <ylavic@apache.org>
+Date: Fri, 26 Jun 2020 10:21:19 +0000
+Subject: [PATCH] Merge r1878280 from trunk:
+
+mod_proxy_http: don't strip EOS when spooling request body to file.
+
+To prevent stream_reqbody() from sending the FILE and FLUSH bucket in separate
+brigades, and thus apr_file_setaside() to trigger if network congestion occurs
+with the backend, restore the EOS in spool_reqbody_cl() which was stripped
+when spooling the request body to a file.
+
+Until APR r1878279 is released (and installed by users), apr_file_setaside()
+on a temporary file (mktemp) will simply drop the file cleanup, leaking the
+fd and inode..
+
+This fixes BZ 64452.
+
+
+Submitted by: ylavic
+Reviewed by: ylavic, jorton, rpluem
+
+
+git-svn-id: https://svn.apache.org/repos/asf/httpd/httpd/branches/2.4.x@1879226 13f79535-47bb-0310-9956-ffa450edef68
+---
+ modules/proxy/mod_proxy_http.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/modules/proxy/mod_proxy_http.c b/modules/proxy/mod_proxy_http.c
+index e94bf26d412..7a0f063f705 100644
+--- a/modules/proxy/mod_proxy_http.c
++++ b/modules/proxy/mod_proxy_http.c
+@@ -548,6 +548,14 @@ static int spool_reqbody_cl(proxy_http_req_t *req, apr_off_t *bytes_spooled)
+         e = apr_bucket_immortal_create(CRLF_ASCII, 2, bucket_alloc);
+         APR_BRIGADE_INSERT_TAIL(input_brigade, e);
+     }
++    if (tmpfile) {
++        /* We dropped metadata buckets when spooling to tmpfile,
++         * terminate with EOS for stream_reqbody() to flush the
++         * whole in one go.
++         */
++        e = apr_bucket_eos_create(bucket_alloc);
++        APR_BRIGADE_INSERT_TAIL(input_brigade, e);
++    }
+     return OK;
+ }
+ 

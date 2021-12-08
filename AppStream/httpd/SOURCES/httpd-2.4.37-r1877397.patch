@@ -1,0 +1,249 @@
+diff --git a/modules/ssl/ssl_engine_init.c b/modules/ssl/ssl_engine_init.c
+index b286053..8b6c34f 100644
+--- a/modules/ssl/ssl_engine_init.c
++++ b/modules/ssl/ssl_engine_init.c
+@@ -824,6 +824,13 @@ static apr_status_t ssl_init_ctx_protocol(server_rec *s,
+         SSL_CTX_set_keylog_callback(ctx, modssl_callback_keylog);
+     }
+ #endif
++
++#ifdef SSL_OP_NO_RENEGOTIATION
++    /* For server-side SSL_CTX, disable renegotiation by default.. */
++    if (!mctx->pkp) {
++        SSL_CTX_set_options(ctx, SSL_OP_NO_RENEGOTIATION);
++    }
++#endif
+     
+     return APR_SUCCESS;
+ }
+@@ -845,6 +852,14 @@ static void ssl_init_ctx_session_cache(server_rec *s,
+     }
+ }
+ 
++#ifdef SSL_OP_NO_RENEGOTIATION
++/* OpenSSL-level renegotiation protection. */
++#define MODSSL_BLOCKS_RENEG (0)
++#else
++/* mod_ssl-level renegotiation protection. */
++#define MODSSL_BLOCKS_RENEG (1)
++#endif
++
+ static void ssl_init_ctx_callbacks(server_rec *s,
+                                    apr_pool_t *p,
+                                    apr_pool_t *ptemp,
+@@ -854,7 +869,13 @@ static void ssl_init_ctx_callbacks(server_rec *s,
+ 
+     SSL_CTX_set_tmp_dh_callback(ctx,  ssl_callback_TmpDH);
+ 
+-    SSL_CTX_set_info_callback(ctx, ssl_callback_Info);
++    /* The info callback is used for debug-level tracing.  For OpenSSL
++     * versions where SSL_OP_NO_RENEGOTIATION is not available, the
++     * callback is also used to prevent use of client-initiated
++     * renegotiation.  Enable it in either case. */
++    if (APLOGdebug(s) || MODSSL_BLOCKS_RENEG) {
++        SSL_CTX_set_info_callback(ctx, ssl_callback_Info);
++    }
+ 
+ #ifdef HAVE_TLS_ALPN
+     SSL_CTX_set_alpn_select_cb(ctx, ssl_callback_alpn_select, NULL);
+diff --git a/modules/ssl/ssl_engine_io.c b/modules/ssl/ssl_engine_io.c
+index 836bfdb..0958135 100644
+--- a/modules/ssl/ssl_engine_io.c
++++ b/modules/ssl/ssl_engine_io.c
+@@ -200,11 +200,13 @@ static int bio_filter_out_write(BIO *bio, const char *in, int inl)
+     apr_bucket *e;
+     int need_flush;
+ 
++#ifndef SSL_OP_NO_RENEGOTIATION
+     /* Abort early if the client has initiated a renegotiation. */
+     if (outctx->filter_ctx->config->reneg_state == RENEG_ABORT) {
+         outctx->rc = APR_ECONNABORTED;
+         return -1;
+     }
++#endif
+ 
+     /* when handshaking we'll have a small number of bytes.
+      * max size SSL will pass us here is about 16k.
+@@ -458,11 +460,13 @@ static int bio_filter_in_read(BIO *bio, char *in, int inlen)
+     if (!in)
+         return 0;
+ 
++#ifndef SSL_OP_NO_RENEGOTIATION
+     /* Abort early if the client has initiated a renegotiation. */
+     if (inctx->filter_ctx->config->reneg_state == RENEG_ABORT) {
+         inctx->rc = APR_ECONNABORTED;
+         return -1;
+     }
++#endif
+ 
+     BIO_clear_retry_flags(bio);
+ 
+diff --git a/modules/ssl/ssl_engine_kernel.c b/modules/ssl/ssl_engine_kernel.c
+index e217b9d..21f701f 100644
+--- a/modules/ssl/ssl_engine_kernel.c
++++ b/modules/ssl/ssl_engine_kernel.c
+@@ -992,7 +992,7 @@ static int ssl_hook_Access_classic(request_rec *r, SSLSrvConfigRec *sc, SSLDirCo
+ 
+             /* Toggle the renegotiation state to allow the new
+              * handshake to proceed. */
+-            sslconn->reneg_state = RENEG_ALLOW;
++            modssl_set_reneg_state(sslconn, RENEG_ALLOW);
+ 
+             SSL_renegotiate(ssl);
+             SSL_do_handshake(ssl);
+@@ -1019,7 +1019,7 @@ static int ssl_hook_Access_classic(request_rec *r, SSLSrvConfigRec *sc, SSLDirCo
+              */
+             SSL_peek(ssl, peekbuf, 0);
+ 
+-            sslconn->reneg_state = RENEG_REJECT;
++            modssl_set_reneg_state(sslconn, RENEG_REJECT);
+ 
+             if (!SSL_is_init_finished(ssl)) {
+                 ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02261)
+@@ -1078,7 +1078,7 @@ static int ssl_hook_Access_modern(request_rec *r, SSLSrvConfigRec *sc, SSLDirCon
+         (sc->server->auth.verify_mode != SSL_CVERIFY_UNSET)) {
+         int vmode_inplace, vmode_needed;
+         int change_vmode = FALSE;
+-        int old_state, n, rc;
++        int n, rc;
+ 
+         vmode_inplace = SSL_get_verify_mode(ssl);
+         vmode_needed = SSL_VERIFY_NONE;
+@@ -1180,8 +1180,6 @@ static int ssl_hook_Access_modern(request_rec *r, SSLSrvConfigRec *sc, SSLDirCon
+                 return HTTP_FORBIDDEN;
+             }
+             
+-            old_state = sslconn->reneg_state;
+-            sslconn->reneg_state = RENEG_ALLOW;
+             modssl_set_app_data2(ssl, r);
+ 
+             SSL_do_handshake(ssl);
+@@ -1191,7 +1189,6 @@ static int ssl_hook_Access_modern(request_rec *r, SSLSrvConfigRec *sc, SSLDirCon
+              */
+             SSL_peek(ssl, peekbuf, 0);
+ 
+-            sslconn->reneg_state = old_state;
+             modssl_set_app_data2(ssl, NULL);
+ 
+             /*
+@@ -2271,8 +2268,8 @@ static void log_tracing_state(const SSL *ssl, conn_rec *c,
+ /*
+  * This callback function is executed while OpenSSL processes the SSL
+  * handshake and does SSL record layer stuff.  It's used to trap
+- * client-initiated renegotiations, and for dumping everything to the
+- * log.
++ * client-initiated renegotiations (where SSL_OP_NO_RENEGOTIATION is
++ * not available), and for dumping everything to the log.
+  */
+ void ssl_callback_Info(const SSL *ssl, int where, int rc)
+ {
+@@ -2284,14 +2281,12 @@ void ssl_callback_Info(const SSL *ssl, int where, int rc)
+         return;
+     }
+ 
+-    /* With TLS 1.3 this callback may be called multiple times on the first
+-     * negotiation, so the below logic to detect renegotiations can't work.
+-     * Fortunately renegotiations are forbidden starting with TLS 1.3, and
+-     * this is enforced by OpenSSL so there's nothing to be done here.
+-     */
+-#if SSL_HAVE_PROTOCOL_TLSV1_3
+-    if (SSL_version(ssl) < TLS1_3_VERSION)
+-#endif
++#ifndef SSL_OP_NO_RENEGOTIATION
++    /* With OpenSSL < 1.1.1 (implying TLS v1.2 or earlier), this
++     * callback is used to block client-initiated renegotiation.  With
++     * TLSv1.3 it is unnecessary since renegotiation is forbidden at
++     * protocol level.  Otherwise (TLSv1.2 with OpenSSL >=1.1.1),
++     * SSL_OP_NO_RENEGOTIATION is used to block renegotiation. */
+     {
+         SSLConnRec *sslconn;
+ 
+@@ -2316,6 +2311,7 @@ void ssl_callback_Info(const SSL *ssl, int where, int rc)
+             sslconn->reneg_state = RENEG_REJECT;
+         }
+     }
++#endif
+ 
+     s = mySrvFromConn(c);
+     if (s && APLOGdebug(s)) {
+diff --git a/modules/ssl/ssl_private.h b/modules/ssl/ssl_private.h
+index 2514407..f4e5ac9 100644
+--- a/modules/ssl/ssl_private.h
++++ b/modules/ssl/ssl_private.h
+@@ -508,6 +508,16 @@ typedef struct {
+     apr_time_t     source_mtime;
+ } ssl_asn1_t;
+ 
++typedef enum {
++    RENEG_INIT = 0, /* Before initial handshake */
++    RENEG_REJECT,   /* After initial handshake; any client-initiated
++                     * renegotiation should be rejected */
++    RENEG_ALLOW,    /* A server-initiated renegotiation is taking
++                     * place (as dictated by configuration) */
++    RENEG_ABORT     /* Renegotiation initiated by client, abort the
++                     * connection */
++} modssl_reneg_state;
++
+ /**
+  * Define the mod_ssl per-module configuration structure
+  * (i.e. the global configuration for each httpd process)
+@@ -540,18 +550,13 @@ typedef struct {
+         NON_SSL_SET_ERROR_MSG  /* Need to set the error message */
+     } non_ssl_request;
+ 
+-    /* Track the handshake/renegotiation state for the connection so
+-     * that all client-initiated renegotiations can be rejected, as a
+-     * partial fix for CVE-2009-3555. */
+-    enum {
+-        RENEG_INIT = 0, /* Before initial handshake */
+-        RENEG_REJECT,   /* After initial handshake; any client-initiated
+-                         * renegotiation should be rejected */
+-        RENEG_ALLOW,    /* A server-initiated renegotiation is taking
+-                         * place (as dictated by configuration) */
+-        RENEG_ABORT     /* Renegotiation initiated by client, abort the
+-                         * connection */
+-    } reneg_state;
++#ifndef SSL_OP_NO_RENEGOTIATION
++    /* For OpenSSL < 1.1.1, track the handshake/renegotiation state
++     * for the connection to block client-initiated renegotiations.
++     * For OpenSSL >=1.1.1, the SSL_OP_NO_RENEGOTIATION flag is used in
++     * the SSL * options state with equivalent effect. */
++    modssl_reneg_state reneg_state;
++#endif
+ 
+     server_rec *server;
+     SSLDirConfigRec *dc;
+@@ -1130,6 +1135,9 @@ int ssl_is_challenge(conn_rec *c, const char *servername,
+  * the configured ENGINE. */
+ int modssl_is_engine_id(const char *name);
+ 
++/* Set the renegotation state for connection. */
++void modssl_set_reneg_state(SSLConnRec *sslconn, modssl_reneg_state state);
++
+ #endif /* SSL_PRIVATE_H */
+ /** @} */
+ 
+diff --git a/modules/ssl/ssl_util_ssl.c b/modules/ssl/ssl_util_ssl.c
+index 4fa089b..3413d83 100644
+--- a/modules/ssl/ssl_util_ssl.c
++++ b/modules/ssl/ssl_util_ssl.c
+@@ -504,3 +504,19 @@ char *modssl_SSL_SESSION_id2sz(IDCONST unsigned char *id, int idlen,
+ 
+     return str;
+ }
++
++void modssl_set_reneg_state(SSLConnRec *sslconn, modssl_reneg_state state)
++{
++#ifdef SSL_OP_NO_RENEGOTIATION
++    switch (state) {
++    case RENEG_ALLOW:
++        SSL_clear_options(sslconn->ssl, SSL_OP_NO_RENEGOTIATION);
++        break;
++    default:
++        SSL_set_options(sslconn->ssl, SSL_OP_NO_RENEGOTIATION);
++        break;
++    }
++#else
++    sslconn->reneg_state = state;
++#endif
++}

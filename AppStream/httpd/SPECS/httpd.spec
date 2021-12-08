@@ -13,10 +13,9 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.37
-Release: 21%{?dist}
+Release: 43%{?dist}
 URL: https://httpd.apache.org/
 Source0: https://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex-8.0.tar.gz
 Source2: httpd.logrotate
 Source3: instance.conf
 Source4: httpd-ssl-pass-dialog
@@ -55,6 +54,7 @@ Source42: httpd-init.service
 Source43: httpd-ssl-gencerts
 Source44: httpd@.service
 Source45: config.layout
+Source46: apache-poweredby.png
 
 # build/scripts patches
 # http://bugzilla.redhat.com/show_bug.cgi?id=1231924
@@ -90,8 +90,20 @@ Patch32: httpd-2.4.37-sslprotdefault.patch
 Patch33: httpd-2.4.37-mod-md-mod-ssl-hooks.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1725031
 Patch34: httpd-2.4.37-r1861793+.patch
-# https://bugzilla.redhat.com/show_bug.cgi?id=1704317ě
+# https://bugzilla.redhat.com/show_bug.cgi?id=1704317
 Patch35: httpd-2.4.37-sslkeylogfile-support.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1794728
+Patch36: httpd-2.4.37-session-expiry-updt-int.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1209162
+Patch37: httpd-2.4.37-logjournal.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1869576
+Patch38: httpd-2.4.37-pr37355.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1896176
+Patch39: httpd-2.4.37-proxy-ws-idle-timeout.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1883648
+Patch40: httpd-2.4.37-ssl-proxy-chains.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1935742
+Patch41: httpd-2.4.37-usertrack-samesite.patch
 
 # Bug fixes
 # https://bugzilla.redhat.com/show_bug.cgi?id=1397243
@@ -122,6 +134,31 @@ Patch73: httpd-2.4.35-ocsp-wrong-ctx.patch
 Patch74: httpd-2.4.37-r1828172+.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1775158
 Patch75: httpd-2.4.37-r1870095+.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1771847
+Patch76: httpd-2.4.37-proxy-continue.patch
+Patch77: httpd-2.4.37-balancer-failover.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1875844
+Patch78: httpd-2.4.37-r1881459.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1891829
+Patch79: httpd-2.4.37-r1864000.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1868608
+Patch80: httpd-2.4.37-r1872790.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1861380
+Patch81: httpd-2.4.37-r1879224.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1680118
+Patch82: httpd-2.4.37-r1877397.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1847585
+Patch83: httpd-2.4.37-r1878890.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1918741
+Patch84: httpd-2.4.37-r1878280.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1891594
+Patch85: httpd-2.4.37-htcacheclean-dont-break.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1937334
+Patch86: httpd-2.4.37-r1873907.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1680111
+Patch87: httpd-2.4.37-reply-two-tls-rec.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1905613
+Patch88: httpd-2.4.37-r1845768+.patch
 
 # Security fixes
 Patch200: httpd-2.4.37-r1851471.patch
@@ -137,6 +174,28 @@ Patch204: httpd-2.4.37-CVE-2019-0220.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1741864
 # https://bugzilla.redhat.com/show_bug.cgi?id=1741868
 Patch205: httpd-2.4.34-CVE-2019-9511-and-9516-and-9517.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1823259
+# https://bugzilla.redhat.com/show_bug.cgi?id=1747284
+# fixes both CVE-2020-1927 and CVE-2019-10098
+Patch206: httpd-2.4.37-CVE-2019-10098.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1747281
+Patch207: httpd-2.4.37-CVE-2019-10092.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1747291
+Patch208: httpd-2.4.37-CVE-2019-10097.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1820772
+Patch209: httpd-2.4.37-CVE-2020-1934.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1668493
+Patch210: httpd-2.4.37-CVE-2018-17199.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1866563
+Patch211: httpd-2.4.37-CVE-2020-11984.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1972500
+Patch212: httpd-2.4.37-CVE-2021-30641.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1968307
+Patch213: httpd-2.4.37-CVE-2021-26690.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=2005117
+Patch214: httpd-2.4.37-CVE-2021-40438.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1966732
+Patch215: httpd-2.4.37-CVE-2021-26691.patch
 
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -145,7 +204,9 @@ BuildRequires: autoconf, perl-interpreter, perl-generators, pkgconfig, findutils
 BuildRequires: zlib-devel, libselinux-devel, lua-devel,  brotli-devel
 BuildRequires: apr-devel >= 1.5.0, apr-util-devel >= 1.5.0, pcre-devel >= 5.0
 BuildRequires: systemd-devel
-Requires: /etc/mime.types, system-logos-httpd
+# web server testpage added to redhat-logos in 82.0 (rhbz1896319)
+# new logo requires new footer copyring which was added in rhbz1934800
+Requires: /etc/mime.types, system-logos(httpd-logo-ng)
 Obsoletes: httpd-suexec
 Provides: webserver
 Provides: mod_dav = %{version}-%{release}, httpd-suexec = %{version}-%{release}
@@ -280,6 +341,12 @@ interface for storing and accessing per-user session data.
 %patch33 -p1 -b .mod-md-mod-ssl-hooks
 %patch34 -p1 -b .r1861793+
 %patch35 -p1 -b .sslkeylogfile-support
+%patch36 -p1 -b .session-expiry
+%patch37 -p1 -b .logjournal
+%patch38 -p1 -b .pr37355
+%patch39 -p1 -b .proxy-ws-idle-timeout
+%patch40 -p1 -b .ssl-proxy-chains
+%patch41 -p1 -b .usertrack-samesite
 
 %patch61 -p1 -b .r1738878
 %patch62 -p1 -b .r1633085
@@ -294,6 +361,19 @@ interface for storing and accessing per-user session data.
 %patch73 -p1 -b .ocspwrongctx
 %patch74 -p1 -b .r1828172+
 %patch75 -p1 -b .r1870095+
+%patch76 -p1 -b .proxy-continue
+%patch77 -p1 -b .balancer-failover
+%patch78 -p1 -b .r1881459
+%patch79 -p1 -b .r1864000
+%patch80 -p1 -b .r1872790
+%patch81 -p1 -b .r1879224
+%patch82 -p1 -b .r1877397
+%patch83 -p1 -b .r1878890
+%patch84 -p1 -b .r1878280
+%patch85 -p1 -b .htcacheclean-dont-break
+%patch86 -p1 -b .r1873907
+%patch87 -p1 -b .reply-two-tls-rec
+%patch88 -p1 -b .r1845768+
 
 %patch200 -p1 -b .r1851471
 %patch201 -p1 -b .CVE-2019-0211
@@ -301,6 +381,16 @@ interface for storing and accessing per-user session data.
 %patch203 -p1 -b .CVE-2019-0217
 %patch204 -p1 -b .CVE-2019-0220
 %patch205 -p1 -b .CVE-2019-9511-and-9516-and-9517
+%patch206 -p1 -b .CVE-2019-10098
+%patch207 -p1 -b .CVE-2019-10092
+%patch208 -p1 -b .CVE-2019-10097
+%patch209 -p1 -b .CVE-2020-1934
+%patch210 -p1 -b .CVE-2018-17199
+%patch211 -p1 -b .CVE-2020-11984
+%patch212 -p1 -b .CVE-2021-30641
+%patch213 -p1 -b .CVE-2021-26690
+%patch214 -p1 -b .CVE-2021-40438
+%patch215 -p1 -b .CVE-2021-26691
 
 # Patch in the vendor string
 sed -i '/^#define PLATFORM/s/Unix/%{vstring}/' os/unix/os.h
@@ -326,6 +416,9 @@ if test "x${vmmn}" != "x%{mmn}"; then
    : Update the mmn macro and rebuild.
    exit 1
 fi
+
+# A new logo which comes together with a new test page
+cp %{SOURCE46} ./docs/icons/apache_pb3.png
 
 # Provide default layout
 cp $RPM_SOURCE_DIR/config.layout .
@@ -504,7 +597,8 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf %{SOURCE1} -C $RPM_BUILD_ROOT%{contentdir}/noindex/ --strip-components=1
+ln -s ../../testpage/index.html \
+      $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -612,7 +706,7 @@ exit 0
 %systemd_preun httpd.service htcacheclean.service httpd.socket
 
 %postun
-%systemd_postun
+%systemd_postun httpd.service htcacheclean.service httpd.socket
 
 # Trigger for conversion from SysV, per guidelines at:
 # https://fedoraproject.org/wiki/Packaging:ScriptletSnippets#Systemd
@@ -718,7 +812,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %attr(0710,root,apache) %dir /run/httpd
 %attr(0700,apache,apache) %dir /run/httpd/htcacheclean
@@ -802,8 +896,94 @@ rm -rf $RPM_BUILD_ROOT
 %{_rpmconfigdir}/macros.d/macros.httpd
 
 %changelog
-* Tue Apr 28 2020 CentOS Sources <bugs@centos.org> - 2.4.37-21.el8.centos
+* Tue Nov 09 2021 CentOS Sources <bugs@centos.org> - 2.4.37-43.el8.centos
 - Apply debranding changes
+
+* Tue Oct 26 2021 Luboš Uhliarik <luhliari@redhat.com> - 2.4.37-43
+- Related: #2007235 - CVE-2021-40438 httpd:2.4/httpd: mod_proxy: SSRF via
+  a crafted request uri-path
+
+* Thu Sep 30 2021 Luboš Uhliarik <luhliari@redhat.com> - 2.4.37-42
+- Resolves: #2007235 - CVE-2021-40438 httpd:2.4/httpd: mod_proxy: SSRF via
+  a crafted request uri-path
+- Resolves: #2014063 - CVE-2021-26691 httpd:2.4/httpd: Heap overflow in
+  mod_session
+
+* Fri Jul 09 2021 Luboš Uhliarik <luhliari@redhat.com> - 2.4.37-41
+- Resolves: #1680111 - httpd sends reply to HTTPS GET using two TLS records
+- Resolves: #1905613 - mod_ssl does not like valid certificate chain
+- Resolves: #1935742 - [RFE] backport samesite/httponly/secure flags for
+  usertrack
+- Resolves: #1972500 - CVE-2021-30641 httpd:2.4/httpd: MergeSlashes regression
+- Resolves: #1968307 - CVE-2021-26690 httpd:2.4/httpd: mod_session NULL pointer
+  dereference in parser
+- Resolves: #1934741 - Apache trademark update - new logo
+
+* Fri May 14 2021 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-40
+- Resolves: #1952557 - mod_proxy_wstunnel.html is a malformed XML
+- Resolves: #1937334 - SSLProtocol with based virtual hosts
+
+* Tue Jan 26 2021 Artem Egorenkov <aegorenk@redhat.com> - 2.4.37-39
+- prevent htcacheclean from while break when first file processed
+
+* Tue Jan 26 2021 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-38
+- Resolves: #1918741 - Thousands of /tmp/modproxy.tmp.* files created by apache
+
+* Wed Dec 09 2020 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-37
+- Resolves: #1883648 - [RFE] Update httpd directive SSLProxyMachineCertificateFile
+  to be able to handle certs without matching private key
+
+* Mon Nov 30 2020 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-36
+- Resolves: #1896176 - [RFE] ProxyWebsocketIdleTimeout from httpd
+  mod_proxy_wstunnel
+- Resolves: #1847585 - mod_ldap: High CPU usage at apr_ldap_rebind_remove()
+
+* Wed Nov 11 2020 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-35
+- Resolves: #1651376 - centralizing default index.html for httpd
+
+* Fri Nov 06 2020 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-33
+- Resolves: #1868608 - Intermittent Segfault in Apache httpd due to pool
+  concurrency issues
+- Resolves: #1861380 - httpd/mod_proxy_http/mod_ssl aborted when sending
+  a client cert to backend server
+- Resolves: #1680118 - unorderly connection close when client attempts
+  renegotiation
+
+* Thu Oct 29 2020 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-31
+- Resolves: #1677590 - CVE-2018-17199 httpd:2.4/httpd: mod_session_cookie does
+  not respect expiry time
+- Resolves: #1869075 - CVE-2020-11984 httpd:2.4/httpd: mod_proxy_uswgi buffer
+  overflow
+- Resolves: #1872828 - httpd: typo in htpasswd, contained in httpd-tools package
+- Resolves: #1869576 - httpd : mod_proxy should allow to specify
+  Proxy-Authorization in ProxyRemote directive
+- Resolves: #1875844 - mod_cgid takes CGIDScriptTimeout x 2 seconds for timeout
+- Resolves: #1891829 - mod_proxy_hcheck Doesn't perform checks when in
+  a balancer
+
+* Mon Jun 15 2020 Joe Orton <jorton@redhat.com> - 2.4.37-30
+- Resolves: #1209162 - support logging to journald from CustomLog
+
+* Mon Jun 08 2020 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-29
+- Resolves: #1823263 (CVE-2020-1934) - CVE-2020-1934 httpd: mod_proxy_ftp use of
+  uninitialized value
+
+* Fri May 29 2020 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-28
+- Related: #1771847 - BalancerMember ping parameter for mod_proxy_http
+  doesn't work
+
+* Tue Apr 14 2020 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-27
+- Resolves: #1823259 - CVE-2020-1927 httpd:2.4/httpd: mod_rewrite configurations
+  vulnerable to open redirect
+- Resolves: #1747284 - CVE-2019-10098 httpd:2.4/httpd: mod_rewrite potential
+  open redirect
+- Resolves: #1747281 - CVE-2019-10092 httpd:2.4/httpd: limited cross-site 
+  scripting in mod_proxy error page
+- Resolves: #1747291 - CVE-2019-10097 httpd:2.4/httpd: null-pointer dereference
+  in mod_remoteip
+- Resolves: #1771847 - BalancerMember ping parameter for mod_proxy_http
+  doesn't work
+- Resolves: #1794728 - Backport of SessionExpiryUpdateInterval directive
 
 * Mon Dec 02 2019 Lubos Uhliarik <luhliari@redhat.com> - 2.4.37-21
 - Resolves: #1775158 - POST request with TLS 1.3 PHA client auth fails:

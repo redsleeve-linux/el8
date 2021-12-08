@@ -1,0 +1,265 @@
+diff --git a/docs/manual/mod/mod_ssl.html.en b/docs/manual/mod/mod_ssl.html.en
+index b543150..ab72d4f 100644
+--- a/docs/manual/mod/mod_ssl.html.en
++++ b/docs/manual/mod/mod_ssl.html.en
+@@ -1524,6 +1524,32 @@ The available (case-insensitive) <em>protocol</em>s are:</p>
+ <div class="example"><h3>Example</h3><pre class="prettyprint lang-config">SSLProtocol TLSv1</pre>
+ </div>
+ 
++<div class="note">
++<h3><code class="directive">SSLProtocol</code> for name-based virtual hosts</h3>
++<p>
++Before OpenSSL 1.1.1, even though the Server Name Indication (SNI) allowed to
++determine the targeted virtual host early in the TLS handshake, it was not
++possible to switch the TLS protocol version of the connection at this point,
++and thus the <code class="directive">SSLProtocol</code> negotiated was always based off
++the one of the <em>base virtual host</em> (first virtual host declared on the
++listening <code>IP:port</code> of the connection).
++</p>
++<p>
++Beginning with Apache HTTP server version 2.4.42, when built/linked against
++OpenSSL 1.1.1 or later, and when the SNI is provided by the client in the TLS
++handshake, the <code class="directive">SSLProtocol</code> of each (name-based) virtual
++host can and will be honored.
++</p>
++<p>
++For compatibility with previous versions, if no
++<code class="directive">SSLProtocol</code> is configured in a name-based virtual host,
++the one from the base virtual host still applies, <strong>unless</strong>
++<code class="directive">SSLProtocol</code> is configured globally in which case the
++global value applies (this latter exception is more sensible than compatible,
++though).
++</p>
++</div>
++
+ </div>
+ <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
+ <div class="directive-section"><h2><a name="SSLProxyCACertificateFile" id="SSLProxyCACertificateFile">SSLProxyCACertificateFile</a> <a name="sslproxycacertificatefile" id="sslproxycacertificatefile">Directive</a></h2>
+diff --git a/modules/ssl/ssl_engine_config.c b/modules/ssl/ssl_engine_config.c
+index 0c4bf1f..ca5f702 100644
+--- a/modules/ssl/ssl_engine_config.c
++++ b/modules/ssl/ssl_engine_config.c
+@@ -269,6 +269,7 @@ static void modssl_ctx_cfg_merge(apr_pool_t *p,
+         mrg->protocol_set = 1;
+     }
+     else {
++        mrg->protocol_set = base->protocol_set;
+         mrg->protocol = base->protocol;
+     }
+ 
+diff --git a/modules/ssl/ssl_engine_init.c b/modules/ssl/ssl_engine_init.c
+index 31062bc..70d151e 100644
+--- a/modules/ssl/ssl_engine_init.c
++++ b/modules/ssl/ssl_engine_init.c
+@@ -520,7 +520,9 @@ static apr_status_t ssl_init_ctx_tls_extensions(server_rec *s,
+                  "Configuring TLS extension handling");
+ 
+     /*
+-     * Server name indication (SNI)
++     * The Server Name Indication (SNI) provided by the ClientHello can be
++     * used to select the right (name-based-)vhost and its SSL configuration
++     * before the handshake takes place.
+      */
+     if (!SSL_CTX_set_tlsext_servername_callback(mctx->ssl_ctx,
+                           ssl_callback_ServerNameIndication) ||
+@@ -532,6 +534,16 @@ static apr_status_t ssl_init_ctx_tls_extensions(server_rec *s,
+         return ssl_die(s);
+     }
+ 
++#if OPENSSL_VERSION_NUMBER >= 0x10101000L && !defined(LIBRESSL_VERSION_NUMBER)
++    /*
++     * The ClientHello callback also allows to retrieve the SNI, but since it
++     * runs at the earliest possible connection stage we can even set the TLS
++     * protocol version(s) according to the selected (name-based-)vhost, which
++     * is not possible at the SNI callback stage (due to OpenSSL internals).
++     */
++    SSL_CTX_set_client_hello_cb(mctx->ssl_ctx, ssl_callback_ClientHello, NULL);
++#endif
++
+ #ifdef HAVE_OCSP_STAPLING
+     /*
+      * OCSP Stapling support, status_request extension
+@@ -708,7 +720,7 @@ static apr_status_t ssl_init_ctx_protocol(server_rec *s,
+ #else /* #if OPENSSL_VERSION_NUMBER < 0x10100000L */
+     /* We first determine the maximum protocol version we should provide */
+ #if SSL_HAVE_PROTOCOL_TLSV1_3
+-    if (SSL_HAVE_PROTOCOL_TLSV1_3 && (protocol & SSL_PROTOCOL_TLSV1_3)) {
++    if (protocol & SSL_PROTOCOL_TLSV1_3) {
+         prot = TLS1_3_VERSION;
+     } else  
+ #endif
+diff --git a/modules/ssl/ssl_engine_kernel.c b/modules/ssl/ssl_engine_kernel.c
+index 8b44674..7313a55 100644
+--- a/modules/ssl/ssl_engine_kernel.c
++++ b/modules/ssl/ssl_engine_kernel.c
+@@ -2357,28 +2357,31 @@ static apr_status_t set_challenge_creds(conn_rec *c, const char *servername,
+  * This function sets the virtual host from an extended
+  * client hello with a server name indication extension ("SNI", cf. RFC 6066).
+  */
+-static apr_status_t init_vhost(conn_rec *c, SSL *ssl)
++static apr_status_t init_vhost(conn_rec *c, SSL *ssl, const char *servername)
+ {
+-    const char *servername;
+     X509 *cert;
+     EVP_PKEY *key;
+     
+     if (c) {
+         SSLConnRec *sslcon = myConnConfig(c);
+-        
+-        if (sslcon->server != c->base_server) {
+-            /* already found the vhost */
+-            return APR_SUCCESS;
++
++        if (sslcon->vhost_found) {
++            /* already found the vhost? */
++            return sslcon->vhost_found > 0 ? APR_SUCCESS : APR_NOTFOUND;
+         }
++        sslcon->vhost_found = -1;
+         
+-        servername = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
++        if (!servername) {
++            servername = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
++        }
+         if (servername) {
+             if (ap_vhost_iterate_given_conn(c, ssl_find_vhost,
+                                             (void *)servername)) {
+                 ap_log_cerror(APLOG_MARK, APLOG_DEBUG, 0, c, APLOGNO(02043)
+                               "SSL virtual host for servername %s found",
+                               servername);
+-                
++
++                sslcon->vhost_found = +1;
+                 return APR_SUCCESS;
+             }
+             else if (ssl_is_challenge(c, servername, &cert, &key)) {
+@@ -2428,11 +2431,72 @@ static apr_status_t init_vhost(conn_rec *c, SSL *ssl)
+ int ssl_callback_ServerNameIndication(SSL *ssl, int *al, modssl_ctx_t *mctx)
+ {
+     conn_rec *c = (conn_rec *)SSL_get_app_data(ssl);
+-    apr_status_t status = init_vhost(c, ssl);
++    apr_status_t status = init_vhost(c, ssl, NULL);
+     
+     return (status == APR_SUCCESS)? SSL_TLSEXT_ERR_OK : SSL_TLSEXT_ERR_NOACK;
+ }
+ 
++#if OPENSSL_VERSION_NUMBER >= 0x10101000L && !defined(LIBRESSL_VERSION_NUMBER)
++/*
++ * This callback function is called when the ClientHello is received.
++ */
++int ssl_callback_ClientHello(SSL *ssl, int *al, void *arg)
++{
++    char *servername = NULL;
++    conn_rec *c = (conn_rec *)SSL_get_app_data(ssl);
++    const unsigned char *pos;
++    size_t len, remaining;
++    (void)arg;
++ 
++    /* We can't use SSL_get_servername() at this earliest OpenSSL connection
++     * stage, and there is no SSL_client_hello_get0_servername() provided as
++     * of OpenSSL 1.1.1. So the code below, that extracts the SNI from the
++     * ClientHello's TLS extensions, is taken from some test code in OpenSSL,
++     * i.e. client_hello_select_server_ctx() in "test/handshake_helper.c".
++     */
++
++    /*
++     * The server_name extension was given too much extensibility when it
++     * was written, so parsing the normal case is a bit complex.
++     */
++    if (!SSL_client_hello_get0_ext(ssl, TLSEXT_TYPE_server_name, &pos,
++                                   &remaining)
++            || remaining <= 2) 
++        goto give_up;
++
++    /* Extract the length of the supplied list of names. */
++    len = (*(pos++) << 8);
++    len += *(pos++);
++    if (len + 2 != remaining)
++        goto give_up;
++    remaining = len;
++
++    /*
++     * The list in practice only has a single element, so we only consider
++     * the first one.
++     */
++    if (remaining <= 3 || *pos++ != TLSEXT_NAMETYPE_host_name)
++        goto give_up;
++    remaining--;
++
++    /* Now we can finally pull out the byte array with the actual hostname. */
++    len = (*(pos++) << 8);
++    len += *(pos++);
++    if (len + 2 != remaining)
++        goto give_up;
++
++    /* Use the SNI to switch to the relevant vhost, should it differ from
++     * c->base_server.
++     */
++    servername = apr_pstrmemdup(c->pool, (const char *)pos, len);
++
++give_up:
++    init_vhost(c, ssl, servername);
++    return SSL_CLIENT_HELLO_SUCCESS;
++}
++#endif /* OPENSSL_VERSION_NUMBER < 0x10101000L */
++
++
+ /*
+  * Find a (name-based) SSL virtual host where either the ServerName
+  * or one of the ServerAliases matches the supplied name (to be used
+@@ -2452,12 +2516,25 @@ static int ssl_find_vhost(void *servername, conn_rec *c, server_rec *s)
+     if (found && (ssl = sslcon->ssl) &&
+         (sc = mySrvConfig(s))) {
+         SSL_CTX *ctx = SSL_set_SSL_CTX(ssl, sc->server->ssl_ctx);
++
+         /*
+          * SSL_set_SSL_CTX() only deals with the server cert,
+          * so we need to duplicate a few additional settings
+          * from the ctx by hand
+          */
+         SSL_set_options(ssl, SSL_CTX_get_options(ctx));
++#if OPENSSL_VERSION_NUMBER >= 0x10100000L \
++        && (!defined(LIBRESSL_VERSION_NUMBER) \
++            || LIBRESSL_VERSION_NUMBER >= 0x20800000L)
++        /*
++         * Don't switch the protocol if none is configured for this vhost,
++         * the default in this case is still the base server's SSLProtocol.
++         */
++        if (myCtxConfig(sslcon, sc)->protocol_set) {
++            SSL_set_min_proto_version(ssl, SSL_CTX_get_min_proto_version(ctx));
++            SSL_set_max_proto_version(ssl, SSL_CTX_get_max_proto_version(ctx));
++        }
++#endif
+         if ((SSL_get_verify_mode(ssl) == SSL_VERIFY_NONE) ||
+             (SSL_num_renegotiations(ssl) == 0)) {
+            /*
+@@ -2654,7 +2731,7 @@ int ssl_callback_alpn_select(SSL *ssl,
+      * they callback the SNI. We need to make sure that we know which vhost
+      * we are dealing with so we respect the correct protocols.
+      */
+-    init_vhost(c, ssl);
++    init_vhost(c, ssl, NULL);
+     
+     proposed = ap_select_protocol(c, NULL, sslconn->server, client_protos);
+     if (!proposed) {
+diff --git a/modules/ssl/ssl_private.h b/modules/ssl/ssl_private.h
+index 8055200..f8a1db7 100644
+--- a/modules/ssl/ssl_private.h
++++ b/modules/ssl/ssl_private.h
+@@ -563,6 +563,7 @@ typedef struct {
+     
+     const char *cipher_suite; /* cipher suite used in last reneg */
+     int service_unavailable;  /* thouugh we negotiate SSL, no requests will be served */
++    int vhost_found;          /* whether we found vhost from SNI already */
+ } SSLConnRec;
+ 
+ /* BIG FAT WARNING: SSLModConfigRec has unusual memory lifetime: it is
+@@ -946,6 +947,9 @@ void         ssl_callback_Info(const SSL *, int, int);
+ #ifdef HAVE_TLSEXT
+ int          ssl_callback_ServerNameIndication(SSL *, int *, modssl_ctx_t *);
+ #endif
++#if OPENSSL_VERSION_NUMBER >= 0x10101000L && !defined(LIBRESSL_VERSION_NUMBER)
++int          ssl_callback_ClientHello(SSL *, int *, void *);
++#endif
+ #ifdef HAVE_TLS_SESSION_TICKETS
+ int         ssl_callback_SessionTicket(SSL *, unsigned char *, unsigned char *,
+                                        EVP_CIPHER_CTX *, HMAC_CTX *, int);

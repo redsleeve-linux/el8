@@ -1,0 +1,16 @@
+--- a/modules/generators/cgi_common.h	2020/09/04 13:16:53	1881458
++++ b/modules/generators/cgi_common.h	2020/09/04 13:56:25	1881459
+@@ -259,6 +259,13 @@
+         if ((ret = ap_scan_script_header_err_brigade_ex(r, bb, sbuf,
+                                                         APLOG_MODULE_INDEX)))
+         {
++            /* In the case of a timeout reading script output, clear
++             * the brigade to avoid a second attempt to read the
++             * output. */
++            if (ret == HTTP_GATEWAY_TIME_OUT) {
++                apr_brigade_cleanup(bb);
++            }
++
+             ret = log_script(r, conf, ret, logdata, sbuf, bb, script_err);
+ 
+             /*

@@ -1,0 +1,178 @@
+diff --git a/docs/manual/mod/mod_usertrack.html.en b/docs/manual/mod/mod_usertrack.html.en
+index b212747..d2da9b9 100644
+--- a/docs/manual/mod/mod_usertrack.html.en
++++ b/docs/manual/mod/mod_usertrack.html.en
+@@ -47,7 +47,10 @@
+ <ul id="toc">
+ <li><img alt="" src="../images/down.gif" /> <a href="#cookiedomain">CookieDomain</a></li>
+ <li><img alt="" src="../images/down.gif" /> <a href="#cookieexpires">CookieExpires</a></li>
++<li><img alt="" src="../images/down.gif" /> <a href="#cookiehttponly">CookieHTTPOnly</a></li>
+ <li><img alt="" src="../images/down.gif" /> <a href="#cookiename">CookieName</a></li>
++<li><img alt="" src="../images/down.gif" /> <a href="#cookiesamesite">CookieSameSite</a></li>
++<li><img alt="" src="../images/down.gif" /> <a href="#cookiesecure">CookieSecure</a></li>
+ <li><img alt="" src="../images/down.gif" /> <a href="#cookiestyle">CookieStyle</a></li>
+ <li><img alt="" src="../images/down.gif" /> <a href="#cookietracking">CookieTracking</a></li>
+ </ul>
+@@ -127,6 +130,22 @@ CustomLog "logs/clickstream.log" usertrack</pre>
+     <pre class="prettyprint lang-config">CookieExpires "3 weeks"</pre>
+ 
+ 
++</div>
++<div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
++<div class="directive-section"><h2><a name="CookieHTTPOnly" id="CookieHTTPOnly">CookieHTTPOnly</a> <a name="cookiehttponly" id="cookiehttponly">Directive</a></h2>
++<table class="directive">
++<tbody><tr><th><a href="directive-dict.html#Description">Description:</a></th><td>Adds the 'HTTPOnly' attribute to the cookie</td></tr>
++<tr><th><a href="directive-dict.html#Syntax">Syntax:</a></th><td><code>CookieHTTPOnly on|off</code></td></tr>
++<tr><th><a href="directive-dict.html#Default">Default:</a></th><td><code>CookieHTTPOnly off</code></td></tr>
++<tr><th><a href="directive-dict.html#Context">Context:</a></th><td>server config, virtual host, directory, .htaccess</td></tr>
++<tr><th><a href="directive-dict.html#Override">Override:</a></th><td>FileInfo</td></tr>
++<tr><th><a href="directive-dict.html#Status">Status:</a></th><td>Extension</td></tr>
++<tr><th><a href="directive-dict.html#Module">Module:</a></th><td>mod_usertrack</td></tr>
++</tbody></table>
++    <p>When set to 'ON', the 'HTTPOnly' cookie attribute is added to this 
++    modules tracking cookie. This attribute instructs browsers to block javascript
++    from reading the value of the cookie.</p>
++
+ </div>
+ <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
+ <div class="directive-section"><h2><a name="CookieName" id="CookieName">CookieName</a> <a name="cookiename" id="cookiename">Directive</a></h2>
+@@ -150,6 +169,45 @@ CustomLog "logs/clickstream.log" usertrack</pre>
+     <pre class="prettyprint lang-config">CookieName clicktrack</pre>
+ 
+ 
++</div>
++<div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
++<div class="directive-section"><h2><a name="CookieSameSite" id="CookieSameSite">CookieSameSite</a> <a name="cookiesamesite" id="cookiesamesite">Directive</a></h2>
++<table class="directive">
++<tbody><tr><th><a href="directive-dict.html#Description">Description:</a></th><td>Adds the 'SameSite' attribute to the cookie</td></tr>
++<tr><th><a href="directive-dict.html#Syntax">Syntax:</a></th><td><code>CookieSameSite None|Lax|Strict</code></td></tr>
++<tr><th><a href="directive-dict.html#Default">Default:</a></th><td><code>unset</code></td></tr>
++<tr><th><a href="directive-dict.html#Context">Context:</a></th><td>server config, virtual host, directory, .htaccess</td></tr>
++<tr><th><a href="directive-dict.html#Override">Override:</a></th><td>FileInfo</td></tr>
++<tr><th><a href="directive-dict.html#Status">Status:</a></th><td>Extension</td></tr>
++<tr><th><a href="directive-dict.html#Module">Module:</a></th><td>mod_usertrack</td></tr>
++</tbody></table>
++    <p>When set to 'None', 'Lax', or 'Strict', the 'SameSite' cookie attribute 
++    is added to this modules tracking cookie with the corresponding value.  
++    This attribute instructs browser on how to treat the cookie when it is 
++    requested in a cross-site context.</p>
++
++     <div class="note">
++        <p>A value of 'None' sets 'SameSite=None', which is the most liberal setting. To 
++        omit this attribute, omit the directive entirely.</p>
++    </div>
++  
++
++</div>
++<div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
++<div class="directive-section"><h2><a name="CookieSecure" id="CookieSecure">CookieSecure</a> <a name="cookiesecure" id="cookiesecure">Directive</a></h2>
++<table class="directive">
++<tbody><tr><th><a href="directive-dict.html#Description">Description:</a></th><td>Adds the 'Secure' attribute to the cookie</td></tr>
++<tr><th><a href="directive-dict.html#Syntax">Syntax:</a></th><td><code>CookieSecure on|off</code></td></tr>
++<tr><th><a href="directive-dict.html#Default">Default:</a></th><td><code>CookieSecure off</code></td></tr>
++<tr><th><a href="directive-dict.html#Context">Context:</a></th><td>server config, virtual host, directory, .htaccess</td></tr>
++<tr><th><a href="directive-dict.html#Override">Override:</a></th><td>FileInfo</td></tr>
++<tr><th><a href="directive-dict.html#Status">Status:</a></th><td>Extension</td></tr>
++<tr><th><a href="directive-dict.html#Module">Module:</a></th><td>mod_usertrack</td></tr>
++</tbody></table>
++    <p>When set to 'ON', the 'Secure' cookie attribute is added to this 
++    modules tracking cookie. This attribute instructs browsers to only
++    transmit the cookie over HTTPS.</p>
++
+ </div>
+ <div class="top"><a href="#page-header"><img alt="top" src="../images/up.gif" /></a></div>
+ <div class="directive-section"><h2><a name="CookieStyle" id="CookieStyle">CookieStyle</a> <a name="cookiestyle" id="cookiestyle">Directive</a></h2>
+diff --git a/modules/metadata/mod_usertrack.c b/modules/metadata/mod_usertrack.c
+index 73a9f45..65759c2 100644
+--- a/modules/metadata/mod_usertrack.c
++++ b/modules/metadata/mod_usertrack.c
+@@ -86,6 +86,9 @@ typedef struct {
+     const char *cookie_domain;
+     char *regexp_string;  /* used to compile regexp; save for debugging */
+     ap_regex_t *regexp;  /* used to find usertrack cookie in cookie header */
++    int is_secure;
++    int is_httponly;
++    const char *samesite;
+ } cookie_dir_rec;
+ 
+ /* Make Cookie: Now we have to generate something that is going to be
+@@ -143,6 +146,21 @@ static void make_cookie(request_rec *r)
+                                   : ""),
+                                  NULL);
+     }
++    if (dcfg->samesite != NULL) {
++        new_cookie = apr_pstrcat(r->pool, new_cookie, "; ",
++                                 dcfg->samesite,
++                                 NULL);
++    }
++    if (dcfg->is_secure) {
++        new_cookie = apr_pstrcat(r->pool, new_cookie, "; Secure",
++                                 NULL);
++    }
++    if (dcfg->is_httponly) {
++        new_cookie = apr_pstrcat(r->pool, new_cookie, "; HttpOnly",
++                                 NULL);
++    }
++
++
+ 
+     apr_table_addn(r->err_headers_out,
+                    (dcfg->style == CT_COOKIE2 ? "Set-Cookie2" : "Set-Cookie"),
+@@ -269,6 +287,7 @@ static void *make_cookie_dir(apr_pool_t *p, char *d)
+     dcfg->cookie_domain = NULL;
+     dcfg->style = CT_UNSET;
+     dcfg->enabled = 0;
++    /* calloc'ed to disabled: samesite, is_secure, is_httponly */
+ 
+     /* In case the user does not use the CookieName directive,
+      * we need to compile the regexp for the default cookie name. */
+@@ -429,6 +448,31 @@ static const char *set_cookie_style(cmd_parms *cmd, void *mconfig,
+     return NULL;
+ }
+ 
++/* 
++ * SameSite enabled disabled 
++ */ 
++
++static const char *set_samesite_value(cmd_parms *cmd, void *mconfig,
++                                    const char *name)
++{
++    cookie_dir_rec *dcfg;
++
++    dcfg = (cookie_dir_rec *) mconfig;
++
++    if (strcasecmp(name, "strict") == 0) {
++        dcfg->samesite = "SameSite=Strict"; 
++    } else if (strcasecmp(name, "lax") == 0) {
++        dcfg->samesite = "SameSite=Lax"; 
++    } else if (strcasecmp(name, "none") == 0) {
++        dcfg->samesite = "SameSite=None"; 
++    } else {
++        return "CookieSameSite accepts 'Strict', 'Lax', or 'None'";
++    }
++
++    
++    return NULL;
++}
++
+ static const command_rec cookie_log_cmds[] = {
+     AP_INIT_TAKE1("CookieExpires", set_cookie_exp, NULL, OR_FILEINFO,
+                   "an expiry date code"),
+@@ -440,6 +484,17 @@ static const command_rec cookie_log_cmds[] = {
+                  "whether or not to enable cookies"),
+     AP_INIT_TAKE1("CookieName", set_cookie_name, NULL, OR_FILEINFO,
+                   "name of the tracking cookie"),
++                  AP_INIT_FLAG("CookieTracking", set_cookie_enable, NULL, OR_FILEINFO,
++                 "whether or not to enable cookies"),
++    AP_INIT_TAKE1("CookieSameSite", set_samesite_value, NULL, OR_FILEINFO,
++                  "SameSite setting"),
++    AP_INIT_FLAG("CookieSecure", ap_set_flag_slot, 
++                 (void *)APR_OFFSETOF(cookie_dir_rec, is_secure), OR_FILEINFO,
++                 "is cookie secure"),
++    AP_INIT_FLAG("CookieHttpOnly", ap_set_flag_slot, 
++                 (void *)APR_OFFSETOF(cookie_dir_rec, is_httponly),OR_FILEINFO,
++                 "is cookie http only"),
++
+     {NULL}
+ };
+ 
