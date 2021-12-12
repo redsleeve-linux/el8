@@ -1,0 +1,737 @@
+From 7eaba1c3599f414294e5451e472456eed533475b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Esteban=20K=C3=BCber?= <esteban@kuber.com.ar>
+Date: Thu, 19 Aug 2021 11:40:00 -0700
+Subject: [PATCH] Lint against RTL unicode codepoints in literals and comments
+
+Address CVE-2021-42574.
+
+Backported-by: Josh Stone <jistone@redhat.com>
+---
+ Cargo.lock                                    |   1 +
+ compiler/rustc_errors/src/emitter.rs          |  20 +-
+ compiler/rustc_lint/src/context.rs            |  39 +++-
+ .../src/hidden_unicode_codepoints.rs          | 161 +++++++++++++++
+ compiler/rustc_lint/src/lib.rs                |   3 +
+ compiler/rustc_lint_defs/src/builtin.rs       |  28 +++
+ compiler/rustc_lint_defs/src/lib.rs           |   1 +
+ compiler/rustc_parse/Cargo.toml               |   1 +
+ compiler/rustc_parse/src/lexer/mod.rs         |  40 +++-
+ .../src/lexer/unescape_error_reporting.rs     |  16 +-
+ .../ui/parser/unicode-control-codepoints.rs   |  39 ++++
+ .../parser/unicode-control-codepoints.stderr  | 184 ++++++++++++++++++
+ 12 files changed, 525 insertions(+), 8 deletions(-)
+ create mode 100644 compiler/rustc_lint/src/hidden_unicode_codepoints.rs
+ create mode 100644 src/test/ui/parser/unicode-control-codepoints.rs
+ create mode 100644 src/test/ui/parser/unicode-control-codepoints.stderr
+
+diff --git a/Cargo.lock b/Cargo.lock
+index de110c55a4b2..140026dc6ae1 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -4170,6 +4170,7 @@ dependencies = [
+  "smallvec",
+  "tracing",
+  "unicode-normalization",
++ "unicode-width",
+ ]
+ 
+ [[package]]
+diff --git a/compiler/rustc_errors/src/emitter.rs b/compiler/rustc_errors/src/emitter.rs
+index d3f92bf3047b..db7bbe58c80c 100644
+--- a/compiler/rustc_errors/src/emitter.rs
++++ b/compiler/rustc_errors/src/emitter.rs
+@@ -1977,8 +1977,26 @@ fn num_decimal_digits(num: usize) -> usize {
+     MAX_DIGITS
+ }
+ 
++// We replace some characters so the CLI output is always consistent and underlines aligned.
++const OUTPUT_REPLACEMENTS: &[(char, &str)] = &[
++    ('\t', "    "),   // We do our own tab replacement
++    ('\u{202A}', ""), // The following unicode text flow control characters are inconsistently
++    ('\u{202B}', ""), // supported accross CLIs and can cause confusion due to the bytes on disk
++    ('\u{202D}', ""), // not corresponding to the visible source code, so we replace them always.
++    ('\u{202E}', ""),
++    ('\u{2066}', ""),
++    ('\u{2067}', ""),
++    ('\u{2068}', ""),
++    ('\u{202C}', ""),
++    ('\u{2069}', ""),
++];
++
+ fn replace_tabs(str: &str) -> String {
+-    str.replace('\t', "    ")
++    let mut s = str.to_string();
++    for (c, replacement) in OUTPUT_REPLACEMENTS {
++        s = s.replace(*c, replacement);
++    }
++    s
+ }
+ 
+ fn draw_col_separator(buffer: &mut StyledBuffer, line: usize, col: usize) {
+diff --git a/compiler/rustc_lint/src/context.rs b/compiler/rustc_lint/src/context.rs
+index a8df1b0952c1..0a2b55dbbada 100644
+--- a/compiler/rustc_lint/src/context.rs
++++ b/compiler/rustc_lint/src/context.rs
+@@ -16,6 +16,7 @@
+ 
+ use self::TargetLint::*;
+ 
++use crate::hidden_unicode_codepoints::UNICODE_TEXT_FLOW_CHARS;
+ use crate::levels::LintLevelsBuilder;
+ use crate::passes::{EarlyLintPassObject, LateLintPassObject};
+ use rustc_ast as ast;
+@@ -40,7 +41,7 @@
+ use rustc_session::Session;
+ use rustc_session::SessionLintStore;
+ use rustc_span::lev_distance::find_best_match_for_name;
+-use rustc_span::{symbol::Symbol, MultiSpan, Span, DUMMY_SP};
++use rustc_span::{symbol::Symbol, BytePos, MultiSpan, Span, DUMMY_SP};
+ use rustc_target::abi::LayoutOf;
+ use tracing::debug;
+ 
+@@ -601,6 +602,42 @@ fn lookup_with_diagnostics(
+             // Now, set up surrounding context.
+             let sess = self.sess();
+             match diagnostic {
++                BuiltinLintDiagnostics::UnicodeTextFlow(span, content) => {
++                    let spans: Vec<_> = content
++                        .char_indices()
++                        .filter_map(|(i, c)| {
++                            UNICODE_TEXT_FLOW_CHARS.contains(&c).then(|| {
++                                let lo = span.lo() + BytePos(2 + i as u32);
++                                (c, span.with_lo(lo).with_hi(lo + BytePos(c.len_utf8() as u32)))
++                            })
++                        })
++                        .collect();
++                    let (an, s) = match spans.len() {
++                        1 => ("an ", ""),
++                        _ => ("", "s"),
++                    };
++                    db.span_label(span, &format!(
++                        "this comment contains {}invisible unicode text flow control codepoint{}",
++                        an,
++                        s,
++                    ));
++                    for (c, span) in &spans {
++                        db.span_label(*span, format!("{:?}", c));
++                    }
++                    db.note(
++                        "these kind of unicode codepoints change the way text flows on \
++                         applications that support them, but can cause confusion because they \
++                         change the order of characters on the screen",
++                    );
++                    if !spans.is_empty() {
++                        db.multipart_suggestion_with_style(
++                            "if their presence wasn't intentional, you can remove them",
++                            spans.into_iter().map(|(_, span)| (span, "".to_string())).collect(),
++                            Applicability::MachineApplicable,
++                            SuggestionStyle::HideCodeAlways,
++                        );
++                    }
++                },
+                 BuiltinLintDiagnostics::Normal => (),
+                 BuiltinLintDiagnostics::BareTraitObject(span, is_global) => {
+                     let (sugg, app) = match sess.source_map().span_to_snippet(span) {
+diff --git a/compiler/rustc_lint/src/hidden_unicode_codepoints.rs b/compiler/rustc_lint/src/hidden_unicode_codepoints.rs
+new file mode 100644
+index 000000000000..1bcdcb806fc4
+--- /dev/null
++++ b/compiler/rustc_lint/src/hidden_unicode_codepoints.rs
+@@ -0,0 +1,161 @@
++use crate::{EarlyContext, EarlyLintPass, LintContext};
++use rustc_ast as ast;
++use rustc_errors::{Applicability, SuggestionStyle};
++use rustc_span::{BytePos, Span, Symbol};
++
++declare_lint! {
++    /// The `text_direction_codepoint_in_literal` lint detects Unicode codepoints that change the
++    /// visual representation of text on screen in a way that does not correspond to their on
++    /// memory representation.
++    ///
++    /// ### Explanation
++    ///
++    /// The unicode characters `\u{202A}`, `\u{202B}`, `\u{202D}`, `\u{202E}`, `\u{2066}`,
++    /// `\u{2067}`, `\u{2068}`, `\u{202C}` and `\u{2069}` make the flow of text on screen change
++    /// its direction on software that supports these codepoints. This makes the text "abc" display
++    /// as "cba" on screen. By leveraging software that supports these, people can write specially
++    /// crafted literals that make the surrounding code seem like it's performing one action, when
++    /// in reality it is performing another. Because of this, we proactively lint against their
++    /// presence to avoid surprises.
++    ///
++    /// ### Example
++    ///
++    /// ```rust,compile_fail
++    /// #![deny(text_direction_codepoint_in_literal)]
++    /// fn main() {
++    ///     println!("{:?}", '‮');
++    /// }
++    /// ```
++    ///
++    /// {{produces}}
++    ///
++    pub TEXT_DIRECTION_CODEPOINT_IN_LITERAL,
++    Deny,
++    "detect special Unicode codepoints that affect the visual representation of text on screen, \
++     changing the direction in which text flows",
++}
++
++declare_lint_pass!(HiddenUnicodeCodepoints => [TEXT_DIRECTION_CODEPOINT_IN_LITERAL]);
++
++crate const UNICODE_TEXT_FLOW_CHARS: &[char] = &[
++    '\u{202A}', '\u{202B}', '\u{202D}', '\u{202E}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{202C}',
++    '\u{2069}',
++];
++
++impl HiddenUnicodeCodepoints {
++    fn lint_text_direction_codepoint(
++        &self,
++        cx: &EarlyContext<'_>,
++        text: Symbol,
++        span: Span,
++        padding: u32,
++        point_at_inner_spans: bool,
++        label: &str,
++    ) {
++        // Obtain the `Span`s for each of the forbidden chars.
++        let spans: Vec<_> = text
++            .as_str()
++            .char_indices()
++            .filter_map(|(i, c)| {
++                UNICODE_TEXT_FLOW_CHARS.contains(&c).then(|| {
++                    let lo = span.lo() + BytePos(i as u32 + padding);
++                    (c, span.with_lo(lo).with_hi(lo + BytePos(c.len_utf8() as u32)))
++                })
++            })
++            .collect();
++
++        cx.struct_span_lint(TEXT_DIRECTION_CODEPOINT_IN_LITERAL, span, |lint| {
++            let mut err = lint.build(&format!(
++                "unicode codepoint changing visible direction of text present in {}",
++                label
++            ));
++            let (an, s) = match spans.len() {
++                1 => ("an ", ""),
++                _ => ("", "s"),
++            };
++            err.span_label(
++                span,
++                &format!(
++                    "this {} contains {}invisible unicode text flow control codepoint{}",
++                    label, an, s,
++                ),
++            );
++            if point_at_inner_spans {
++                for (c, span) in &spans {
++                    err.span_label(*span, format!("{:?}", c));
++                }
++            }
++            err.note(
++                "these kind of unicode codepoints change the way text flows on applications that \
++                 support them, but can cause confusion because they change the order of \
++                 characters on the screen",
++            );
++            if point_at_inner_spans && !spans.is_empty() {
++                err.multipart_suggestion_with_style(
++                    "if their presence wasn't intentional, you can remove them",
++                    spans.iter().map(|(_, span)| (*span, "".to_string())).collect(),
++                    Applicability::MachineApplicable,
++                    SuggestionStyle::HideCodeAlways,
++                );
++                err.multipart_suggestion(
++                    "if you want to keep them but make them visible in your source code, you can \
++                    escape them",
++                    spans
++                        .into_iter()
++                        .map(|(c, span)| {
++                            let c = format!("{:?}", c);
++                            (span, c[1..c.len() - 1].to_string())
++                        })
++                        .collect(),
++                    Applicability::MachineApplicable,
++                );
++            } else {
++                // FIXME: in other suggestions we've reversed the inner spans of doc comments. We
++                // should do the same here to provide the same good suggestions as we do for
++                // literals above.
++                err.note("if their presence wasn't intentional, you can remove them");
++                err.note(&format!(
++                    "if you want to keep them but make them visible in your source code, you can \
++                     escape them: {}",
++                    spans
++                        .into_iter()
++                        .map(|(c, _)| { format!("{:?}", c) })
++                        .collect::<Vec<String>>()
++                        .join(", "),
++                ));
++            }
++            err.emit();
++        });
++    }
++}
++impl EarlyLintPass for HiddenUnicodeCodepoints {
++    fn check_attribute(&mut self, cx: &EarlyContext<'_>, attr: &ast::Attribute) {
++        if let ast::AttrKind::DocComment(_, comment) = attr.kind {
++            if comment.as_str().contains(UNICODE_TEXT_FLOW_CHARS) {
++                self.lint_text_direction_codepoint(cx, comment, attr.span, 0, false, "doc comment");
++            }
++        }
++    }
++
++    fn check_expr(&mut self, cx: &EarlyContext<'_>, expr: &ast::Expr) {
++        // byte strings are already handled well enough by `EscapeError::NonAsciiCharInByteString`
++        let (text, span, padding) = match &expr.kind {
++            ast::ExprKind::Lit(ast::Lit { token, kind, span }) => {
++                let text = token.symbol;
++                if !text.as_str().contains(UNICODE_TEXT_FLOW_CHARS) {
++                    return;
++                }
++                let padding = match kind {
++                    // account for `"` or `'`
++                    ast::LitKind::Str(_, ast::StrStyle::Cooked) | ast::LitKind::Char(_) => 1,
++                    // account for `r###"`
++                    ast::LitKind::Str(_, ast::StrStyle::Raw(val)) => *val as u32 + 2,
++                    _ => return,
++                };
++                (text, span, padding)
++            }
++            _ => return,
++        };
++        self.lint_text_direction_codepoint(cx, text, *span, padding, true, "literal");
++    }
++}
+diff --git a/compiler/rustc_lint/src/lib.rs b/compiler/rustc_lint/src/lib.rs
+index 4f59460aa82a..89612eb72b48 100644
+--- a/compiler/rustc_lint/src/lib.rs
++++ b/compiler/rustc_lint/src/lib.rs
+@@ -48,6 +48,7 @@
+ pub mod builtin;
+ mod context;
+ mod early;
++pub mod hidden_unicode_codepoints;
+ mod internal;
+ mod late;
+ mod levels;
+@@ -75,6 +76,7 @@
+ 
+ use array_into_iter::ArrayIntoIter;
+ use builtin::*;
++use hidden_unicode_codepoints::*;
+ use internal::*;
+ use methods::*;
+ use non_ascii_idents::*;
+@@ -126,6 +128,7 @@ macro_rules! early_lint_passes {
+                 DeprecatedAttr: DeprecatedAttr::new(),
+                 WhileTrue: WhileTrue,
+                 NonAsciiIdents: NonAsciiIdents,
++                HiddenUnicodeCodepoints: HiddenUnicodeCodepoints,
+                 IncompleteFeatures: IncompleteFeatures,
+                 RedundantSemicolons: RedundantSemicolons,
+                 UnusedDocComment: UnusedDocComment,
+diff --git a/compiler/rustc_lint_defs/src/builtin.rs b/compiler/rustc_lint_defs/src/builtin.rs
+index 352146d64635..cd4d5c6e5f1c 100644
+--- a/compiler/rustc_lint_defs/src/builtin.rs
++++ b/compiler/rustc_lint_defs/src/builtin.rs
+@@ -3240,3 +3240,31 @@
+     Allow,
+     "detects usage of old versions of or-patterns",
+ }
++
++declare_lint! {
++    /// The `text_direction_codepoint_in_comment` lint detects Unicode codepoints in comments that
++    /// change the visual representation of text on screen in a way that does not correspond to
++    /// their on memory representation.
++    ///
++    /// ### Example
++    ///
++    /// ```rust,compile_fail
++    /// #![deny(text_direction_codepoint_in_comment)]
++    /// fn main() {
++    ///     println!("{:?}"); // '‮');
++    /// }
++    /// ```
++    ///
++    /// {{produces}}
++    ///
++    /// ### Explanation
++    ///
++    /// Unicode allows changing the visual flow of text on screen in order to support scripts that
++    /// are written right-to-left, but a specially crafted comment can make code that will be
++    /// compiled appear to be part of a comment, depending on the software used to read the code.
++    /// To avoid potential problems or confusion, such as in CVE-2021-42574, by default we deny
++    /// their use.
++    pub TEXT_DIRECTION_CODEPOINT_IN_COMMENT,
++    Deny,
++    "invisible directionality-changing codepoints in comment"
++}
+diff --git a/compiler/rustc_lint_defs/src/lib.rs b/compiler/rustc_lint_defs/src/lib.rs
+index f1c4e5fb4a36..1ec50fe5fbb5 100644
+--- a/compiler/rustc_lint_defs/src/lib.rs
++++ b/compiler/rustc_lint_defs/src/lib.rs
+@@ -272,6 +272,7 @@ pub enum BuiltinLintDiagnostics {
+     ExternDepSpec(String, ExternDepSpec),
+     ProcMacroBackCompat(String),
+     OrPatternsBackCompat(Span, String),
++    UnicodeTextFlow(Span, String),
+ }
+ 
+ /// Lints that are buffered up early on in the `Session` before the
+diff --git a/compiler/rustc_parse/Cargo.toml b/compiler/rustc_parse/Cargo.toml
+index c887729c3557..96a215628dfb 100644
+--- a/compiler/rustc_parse/Cargo.toml
++++ b/compiler/rustc_parse/Cargo.toml
+@@ -19,4 +19,5 @@ rustc_session = { path = "../rustc_session" }
+ rustc_span = { path = "../rustc_span" }
+ rustc_ast = { path = "../rustc_ast" }
+ unicode-normalization = "0.1.11"
++unicode-width = "0.1.4"
+ smallvec = { version = "1.6.1", features = ["union", "may_dangle"] }
+diff --git a/compiler/rustc_parse/src/lexer/mod.rs b/compiler/rustc_parse/src/lexer/mod.rs
+index 1c2f9a9645fe..97a9a5aee42a 100644
+--- a/compiler/rustc_parse/src/lexer/mod.rs
++++ b/compiler/rustc_parse/src/lexer/mod.rs
+@@ -1,9 +1,11 @@
+-use rustc_ast::ast::AttrStyle;
++use rustc_ast::ast::{self, AttrStyle};
+ use rustc_ast::token::{self, CommentKind, Token, TokenKind};
+ use rustc_ast::tokenstream::{Spacing, TokenStream};
+ use rustc_errors::{error_code, Applicability, DiagnosticBuilder, FatalError, PResult};
+ use rustc_lexer::unescape::{self, Mode};
+ use rustc_lexer::{Base, DocStyle, RawStrError};
++use rustc_session::lint::builtin::TEXT_DIRECTION_CODEPOINT_IN_COMMENT;
++use rustc_session::lint::BuiltinLintDiagnostics;
+ use rustc_session::parse::ParseSess;
+ use rustc_span::symbol::{sym, Symbol};
+ use rustc_span::{BytePos, Pos, Span};
+@@ -127,6 +129,28 @@ fn struct_fatal_span_char(
+             .struct_span_fatal(self.mk_sp(from_pos, to_pos), &format!("{}: {}", m, escaped_char(c)))
+     }
+ 
++    /// Detect usages of Unicode codepoints changing the direction of the text on screen and loudly
++    /// complain about it.
++    fn lint_unicode_text_flow(&self, start: BytePos) {
++        // Opening delimiter of the length 2 is not included into the comment text.
++        let content_start = start + BytePos(2);
++        let content = self.str_from(content_start);
++        let span = self.mk_sp(start, self.pos);
++        const UNICODE_TEXT_FLOW_CHARS: &[char] = &[
++            '\u{202A}', '\u{202B}', '\u{202D}', '\u{202E}', '\u{2066}', '\u{2067}', '\u{2068}',
++            '\u{202C}', '\u{2069}',
++        ];
++        if content.contains(UNICODE_TEXT_FLOW_CHARS) {
++            self.sess.buffer_lint_with_diagnostic(
++                &TEXT_DIRECTION_CODEPOINT_IN_COMMENT,
++                span,
++                ast::CRATE_NODE_ID,
++                "unicode codepoint changing visible direction of text present in comment",
++                BuiltinLintDiagnostics::UnicodeTextFlow(span, content.to_string()),
++            );
++        }
++    }
++
+     /// Turns simple `rustc_lexer::TokenKind` enum into a rich
+     /// `rustc_ast::TokenKind`. This turns strings into interned
+     /// symbols and runs additional validation.
+@@ -134,7 +158,12 @@ fn cook_lexer_token(&self, token: rustc_lexer::TokenKind, start: BytePos) -> Opt
+         Some(match token {
+             rustc_lexer::TokenKind::LineComment { doc_style } => {
+                 // Skip non-doc comments
+-                let doc_style = doc_style?;
++                let doc_style = if let Some(doc_style) = doc_style {
++                    doc_style
++                } else {
++                    self.lint_unicode_text_flow(start);
++                    return None;
++                };
+ 
+                 // Opening delimiter of the length 3 is not included into the symbol.
+                 let content_start = start + BytePos(3);
+@@ -156,7 +185,12 @@ fn cook_lexer_token(&self, token: rustc_lexer::TokenKind, start: BytePos) -> Opt
+                 }
+ 
+                 // Skip non-doc comments
+-                let doc_style = doc_style?;
++                let doc_style = if let Some(doc_style) = doc_style {
++                    doc_style
++                } else {
++                    self.lint_unicode_text_flow(start);
++                    return None;
++                };
+ 
+                 // Opening delimiter of the length 3 and closing delimiter of the length 2
+                 // are not included into the symbol.
+diff --git a/compiler/rustc_parse/src/lexer/unescape_error_reporting.rs b/compiler/rustc_parse/src/lexer/unescape_error_reporting.rs
+index a580f0c55d0e..1e673e03d67f 100644
+--- a/compiler/rustc_parse/src/lexer/unescape_error_reporting.rs
++++ b/compiler/rustc_parse/src/lexer/unescape_error_reporting.rs
+@@ -153,9 +153,14 @@ pub(crate) fn emit_unescape_error(
+         EscapeError::NonAsciiCharInByte => {
+             assert!(mode.is_bytes());
+             let (c, span) = last_char();
++            let postfix = if unicode_width::UnicodeWidthChar::width(c).unwrap_or(1) == 0 {
++                format!(" but is {:?}", c)
++            } else {
++                String::new()
++            };
+             handler
+                 .struct_span_err(span, "non-ASCII character in byte constant")
+-                .span_label(span, "byte constant must be ASCII")
++                .span_label(span, &format!("byte constant must be ASCII{}", postfix))
+                 .span_suggestion(
+                     span,
+                     "use a \\xHH escape for a non-ASCII byte",
+@@ -166,10 +171,15 @@ pub(crate) fn emit_unescape_error(
+         }
+         EscapeError::NonAsciiCharInByteString => {
+             assert!(mode.is_bytes());
+-            let (_c, span) = last_char();
++            let (c, span) = last_char();
++            let postfix = if unicode_width::UnicodeWidthChar::width(c).unwrap_or(1) == 0 {
++                format!(" but is {:?}", c)
++            } else {
++                String::new()
++            };
+             handler
+                 .struct_span_err(span, "raw byte string must be ASCII")
+-                .span_label(span, "must be ASCII")
++                .span_label(span, &format!("must be ASCII{}", postfix))
+                 .emit();
+         }
+         EscapeError::OutOfRangeHexEscape => {
+diff --git a/src/test/ui/parser/unicode-control-codepoints.rs b/src/test/ui/parser/unicode-control-codepoints.rs
+new file mode 100644
+index 000000000000..5af0b585a127
+--- /dev/null
++++ b/src/test/ui/parser/unicode-control-codepoints.rs
+@@ -0,0 +1,39 @@
++fn main() {
++    // if access_level != "us‫e‪r" { // Check if admin
++    //~^ ERROR unicode codepoint changing visible direction of text present in comment
++    println!("us\u{202B}e\u{202A}r");
++    println!("{:?}", r#"us\u{202B}e\u{202A}r"#);
++    println!("{:?}", b"us\u{202B}e\u{202A}r");
++    //~^ ERROR unicode escape in byte string
++    //~| ERROR unicode escape in byte string
++    println!("{:?}", br##"us\u{202B}e\u{202A}r"##);
++
++    println!("{:?}", "/*‮ } ⁦if isAdmin⁩ ⁦ begin admins only ");
++    //~^ ERROR unicode codepoint changing visible direction of text present in literal
++
++    println!("{:?}", r##"/*‮ } ⁦if isAdmin⁩ ⁦ begin admins only "##);
++    //~^ ERROR unicode codepoint changing visible direction of text present in literal
++    println!("{:?}", b"/*‮ } ⁦if isAdmin⁩ ⁦ begin admins only ");
++    //~^ ERROR non-ASCII character in byte constant
++    //~| ERROR non-ASCII character in byte constant
++    //~| ERROR non-ASCII character in byte constant
++    //~| ERROR non-ASCII character in byte constant
++    println!("{:?}", br##"/*‮ } ⁦if isAdmin⁩ ⁦ begin admins only "##);
++    //~^ ERROR raw byte string must be ASCII
++    //~| ERROR raw byte string must be ASCII
++    //~| ERROR raw byte string must be ASCII
++    //~| ERROR raw byte string must be ASCII
++    println!("{:?}", '‮');
++    //~^ ERROR unicode codepoint changing visible direction of text present in literal
++}
++
++//"/*‮ } ⁦if isAdmin⁩ ⁦ begin admins only */"
++//~^ ERROR unicode codepoint changing visible direction of text present in comment
++
++/**  '‮'); */fn foo() {}
++//~^ ERROR unicode codepoint changing visible direction of text present in doc comment
++
++/**
++ *
++ *  '‮'); */fn bar() {}
++//~^^^ ERROR unicode codepoint changing visible direction of text present in doc comment
+diff --git a/src/test/ui/parser/unicode-control-codepoints.stderr b/src/test/ui/parser/unicode-control-codepoints.stderr
+new file mode 100644
+index 000000000000..650cc74feed0
+--- /dev/null
++++ b/src/test/ui/parser/unicode-control-codepoints.stderr
+@@ -0,0 +1,184 @@
++error: unicode escape in byte string
++  --> $DIR/unicode-control-codepoints.rs:6:26
++   |
++LL |     println!("{:?}", b"us\u{202B}e\u{202A}r");
++   |                          ^^^^^^^^ unicode escape in byte string
++   |
++   = help: unicode escape sequences cannot be used as a byte or in a byte string
++
++error: unicode escape in byte string
++  --> $DIR/unicode-control-codepoints.rs:6:35
++   |
++LL |     println!("{:?}", b"us\u{202B}e\u{202A}r");
++   |                                   ^^^^^^^^ unicode escape in byte string
++   |
++   = help: unicode escape sequences cannot be used as a byte or in a byte string
++
++error: non-ASCII character in byte constant
++  --> $DIR/unicode-control-codepoints.rs:16:26
++   |
++LL |     println!("{:?}", b"/* } if isAdmin  begin admins only ");
++   |                          ^
++   |                          |
++   |                          byte constant must be ASCII but is '\u{202e}'
++   |                          help: use a \xHH escape for a non-ASCII byte: `\x202E`
++
++error: non-ASCII character in byte constant
++  --> $DIR/unicode-control-codepoints.rs:16:30
++   |
++LL |     println!("{:?}", b"/* } if isAdmin  begin admins only ");
++   |                             ^
++   |                             |
++   |                             byte constant must be ASCII but is '\u{2066}'
++   |                             help: use a \xHH escape for a non-ASCII byte: `\x2066`
++
++error: non-ASCII character in byte constant
++  --> $DIR/unicode-control-codepoints.rs:16:41
++   |
++LL |     println!("{:?}", b"/* } if isAdmin  begin admins only ");
++   |                                       ^
++   |                                       |
++   |                                       byte constant must be ASCII but is '\u{2069}'
++   |                                       help: use a \xHH escape for a non-ASCII byte: `\x2069`
++
++error: non-ASCII character in byte constant
++  --> $DIR/unicode-control-codepoints.rs:16:43
++   |
++LL |     println!("{:?}", b"/* } if isAdmin  begin admins only ");
++   |                                        ^
++   |                                        |
++   |                                        byte constant must be ASCII but is '\u{2066}'
++   |                                        help: use a \xHH escape for a non-ASCII byte: `\x2066`
++
++error: raw byte string must be ASCII
++  --> $DIR/unicode-control-codepoints.rs:21:29
++   |
++LL |     println!("{:?}", br##"/* } if isAdmin  begin admins only "##);
++   |                             ^ must be ASCII but is '\u{202e}'
++
++error: raw byte string must be ASCII
++  --> $DIR/unicode-control-codepoints.rs:21:33
++   |
++LL |     println!("{:?}", br##"/* } if isAdmin  begin admins only "##);
++   |                                ^ must be ASCII but is '\u{2066}'
++
++error: raw byte string must be ASCII
++  --> $DIR/unicode-control-codepoints.rs:21:44
++   |
++LL |     println!("{:?}", br##"/* } if isAdmin  begin admins only "##);
++   |                                          ^ must be ASCII but is '\u{2069}'
++
++error: raw byte string must be ASCII
++  --> $DIR/unicode-control-codepoints.rs:21:46
++   |
++LL |     println!("{:?}", br##"/* } if isAdmin  begin admins only "##);
++   |                                           ^ must be ASCII but is '\u{2066}'
++
++error: unicode codepoint changing visible direction of text present in comment
++  --> $DIR/unicode-control-codepoints.rs:2:5
++   |
++LL |     // if access_level != "user" { // Check if admin
++   |     ^^^^^^^^^^^^^^^^^^^^^^^^^--^^^^^^^^^^^^^^^^^^^^^
++   |     |                        ||
++   |     |                        |'\u{202a}'
++   |     |                        '\u{202b}'
++   |     this comment contains invisible unicode text flow control codepoints
++   |
++   = note: `#[deny(text_direction_codepoint_in_comment)]` on by default
++   = note: these kind of unicode codepoints change the way text flows on applications that support them, but can cause confusion because they change the order of characters on the screen
++   = help: if their presence wasn't intentional, you can remove them
++
++error: unicode codepoint changing visible direction of text present in comment
++  --> $DIR/unicode-control-codepoints.rs:30:1
++   |
++LL | //"/* } if isAdmin  begin admins only */"
++   | ^^^^^-^^-^^^^^^^^^--^^^^^^^^^^^^^^^^^^^^^
++   | |    |  |         ||
++   | |    |  |         |'\u{2066}'
++   | |    |  |         '\u{2069}'
++   | |    |  '\u{2066}'
++   | |    '\u{202e}'
++   | this comment contains invisible unicode text flow control codepoints
++   |
++   = note: these kind of unicode codepoints change the way text flows on applications that support them, but can cause confusion because they change the order of characters on the screen
++   = help: if their presence wasn't intentional, you can remove them
++
++error: unicode codepoint changing visible direction of text present in literal
++  --> $DIR/unicode-control-codepoints.rs:11:22
++   |
++LL |     println!("{:?}", "/* } if isAdmin  begin admins only ");
++   |                      ^^^-^^-^^^^^^^^^--^^^^^^^^^^^^^^^^^^^
++   |                      |  |  |         ||
++   |                      |  |  |         |'\u{2066}'
++   |                      |  |  |         '\u{2069}'
++   |                      |  |  '\u{2066}'
++   |                      |  '\u{202e}'
++   |                      this literal contains invisible unicode text flow control codepoints
++   |
++   = note: `#[deny(text_direction_codepoint_in_literal)]` on by default
++   = note: these kind of unicode codepoints change the way text flows on applications that support them, but can cause confusion because they change the order of characters on the screen
++   = help: if their presence wasn't intentional, you can remove them
++help: if you want to keep them but make them visible in your source code, you can escape them
++   |
++LL |     println!("{:?}", "/*\u{202e} } \u{2066}if isAdmin\u{2069} \u{2066} begin admins only ");
++   |                         ^^^^^^^^   ^^^^^^^^          ^^^^^^^^ ^^^^^^^^
++
++error: unicode codepoint changing visible direction of text present in literal
++  --> $DIR/unicode-control-codepoints.rs:14:22
++   |
++LL |     println!("{:?}", r##"/* } if isAdmin  begin admins only "##);
++   |                      ^^^^^^-^^-^^^^^^^^^--^^^^^^^^^^^^^^^^^^^^^
++   |                      |     |  |         ||
++   |                      |     |  |         |'\u{2066}'
++   |                      |     |  |         '\u{2069}'
++   |                      |     |  '\u{2066}'
++   |                      |     '\u{202e}'
++   |                      this literal contains invisible unicode text flow control codepoints
++   |
++   = note: these kind of unicode codepoints change the way text flows on applications that support them, but can cause confusion because they change the order of characters on the screen
++   = help: if their presence wasn't intentional, you can remove them
++help: if you want to keep them but make them visible in your source code, you can escape them
++   |
++LL |     println!("{:?}", r##"/*\u{202e} } \u{2066}if isAdmin\u{2069} \u{2066} begin admins only "##);
++   |                            ^^^^^^^^   ^^^^^^^^          ^^^^^^^^ ^^^^^^^^
++
++error: unicode codepoint changing visible direction of text present in literal
++  --> $DIR/unicode-control-codepoints.rs:26:22
++   |
++LL |     println!("{:?}", '');
++   |                      ^-
++   |                      ||
++   |                      |'\u{202e}'
++   |                      this literal contains an invisible unicode text flow control codepoint
++   |
++   = note: these kind of unicode codepoints change the way text flows on applications that support them, but can cause confusion because they change the order of characters on the screen
++   = help: if their presence wasn't intentional, you can remove them
++help: if you want to keep them but make them visible in your source code, you can escape them
++   |
++LL |     println!("{:?}", '\u{202e}');
++   |                       ^^^^^^^^
++
++error: unicode codepoint changing visible direction of text present in doc comment
++  --> $DIR/unicode-control-codepoints.rs:33:1
++   |
++LL | /**  ''); */fn foo() {}
++   | ^^^^^^^^^^^^ this doc comment contains an invisible unicode text flow control codepoint
++   |
++   = note: these kind of unicode codepoints change the way text flows on applications that support them, but can cause confusion because they change the order of characters on the screen
++   = note: if their presence wasn't intentional, you can remove them
++   = note: if you want to keep them but make them visible in your source code, you can escape them: '\u{202e}'
++
++error: unicode codepoint changing visible direction of text present in doc comment
++  --> $DIR/unicode-control-codepoints.rs:36:1
++   |
++LL | / /**
++LL | |  *
++LL | |  *  ''); */fn bar() {}
++   | |___________^ this doc comment contains an invisible unicode text flow control codepoint
++   |
++   = note: these kind of unicode codepoints change the way text flows on applications that support them, but can cause confusion because they change the order of characters on the screen
++   = note: if their presence wasn't intentional, you can remove them
++   = note: if you want to keep them but make them visible in your source code, you can escape them: '\u{202e}'
++
++error: aborting due to 17 previous errors
++
+-- 
+2.31.1
+
