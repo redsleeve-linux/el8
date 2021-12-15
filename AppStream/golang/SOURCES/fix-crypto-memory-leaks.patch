@@ -1,0 +1,235 @@
+diff --git a/src/crypto/internal/boring/goopenssl.h b/src/crypto/internal/boring/goopenssl.h
+index 3585458..ae1607b 100644
+--- a/src/crypto/internal/boring/goopenssl.h
++++ b/src/crypto/internal/boring/goopenssl.h
+@@ -667,6 +667,7 @@ typedef EVP_PKEY GO_EVP_PKEY;
+ DEFINEFUNC(GO_EVP_PKEY *, EVP_PKEY_new, (void), ())
+ DEFINEFUNC(void, EVP_PKEY_free, (GO_EVP_PKEY * arg0), (arg0))
+ DEFINEFUNC(int, EVP_PKEY_set1_RSA, (GO_EVP_PKEY * arg0, GO_RSA *arg1), (arg0, arg1))
++DEFINEFUNC(int, EVP_PKEY_set1_EC_KEY, (GO_EVP_PKEY * arg0, GO_EC_KEY *arg1), (arg0, arg1))
+ DEFINEFUNC(int, EVP_PKEY_verify,
+ 	(EVP_PKEY_CTX *ctx, const unsigned char *sig, unsigned int siglen, const unsigned char *tbs, size_t tbslen),
+ 	(ctx, sig, siglen, tbs, tbslen))
+diff --git a/src/crypto/internal/boring/openssl_ecdsa_signature.c b/src/crypto/internal/boring/openssl_ecdsa_signature.c
+index 4c14cc9..daa1252 100644
+--- a/src/crypto/internal/boring/openssl_ecdsa_signature.c
++++ b/src/crypto/internal/boring/openssl_ecdsa_signature.c
+@@ -9,19 +9,32 @@
+ int
+ _goboringcrypto_ECDSA_sign(EVP_MD* md, const uint8_t *msg, size_t msgLen, uint8_t *sig, unsigned int *slen, GO_EC_KEY *eckey)
+ {
++    int result;
+     EVP_PKEY *key = _goboringcrypto_EVP_PKEY_new();
+-    if (!_goboringcrypto_EVP_PKEY_assign_EC_KEY(key, eckey))
+-        return 0;
+-    return _goboringcrypto_EVP_sign(md, NULL, msg, msgLen, sig, slen, key);
++    if (!_goboringcrypto_EVP_PKEY_set1_EC_KEY(key, eckey)) {
++        result = 0;
++        goto err;
++    }
++    result = _goboringcrypto_EVP_sign(md, NULL, msg, msgLen, sig, slen, key);
++err:
++    _goboringcrypto_EVP_PKEY_free(key);
++    return result;
+ }
+ 
+ int
+ _goboringcrypto_ECDSA_verify(EVP_MD* md, const uint8_t *msg, size_t msgLen, const uint8_t *sig, unsigned int slen, GO_EC_KEY *eckey)
+ {
+ 
++    int result;
+     EVP_PKEY *key = _goboringcrypto_EVP_PKEY_new();
+-    if (!_goboringcrypto_EVP_PKEY_assign_EC_KEY(key, eckey))
+-        return 0;
++    if (!_goboringcrypto_EVP_PKEY_set1_EC_KEY(key, eckey)) {
++        result = 0;
++        goto err;
++    }
+ 
+-    return _goboringcrypto_EVP_verify(md, NULL, msg, msgLen, sig, slen, key);
++    result = _goboringcrypto_EVP_verify(md, NULL, msg, msgLen, sig, slen, key);
++
++err:
++    _goboringcrypto_EVP_PKEY_free(key);
++    return result;
+ }
+diff --git a/src/crypto/internal/boring/openssl_port_rsa.c b/src/crypto/internal/boring/openssl_port_rsa.c
+index a8d047d..2e56499 100644
+--- a/src/crypto/internal/boring/openssl_port_rsa.c
++++ b/src/crypto/internal/boring/openssl_port_rsa.c
+@@ -25,14 +25,13 @@ int _goboringcrypto_RSA_digest_and_sign_pss_mgf1(GO_RSA *rsa, unsigned int *out_
+ 	EVP_PKEY_CTX *ctx;
+ 	unsigned int siglen;
+ 
++	int ret = 0;
+ 	EVP_PKEY *key = _goboringcrypto_EVP_PKEY_new();
+-	if (!_goboringcrypto_EVP_PKEY_assign_RSA(key, rsa))
+-		return 0;
++	if (!_goboringcrypto_EVP_PKEY_set1_RSA(key, rsa))
++		goto err;
+ 	ctx = _goboringcrypto_EVP_PKEY_CTX_new(key, NULL /* no engine */);
+ 	if (!ctx)
+-		return 0;
+-
+-	int ret = 0;
++		goto err;
+ 
+ 	EVP_MD_CTX *mdctx = NULL;
+ 	if (!(mdctx = _goboringcrypto_EVP_MD_CTX_create()))
+@@ -67,6 +66,10 @@ int _goboringcrypto_RSA_digest_and_sign_pss_mgf1(GO_RSA *rsa, unsigned int *out_
+ err:
+ 	if (mdctx)
+ 		_goboringcrypto_EVP_MD_CTX_free(mdctx);
++	if (ctx)
++		_goboringcrypto_EVP_PKEY_CTX_free(ctx);
++	if (key)
++		_goboringcrypto_EVP_PKEY_free(key);
+ 
+ 	return ret;
+ }
+@@ -78,18 +81,17 @@ int _goboringcrypto_RSA_sign_pss_mgf1(GO_RSA *rsa, unsigned int *out_len, uint8_
+ 	EVP_PKEY *pkey;
+ 	size_t siglen;
+ 
++	int ret = 0;
+ 	pkey = _goboringcrypto_EVP_PKEY_new();
+ 	if (!pkey)
+-		return 0;
++		goto err;
+ 
+ 	if (_goboringcrypto_EVP_PKEY_set1_RSA(pkey, rsa) <= 0)
+-		return 0;
+-	
++		goto err;
++
+ 	ctx = _goboringcrypto_EVP_PKEY_CTX_new(pkey, NULL /* no engine */);
+ 	if (!ctx)
+-		return 0;
+-
+-	int ret = 0;
++		goto err;
+ 
+ 	if (_goboringcrypto_EVP_PKEY_sign_init(ctx) <= 0)
+ 		goto err;
+@@ -101,7 +103,7 @@ int _goboringcrypto_RSA_sign_pss_mgf1(GO_RSA *rsa, unsigned int *out_len, uint8_
+ 		goto err;
+ 	if (_goboringcrypto_EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, mgf1_md) <= 0)
+ 		goto err;
+-	
++
+ 	/* Determine buffer length */
+ 	if (_goboringcrypto_EVP_PKEY_sign(ctx, NULL, &siglen, in, in_len) <= 0)
+ 		goto err;
+@@ -116,7 +118,10 @@ int _goboringcrypto_RSA_sign_pss_mgf1(GO_RSA *rsa, unsigned int *out_len, uint8_
+ 	ret = 1;
+ 
+ err:
+-	_goboringcrypto_EVP_PKEY_CTX_free(ctx);
++	if (ctx)
++		_goboringcrypto_EVP_PKEY_CTX_free(ctx);
++	if (pkey)
++		_goboringcrypto_EVP_PKEY_free(pkey);
+ 
+ 	return ret;
+ }
+@@ -130,14 +135,14 @@ int _goboringcrypto_RSA_verify_pss_mgf1(RSA *rsa, const uint8_t *msg, unsigned i
+ 
+ 	pkey = _goboringcrypto_EVP_PKEY_new();
+ 	if (!pkey)
+-		return 0;
++		goto err;
+ 
+ 	if (_goboringcrypto_EVP_PKEY_set1_RSA(pkey, rsa) <= 0)
+-		return 0;
+-	
++		goto err;
++
+ 	ctx = _goboringcrypto_EVP_PKEY_CTX_new(pkey, NULL /* no engine */);
+ 	if (!ctx)
+-		return 0;
++		goto err;
+ 
+ 	if (_goboringcrypto_EVP_PKEY_verify_init(ctx) <= 0)
+ 		goto err;
+@@ -155,25 +160,40 @@ int _goboringcrypto_RSA_verify_pss_mgf1(RSA *rsa, const uint8_t *msg, unsigned i
+ 	ret = 1;
+ 
+ err:
+-	_goboringcrypto_EVP_PKEY_CTX_free(ctx);
++	if (ctx)
++		_goboringcrypto_EVP_PKEY_CTX_free(ctx);
++	if (pkey)
++		_goboringcrypto_EVP_PKEY_free(pkey);
++
+ 
+ 	return ret;
+ }
+ 
+ int _goboringcrypto_EVP_RSA_sign(EVP_MD *md, const uint8_t *msg, unsigned int msgLen, uint8_t *sig, unsigned int *slen, RSA *rsa)
+ {
++	int result;
+ 	EVP_PKEY *key = _goboringcrypto_EVP_PKEY_new();
+-	if (!_goboringcrypto_EVP_PKEY_assign_RSA(key, rsa))
+-		return 0;
+-	return _goboringcrypto_EVP_sign(md, NULL, msg, msgLen, sig, slen, key);
++	if (!_goboringcrypto_EVP_PKEY_set1_RSA(key, rsa)) {
++		result = 0;
++		goto err;
++	}
++	result = _goboringcrypto_EVP_sign(md, NULL, msg, msgLen, sig, slen, key);
++err:
++	_goboringcrypto_EVP_PKEY_free(key);
++	return result;
+ }
+ 
+ int _goboringcrypto_EVP_RSA_verify(EVP_MD *md, const uint8_t *msg, unsigned int msgLen, const uint8_t *sig, unsigned int slen, GO_RSA *rsa)
+ {
++	int result;
+ 	EVP_PKEY *key = _goboringcrypto_EVP_PKEY_new();
+-	if (!_goboringcrypto_EVP_PKEY_assign_RSA(key, rsa))
+-	{
+-		return 0;
++	if (!_goboringcrypto_EVP_PKEY_set1_RSA(key, rsa)) {
++		result = 0;
++		goto err;
+ 	}
+-	 return _goboringcrypto_EVP_verify(md, NULL, msg, msgLen, sig, slen, key);
++	result =  _goboringcrypto_EVP_verify(md, NULL, msg, msgLen, sig, slen, key);
++err:
++	_goboringcrypto_EVP_PKEY_free(key);
++	return result;
++
+ }
+diff --git a/src/crypto/internal/boring/rsa.go b/src/crypto/internal/boring/rsa.go
+index 2eefc27..698c08e 100644
+--- a/src/crypto/internal/boring/rsa.go
++++ b/src/crypto/internal/boring/rsa.go
+@@ -162,12 +162,23 @@ func setupRSA(withKey func(func(*C.GO_RSA) C.int) C.int,
+ 			return nil, nil, NewOpenSSLError("EVP_PKEY_set_rsa_oaep_md failed")
+ 		}
+ 		// ctx takes ownership of label, so malloc a copy for BoringCrypto to free.
+-		clabel := (*C.uint8_t)(C.malloc(C.size_t(len(label))))
+-		if clabel == nil {
+-			return nil, nil, fail("OPENSSL_malloc")
++		var clabel *C.uint8_t
++		clabel = nil
++		// OpenSSL 1.1.1 does not take ownership of the label if the length is zero.
++		// Depending on the malloc implementation, if clabel is allocated with malloc(0),
++		// metadata for the size-zero allocation is never cleaned up, which is a memory leak.
++		// As such, we must only allocate clabel if the label is of non zero length.
++		if len(label) > 0 {
++			clabel = (*C.uint8_t)(C.malloc(C.size_t(len(label))))
++			if clabel == nil {
++				return nil, nil, fail("OPENSSL_malloc")
++			}
++			copy((*[1 << 30]byte)(unsafe.Pointer(clabel))[:len(label)], label)
+ 		}
+-		copy((*[1 << 30]byte)(unsafe.Pointer(clabel))[:len(label)], label)
+-		if C._goboringcrypto_EVP_PKEY_CTX_set0_rsa_oaep_label(ctx, clabel, C.int(len(label))) == 0 {
++		if C._goboringcrypto_EVP_PKEY_CTX_set0_rsa_oaep_label(ctx, clabel, C.int(len(label))) != 1 {
++			if clabel != nil {
++				C.free(unsafe.Pointer(clabel))
++			}
+ 			return nil, nil, NewOpenSSLError("EVP_PKEY_CTX_set0_rsa_oaep_label failed")
+ 		}
+ 	}

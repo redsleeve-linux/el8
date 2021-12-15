@@ -1,0 +1,109 @@
+diff --git a/doc/go1.16.html b/doc/go1.16.html
+index 0beb62d..fc6b668 100644
+--- a/doc/go1.16.html
++++ b/doc/go1.16.html
+@@ -891,6 +891,14 @@ func TestFoo(t *testing.T) {
+       is missing; this is common on musl-based systems and makes
+       Go programs match the behavior of C programs on those systems.
+     </p>
++    <p><!-- CL325829 -->
++      The <a href="/pkg/net/#ParseIP"><code>ParseIP</code></a> and <a href="/pkg/net/#ParseCIDR"><code>ParseCIDR</code></a>
++      functions now reject IPv4 addresses which contain decimal components with leading zeros.
++      These components were always interpreted as decimal, but some operating systems treat them as octal.
++      This mismatch could hypothetically lead to security issues if a Go application was used to validate IP addresses
++      which were then used in their original form with non-Go applications which interpreted components as octal. Generally,
++      it is advisable to always re-encoded values after validation, which avoids this class of parser misalignment issues.
++    </p>
+   </dd>
+ </dl><!-- net -->
+ 
+diff --git a/src/net/hosts_test.go b/src/net/hosts_test.go
+index f850e2f..19c4399 100644
+--- a/src/net/hosts_test.go
++++ b/src/net/hosts_test.go
+@@ -36,7 +36,7 @@ var lookupStaticHostTests = []struct {
+ 		},
+ 	},
+ 	{
+-		"testdata/ipv4-hosts", // see golang.org/issue/8996
++		"testdata/ipv4-hosts",
+ 		[]staticHostEntry{
+ 			{"localhost", []string{"127.0.0.1", "127.0.0.2", "127.0.0.3"}},
+ 			{"localhost.localdomain", []string{"127.0.0.3"}},
+@@ -102,7 +102,7 @@ var lookupStaticAddrTests = []struct {
+ 		},
+ 	},
+ 	{
+-		"testdata/ipv4-hosts", // see golang.org/issue/8996
++		"testdata/ipv4-hosts",
+ 		[]staticHostEntry{
+ 			{"127.0.0.1", []string{"localhost"}},
+ 			{"127.0.0.2", []string{"localhost"}},
+diff --git a/src/net/ip.go b/src/net/ip.go
+index c00fe8e..007f3f7 100644
+--- a/src/net/ip.go
++++ b/src/net/ip.go
+@@ -552,6 +552,10 @@ func parseIPv4(s string) IP {
+ 		if !ok || n > 0xFF {
+ 			return nil
+ 		}
++		if c > 1 && s[0] == '0' {
++			// Reject non-zero components with leading zeroes.
++			return nil
++		}
+ 		s = s[c:]
+ 		p[i] = byte(n)
+ 	}
+diff --git a/src/net/ip_test.go b/src/net/ip_test.go
+index a5fc5e6..585381d 100644
+--- a/src/net/ip_test.go
++++ b/src/net/ip_test.go
+@@ -20,9 +20,7 @@ var parseIPTests = []struct {
+ }{
+ 	{"127.0.1.2", IPv4(127, 0, 1, 2)},
+ 	{"127.0.0.1", IPv4(127, 0, 0, 1)},
+-	{"127.001.002.003", IPv4(127, 1, 2, 3)},
+ 	{"::ffff:127.1.2.3", IPv4(127, 1, 2, 3)},
+-	{"::ffff:127.001.002.003", IPv4(127, 1, 2, 3)},
+ 	{"::ffff:7f01:0203", IPv4(127, 1, 2, 3)},
+ 	{"0:0:0:0:0000:ffff:127.1.2.3", IPv4(127, 1, 2, 3)},
+ 	{"0:0:0:0:000000:ffff:127.1.2.3", IPv4(127, 1, 2, 3)},
+@@ -42,6 +40,11 @@ var parseIPTests = []struct {
+ 	{"fe80::1%911", nil},
+ 	{"", nil},
+ 	{"a1:a2:a3:a4::b1:b2:b3:b4", nil}, // Issue 6628
++	{"127.001.002.003", nil},
++	{"::ffff:127.001.002.003", nil},
++	{"123.000.000.000", nil},
++	{"1.2..4", nil},
++	{"0123.0.0.1", nil},
+ }
+ 
+ func TestParseIP(t *testing.T) {
+@@ -357,6 +360,7 @@ var parseCIDRTests = []struct {
+ 	{"0.0.-2.0/32", nil, nil, &ParseError{Type: "CIDR address", Text: "0.0.-2.0/32"}},
+ 	{"0.0.0.-3/32", nil, nil, &ParseError{Type: "CIDR address", Text: "0.0.0.-3/32"}},
+ 	{"0.0.0.0/-0", nil, nil, &ParseError{Type: "CIDR address", Text: "0.0.0.0/-0"}},
++	{"127.000.000.001/32", nil, nil, &ParseError{Type: "CIDR address", Text: "127.000.000.001/32"}},
+ 	{"", nil, nil, &ParseError{Type: "CIDR address", Text: ""}},
+ }
+ 
+diff --git a/src/net/testdata/ipv4-hosts b/src/net/testdata/ipv4-hosts
+index 5208bb4..6b99675 100644
+--- a/src/net/testdata/ipv4-hosts
++++ b/src/net/testdata/ipv4-hosts
+@@ -1,12 +1,8 @@
+ # See https://tools.ietf.org/html/rfc1123.
+-#
+-# The literal IPv4 address parser in the net package is a relaxed
+-# one. It may accept a literal IPv4 address in dotted-decimal notation
+-# with leading zeros such as "001.2.003.4".
+ 
+ # internet address and host name
+ 127.0.0.1	localhost	# inline comment separated by tab
+-127.000.000.002	localhost       # inline comment separated by space
++127.0.0.2	localhost   # inline comment separated by space
+ 
+ # internet address, host name and aliases
+-127.000.000.003	localhost	localhost.localdomain
++127.0.0.3	localhost	localhost.localdomain
