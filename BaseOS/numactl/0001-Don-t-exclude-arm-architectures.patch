@@ -1,6 +1,6 @@
-From 14632bfa467199139fa831d14ef2f7074f0e886a Mon Sep 17 00:00:00 2001
+From 43294f6ac6de3b83badbfe118348d222cbe7a32d Mon Sep 17 00:00:00 2001
 From: Jacco Ligthart <jacco@redsleeve.org>
-Date: Tue, 7 May 2019 23:32:44 +0200
+Date: Sat, 5 Dec 2020 00:21:59 +0100
 Subject: [PATCH] Don't exclude arm architectures
 
 ---
@@ -8,15 +8,15 @@ Subject: [PATCH] Don't exclude arm architectures
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/SPECS/numactl.spec b/SPECS/numactl.spec
-index 8b61cc4..ed12f70 100644
+index 93be941..39e5124 100644
 --- a/SPECS/numactl.spec
 +++ b/SPECS/numactl.spec
 @@ -1,7 +1,7 @@
  Name:		numactl
  Summary:	Library for tuning for Non Uniform Memory Access machines
  Version:	2.0.12
--Release:	2%{dist}
-+Release:	2%{dist}.redsleeve
+-Release:	11%{?dist}
++Release:	11%{?dist}.redsleeve
  # libnuma is LGPLv2 and GPLv2
  # numactl binaries are GPLv2 only
  License:	GPLv2
@@ -29,16 +29,16 @@ index 8b61cc4..ed12f70 100644
  
  #START INSERT
  #
-@@ -112,6 +112,9 @@ make DESTDIR=$RPM_BUILD_ROOT install
+@@ -136,6 +136,9 @@ make DESTDIR=$RPM_BUILD_ROOT install
  %{_mandir}/man3/*.3*
  
  %changelog
-+* Tue May 07 2019 Jacco Ligthart <jacco@redsleeve.org> - 2.0.12-2.redsleeve
++* Fri Dec 04 2020 Jacco Ligthart <jacco@redsleeve.org> - 2.0.12-11.redsleeve
 +- Don't exclude arm architectures
 +
- * Mon Nov 26 2018 Pingfan Liu <piliu@redhat.com> - 2.0.12-2
- - Fix: Add ShmemHugePages and ShmemPmdMapped to system_meminfo[]
+ * Sat May  9 2020 Pingfan Liu <piliu@redhat.com> - 2.0.12-11
+ - Update manpage description of --localalloc option
  
 -- 
-2.18.1
+2.18.4
 
