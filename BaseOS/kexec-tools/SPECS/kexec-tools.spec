@@ -1,6 +1,6 @@
 Name: kexec-tools
 Version: 2.0.20
-Release: 57%{?dist}
+Release: 57%{?dist}.redsleeve
 License: GPLv2
 Group: Applications/System
 Summary: The kexec/kdump userspace component
@@ -182,7 +182,7 @@ cp %{SOURCE28} .
 cp %{SOURCE31} .
 
 make
-%ifarch %{ix86} x86_64 ppc64 s390x ppc64le aarch64
+%ifarch %{ix86} x86_64 ppc64 s390x ppc64le aarch64 %{arm}
 make -C eppic/libeppic
 make -C makedumpfile-1.6.8 LINKTYPE=dynamic USELZO=on USESNAPPY=on
 make -C makedumpfile-1.6.8 LDFLAGS="$LDFLAGS -I../eppic/libeppic -L../eppic/libeppic" eppic_makedumpfile.so
@@ -244,7 +244,7 @@ install -m 755 -D %{SOURCE22} $RPM_BUILD_ROOT%{_prefix}/lib/systemd/system-gener
 install -m 755 -D %{SOURCE32} $RPM_BUILD_ROOT%{_prefix}/lib/kernel/install.d/60-kdump.install
 
 
-%ifarch %{ix86} x86_64 ppc64 s390x ppc64le aarch64
+%ifarch %{ix86} x86_64 ppc64 s390x ppc64le aarch64 %{arm}
 install -m 755 makedumpfile-1.6.8/makedumpfile $RPM_BUILD_ROOT/usr/sbin/makedumpfile
 install -m 644 makedumpfile-1.6.8/makedumpfile.8.gz $RPM_BUILD_ROOT/%{_mandir}/man8/makedumpfile.8.gz
 install -m 644 makedumpfile-1.6.8/makedumpfile.conf.5.gz $RPM_BUILD_ROOT/%{_mandir}/man5/makedumpfile.conf.5.gz
@@ -367,7 +367,7 @@ done
 %{_bindir}/*
 %{_datadir}/kdump
 %{_prefix}/lib/kdump
-%ifarch %{ix86} x86_64 ppc64 s390x ppc64le aarch64
+%ifarch %{ix86} x86_64 ppc64 s390x ppc64le aarch64 %{arm}
 %{_sysconfdir}/makedumpfile.conf.sample
 %endif
 %config(noreplace,missingok) %{_sysconfdir}/sysconfig/kdump
@@ -400,12 +400,15 @@ done
 %doc supported-kdump-targets.txt
 %doc kdump-in-cluster-environment.txt
 %doc live-image-kdump-howto.txt
-%ifarch %{ix86} x86_64 ppc64 s390x ppc64le aarch64
+%ifarch %{ix86} x86_64 ppc64 s390x ppc64le aarch64 %{arm}
 %{_libdir}/eppic_makedumpfile.so
 /usr/share/makedumpfile/
 %endif
 
 %changelog
+* Sat Dec 04 2021 Jacco Ligthart <jacco@redsleeve.org> - 2.0.20-57.redsleeve
+- Fix FTBFS on arm
+
 * Fri Aug 27 2021 Pingfan Liu <piliu@redhat.com> - 2.0.20-57
 - kdumpctl: enable secure boot on ppc64le LPARs
 
