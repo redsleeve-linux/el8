@@ -2,7 +2,7 @@
 
 Name:    opensm
 Version: 3.3.24
-Release: 1%{?dist}
+Release: 1%{?dist}.redsleeve
 Summary: OpenIB InfiniBand Subnet Manager and management utilities
 Group:   System Environment/Daemons
 License: GPLv2 or BSD
@@ -26,7 +26,7 @@ Requires(post): systemd
 Requires(preun): systemd
 Requires(postun): systemd
 # RDMA is not currently built on 32-bit ARM: #1484155
-ExcludeArch: s390 %{arm}
+ExcludeArch: s390
 
 %description
 OpenSM is the OpenIB project's Subnet Manager for Infiniband networks.
@@ -125,6 +125,9 @@ fi
 %{_libdir}/lib*.a
 
 %changelog
+* Sat Dec 04 2021 Jacco Ligthart <jacco@redsleeve.org> - 3.3.24-1.redsleeve
+- removed arm from exclude archs
+
 * Tue Jun 15 2021 Honggang Li <honli@redhat.com> - 3.3.24-1
 - Rebase to latest upstream release 3.3.24
 - Resolves: bz1961961
