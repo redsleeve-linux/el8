@@ -43,7 +43,7 @@
 Summary: A GNU collection of binary utilities
 Name: binutils%{?name_cross}%{?_with_debug:-debug}
 Version: 2.30
-Release: 108%{?dist}.1
+Release: 108%{?dist}.1.redsleeve
 License: GPLv3+
 URL: https://sourceware.org/binutils
 
@@ -595,6 +595,9 @@ Patch92: binutils-gold-i386-gnu-property-notes.patch
 # Lifetime: Fixed in 2.38 (maybe)
 Patch93: binutils.unicode.patch
 
+Patch1000: binutils-special-sections-in-groups.patch
+Patch1001: binutils-armv6.patch
+
 #----------------------------------------------------------------------------
 
 Provides: bundled(libiberty)
@@ -825,6 +828,9 @@ using libelf instead of BFD.
 %patch91 -p1
 %patch92 -p1
 %patch93 -p1
+
+%patch1000 -p1
+%patch1001 -p1
 
 # We cannot run autotools as there is an exact requirement of autoconf-2.59.
 # FIXME - this is no longer true.  Maybe try reinstating autotool use ?
@@ -1274,6 +1280,10 @@ exit 0
 
 #----------------------------------------------------------------------------
 %changelog
+* Mon Nov 22 2021 Jacco Ligthart <jacco@redsleeve.org> - 2.30-108.1.redsleeve
+- Allow OS specific sections in section groups. (#1639485)
+- added armv6 specific flage to the build
+
 * Wed Oct 20 2021 Nick Clifton  <nickc@redhat.com> - 2.30-108.1
 - Add ability to control the display of unicode characters.  (#2009172)
 
