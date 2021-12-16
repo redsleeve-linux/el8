@@ -1,6 +1,6 @@
-From 83cb165627e2f7f87975d0f71a508ab12165470f Mon Sep 17 00:00:00 2001
+From ee5e52cfcf0a0646630d34d911f2243d17aaf76b Mon Sep 17 00:00:00 2001
 From: Jacco Ligthart <jacco@redsleeve.org>
-Date: Fri, 1 Oct 2021 10:38:26 +0000
+Date: Mon, 22 Nov 2021 23:19:27 +0000
 Subject: [PATCH] added arm to the ExclusiveArch and nobuildarches lists
 
 ---
@@ -8,10 +8,10 @@ Subject: [PATCH] added arm to the ExclusiveArch and nobuildarches lists
  1 file changed, 13 insertions(+), 5 deletions(-)
 
 diff --git a/SPECS/kernel.spec b/SPECS/kernel.spec
-index a564c0d..d52f9a9 100644
+index 926a938..3930083 100644
 --- a/SPECS/kernel.spec
 +++ b/SPECS/kernel.spec
-@@ -295,6 +295,11 @@
+@@ -296,6 +296,11 @@
  %define kernel_image arch/arm64/boot/Image.gz
  %endif
  
@@ -23,7 +23,7 @@ index a564c0d..d52f9a9 100644
  # To temporarily exclude an architecture from being built, add it to
  # %%nobuildarches. Do _NOT_ use the ExclusiveArch: line, because if we
  # don't build kernel-headers then the new build system will no longer let
-@@ -302,7 +307,7 @@
+@@ -303,7 +308,7 @@
  # Which is a BadThing(tm).
  
  # We only build kernel-headers on the following...
@@ -32,7 +32,7 @@ index a564c0d..d52f9a9 100644
  
  %ifarch %nobuildarches
  %define with_up 0
-@@ -332,14 +337,14 @@ Group: System Environment/Kernel
+@@ -333,14 +338,14 @@ Group: System Environment/Kernel
  License: GPLv2 and Redistributable, no modification permitted
  URL: http://www.kernel.org/
  Version: %{rpmversion}
@@ -49,7 +49,7 @@ index a564c0d..d52f9a9 100644
  %endif
  ExclusiveOS: Linux
  %ifnarch %{nobuildarches}
-@@ -357,7 +362,7 @@ Requires: rt-setup
+@@ -358,7 +363,7 @@ Requires: rt-setup
  BuildRequires: kmod, patch, bash, coreutils, tar, git, which
  BuildRequires: bzip2, xz, findutils, gzip, m4, perl-interpreter, perl-Carp, perl-devel, perl-generators, make, diffutils, gawk
  BuildRequires: gcc, binutils, redhat-rpm-config, hmaccalc, python3-devel
@@ -58,7 +58,7 @@ index a564c0d..d52f9a9 100644
  %if %{with_doc}
  BuildRequires: xmlto, asciidoc, python3-sphinx
  %endif
-@@ -1783,7 +1788,7 @@ BuildKernel %make_target %kernel_image %{with_vdso_install} zfcpdump
+@@ -1791,7 +1796,7 @@ BuildKernel %make_target %kernel_image %{with_vdso_install} zfcpdump
  BuildKernel %make_target %kernel_image %{with_vdso_install}
  %endif
  
@@ -67,14 +67,14 @@ index a564c0d..d52f9a9 100644
  %if !%{with_debug} && !%{with_zfcpdump} && !%{with_up}
  # If only building the user space tools, then initialize the build environment
  # and some variables so that the various userspace tools can be built.
-@@ -2611,6 +2616,9 @@ fi
+@@ -2622,6 +2627,9 @@ fi
  #
  #
  %changelog
-+* Fri Oct 01 2021 Jacco Ligthart <jacco@redsleeve.org> 4.18.0-305.19.1.el8.redsleeve
++* Mon Nov 22 2021 Jacco Ligthart <jacco@redsleeve.org> 4.18.0-348.2.1.el8.redsleeve
 +- added arm to the ExclusiveArch and nobuildarches lists
 +
- * Wed Sep 15 2021 CentOS Sources <bugs@centos.org> - 4.18.0-305.19.1.el8.centos
+ * Mon Nov 15 2021 CentOS Sources <bugs@centos.org> - 4.18.0-348.2.1.el8.centos
  - Apply debranding changes
  
 -- 
