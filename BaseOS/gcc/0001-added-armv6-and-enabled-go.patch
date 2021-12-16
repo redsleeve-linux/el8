@@ -1,6 +1,6 @@
-From d7c66eae7b007a0c5e74b7d842a4249e66b82906 Mon Sep 17 00:00:00 2001
+From 4a380e7c7b13690e32315e9d4cc31eb01bbed286 Mon Sep 17 00:00:00 2001
 From: Jacco Ligthart <jacco@redsleeve.org>
-Date: Wed, 29 Sep 2021 11:58:24 +0000
+Date: Mon, 22 Nov 2021 23:04:15 +0000
 Subject: [PATCH] added armv6 and enabled go
 
 ---
@@ -8,7 +8,7 @@ Subject: [PATCH] added armv6 and enabled go
  1 file changed, 9 insertions(+), 2 deletions(-)
 
 diff --git a/SPECS/gcc.spec b/SPECS/gcc.spec
-index 47b03f0..9f5a094 100644
+index ea4f09c..28d9024 100644
 --- a/SPECS/gcc.spec
 +++ b/SPECS/gcc.spec
 @@ -17,7 +17,7 @@
@@ -29,7 +29,7 @@ index 47b03f0..9f5a094 100644
  # libgcc, libgfortran, libgomp, libstdc++ and crtstuff have
  # GCC Runtime Exception.
  License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
-@@ -1079,6 +1079,9 @@ CONFIGURE_OPTS="\
+@@ -1089,6 +1089,9 @@ CONFIGURE_OPTS="\
  	--with-tune=generic-armv7-a --with-arch=armv7-a \
  	--with-float=hard --with-fpu=vfpv3-d16 --with-abi=aapcs-linux \
  %endif
@@ -39,17 +39,17 @@ index 47b03f0..9f5a094 100644
  %ifarch mips mipsel
  	--with-arch=mips32r2 --with-fp-32=xx \
  %endif
-@@ -3167,6 +3170,10 @@ fi
+@@ -3177,6 +3180,10 @@ fi
  %endif
  
  %changelog
-+* Wed Sep 29 2021 Jacco Ligthart <jacco@redsleeve.org> 8.4.1-1.redsleeve
++* Mon Nov 22 2021 Jacco Ligthart <jacco@redsleeve.org> 8.5.0-4.redsleeve
 +- Enabled gcc-go build on EL8
 +- added armv6 compile flags
 +
- * Tue Sep 29 2020 Marek Polacek <polacek@redhat.com> 8.4.1-1
- - update from GCC 8.4 release (#1868446)
- - remove symlinks to 32-bit versions of these static libraries: libasan.a,
+ * Fri Oct 29 2021 Marek Polacek <polacek@redhat.com> 8.5.0-4
+ - add -Wbidirectional patch (#2008391)
+ 
 -- 
 2.27.0
 

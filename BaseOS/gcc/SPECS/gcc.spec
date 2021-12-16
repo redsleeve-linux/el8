@@ -17,7 +17,7 @@
 %if 0%{?rhel} > 7
 %global build_ada 0
 %global build_objc 0
-%global build_go 0
+%global build_go 1
 %global build_libgccjit 0
 %else
 %ifarch %{ix86} x86_64 ia64 ppc %{power64} alpha s390x %{arm} aarch64
@@ -104,7 +104,7 @@
 Summary: Various compilers (C, C++, Objective-C, ...)
 Name: gcc
 Version: %{gcc_version}
-Release: %{gcc_release}%{?dist}
+Release: %{gcc_release}%{?dist}.redsleeve
 # libgcc, libgfortran, libgomp, libstdc++ and crtstuff have
 # GCC Runtime Exception.
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
@@ -1088,6 +1088,9 @@ CONFIGURE_OPTS="\
 %ifarch armv7hl
 	--with-tune=generic-armv7-a --with-arch=armv7-a \
 	--with-float=hard --with-fpu=vfpv3-d16 --with-abi=aapcs-linux \
+%endif
+%ifarch armv6hl
+	--with-arch=armv6 --with-float=hard --with-fpu=vfp \
 %endif
 %ifarch mips mipsel
 	--with-arch=mips32r2 --with-fp-32=xx \
@@ -3177,6 +3180,10 @@ fi
 %endif
 
 %changelog
+* Mon Nov 22 2021 Jacco Ligthart <jacco@redsleeve.org> 8.5.0-4.redsleeve
+- Enabled gcc-go build on EL8
+- added armv6 compile flags
+
 * Fri Oct 29 2021 Marek Polacek <polacek@redhat.com> 8.5.0-4
 - add -Wbidirectional patch (#2008391)
 
