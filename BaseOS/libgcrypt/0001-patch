@@ -1,0 +1,11 @@
+--- libgcrypt-1.8.5-ppc-aes-gcm.patch	2021-12-16 21:49:09.082903474 +0100
++++ libgcrypt-1.8.5-ppc-aes-gcm.patch-rs	2021-12-16 21:48:08.747115213 +0100
+@@ -1318,7 +1318,7 @@
+ -  powerpc64-*-*)
+ -      GCRYPT_DIGESTS="$GCRYPT_DIGESTS cipher-gcm-ppc.lo"
+ +  arm*-*-*)
+-+    GCRYPT_DIGESTS="$GCRYPT_DIGESTS cipher-gcm-armv7-neon.lo"
+++#    GCRYPT_DIGESTS="$GCRYPT_DIGESTS cipher-gcm-armv7-neon.lo"
+ +    GCRYPT_DIGESTS="$GCRYPT_DIGESTS cipher-gcm-armv8-aarch32-ce.lo"
+ +  ;;
+ +  aarch64-*-*)
