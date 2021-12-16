@@ -2,7 +2,7 @@
 
 Name:           nettle
 Version:        3.4.1
-Release:        7%{?dist}
+Release:        7%{?dist}.redsleeve
 Summary:        A low-level cryptographic library
 
 Group:          Development/Libraries
@@ -135,6 +135,9 @@ fi
 
 
 %changelog
+* Thu Nov 25 2021 Jacco Ligthart <jacco@redsleeve.org> - 3.4.1-7.redsleeve
+- revert the CTR mode optimization, armv6 does not build with it.
+
 * Wed Jul 14 2021 Daiki Ueno <dueno@redhat.com> - 3.4.1-7
 - Backport CVE-2021-3580 from upstream 3.7.3 release (#1967990)
 

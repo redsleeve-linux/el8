@@ -1,0 +1,67 @@
+From 2790f5d5cb542cf4ab03361b7e04ac1258866176 Mon Sep 17 00:00:00 2001
+From: Jacco Ligthart <jacco@redsleeve.org>
+Date: Thu, 25 Nov 2021 08:10:25 +0000
+Subject: [PATCH] revert the CTR mode optimization
+
+---
+ SOURCES/nettle-3.4.1-powerpc64-ghash-asm.patch | 13 +------------
+ SPECS/nettle.spec                              |  5 ++++-
+ 2 files changed, 5 insertions(+), 13 deletions(-)
+
+diff --git a/SOURCES/nettle-3.4.1-powerpc64-ghash-asm.patch b/SOURCES/nettle-3.4.1-powerpc64-ghash-asm.patch
+index 255adbd..df3c1ae 100644
+--- a/SOURCES/nettle-3.4.1-powerpc64-ghash-asm.patch
++++ b/SOURCES/nettle-3.4.1-powerpc64-ghash-asm.patch
+@@ -157,7 +157,7 @@ diff -up ./ctr16.c.ghash ./ctr16.c
+ diff -up ./ctr.c.ghash ./ctr.c
+ --- ./ctr.c.ghash	2018-12-04 21:56:05.000000000 +0100
+ +++ ./ctr.c	2021-07-14 14:13:07.714539484 +0200
+-@@ -41,11 +41,83 @@
++@@ -41,11 +41,72 @@
+  
+  #include "ctr.h"
+  
+@@ -169,17 +169,6 @@ diff -up ./ctr.c.ghash ./ctr.c
+ -#define NBLOCKS 4
+ +#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+ +
+-+/* The 'u64' member has been added in the public header
+-+   (nettle-types.h).  Check that the alignment is not affected with
+-+   it using _Static_assert. */
+-+union nettle_block16_
+-+{
+-+  uint8_t b[16];
+-+  unsigned long w[16 / sizeof(unsigned long)];
+-+};
+-+_Static_assert(__alignof(union nettle_block16_) == __alignof(union nettle_block16),
+-+	       "nettle_block16 alignment should be preserved");
+-+
+ +static size_t
+ +ctr_fill (size_t block_size, uint8_t *ctr, size_t length, uint8_t *buffer)
+ +{
+diff --git a/SPECS/nettle.spec b/SPECS/nettle.spec
+index 5bde11d..256c159 100644
+--- a/SPECS/nettle.spec
++++ b/SPECS/nettle.spec
+@@ -2,7 +2,7 @@
+ 
+ Name:           nettle
+ Version:        3.4.1
+-Release:        7%{?dist}
++Release:        7%{?dist}.redsleeve
+ Summary:        A low-level cryptographic library
+ 
+ Group:          Development/Libraries
+@@ -135,6 +135,9 @@ fi
+ 
+ 
+ %changelog
++* Thu Nov 25 2021 Jacco Ligthart <jacco@redsleeve.org> - 3.4.1-7.redsleeve
++- revert the CTR mode optimization, armv6 does not build with it.
++
+ * Wed Jul 14 2021 Daiki Ueno <dueno@redhat.com> - 3.4.1-7
+ - Backport CVE-2021-3580 from upstream 3.7.3 release (#1967990)
+ 
+-- 
+2.27.0
+

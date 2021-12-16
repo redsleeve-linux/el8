@@ -157,7 +157,7 @@ diff -up ./ctr16.c.ghash ./ctr16.c
 diff -up ./ctr.c.ghash ./ctr.c
 --- ./ctr.c.ghash	2018-12-04 21:56:05.000000000 +0100
 +++ ./ctr.c	2021-07-14 14:13:07.714539484 +0200
-@@ -41,11 +41,83 @@
+@@ -41,11 +41,72 @@
  
  #include "ctr.h"
  
@@ -168,17 +168,6 @@ diff -up ./ctr.c.ghash ./ctr.c
  
 -#define NBLOCKS 4
 +#define MIN(a,b) (((a) < (b)) ? (a) : (b))
-+
-+/* The 'u64' member has been added in the public header
-+   (nettle-types.h).  Check that the alignment is not affected with
-+   it using _Static_assert. */
-+union nettle_block16_
-+{
-+  uint8_t b[16];
-+  unsigned long w[16 / sizeof(unsigned long)];
-+};
-+_Static_assert(__alignof(union nettle_block16_) == __alignof(union nettle_block16),
-+	       "nettle_block16 alignment should be preserved");
 +
 +static size_t
 +ctr_fill (size_t block_size, uint8_t *ctr, size_t length, uint8_t *buffer)
