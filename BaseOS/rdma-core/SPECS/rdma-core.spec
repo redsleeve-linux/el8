@@ -1,6 +1,6 @@
 Name: rdma-core
 Version: 35.0
-Release: 1%{?dist}
+Release: 1%{?dist}.redsleeve
 Summary: RDMA core userspace libraries and daemons
 
 # Almost everything is licensed under the OFA dual GPLv2, 2 Clause BSD license
@@ -24,7 +24,7 @@ Patch301: 0001-Only-load-i40iw-for-i40e-device-with-specific-PCI-ID.patch
 %define with_static %{?_with_static: 1} %{?!_with_static: 0}
 
 # 32-bit arm is missing required arch-specific memory barriers,
-ExcludeArch: %{arm}
+#ExcludeArch: %{arm}
 
 BuildRequires: binutils
 BuildRequires: cmake >= 2.8.11
@@ -83,7 +83,7 @@ BuildRequires: make
 %define cmake_install DESTDIR=%{buildroot} make install
 %endif
 
-BuildRequires: pandoc
+#BuildRequires: pandoc
 
 %description
 RDMA core userspace infrastructure and documentation, including kernel
@@ -414,7 +414,7 @@ fi
 %config(noreplace) %{_sysconfdir}/rdma/modules/roce.conf
 %config(noreplace) %{_sysconfdir}/udev/rules.d/*
 %dir %{_sysconfdir}/modprobe.d
-%ifnarch s390
+%ifnarch s390 %{arm}
 %config(noreplace) %{_sysconfdir}/modprobe.d/mlx4.conf
 %endif
 %config(noreplace) %{_sysconfdir}/modprobe.d/truescale.conf
@@ -454,13 +454,13 @@ fi
 %endif
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/*.pc
-%{_mandir}/man3/efadv*
 %{_mandir}/man3/ibv_*
 %{_mandir}/man3/rdma*
 %{_mandir}/man3/umad*
 %{_mandir}/man3/*_to_ibv_rate.*
 %{_mandir}/man7/rdma_cm.*
-%ifnarch s390
+%ifnarch s390 %{arm}
+%{_mandir}/man3/efadv*
 %{_mandir}/man3/mlx5dv*
 %{_mandir}/man3/mlx4dv*
 %{_mandir}/man7/efadv*
@@ -540,10 +540,10 @@ fi
 %files -n libibverbs
 %dir %{_sysconfdir}/libibverbs.d
 %dir %{_libdir}/libibverbs
-%{_libdir}/libefa.so.*
 %{_libdir}/libibverbs*.so.*
 %{_libdir}/libibverbs/*.so
-%ifnarch s390
+%ifnarch s390 %{arm}
+%{_libdir}/libefa.so.*
 %{_libdir}/libmlx5.so.*
 %{_libdir}/libmlx4.so.*
 %endif
@@ -552,7 +552,7 @@ fi
 %doc %{_docdir}/%{name}/rxe.md
 %doc %{_docdir}/%{name}/tag_matching.md
 %{_mandir}/man7/rxe*
-%ifnarch s390
+%ifnarch s390 %{arm}
 %{_mandir}/man7/mlx4dv*
 %{_mandir}/man7/mlx5dv*
 %endif
@@ -648,6 +648,9 @@ fi
 %endif
 
 %changelog
+* Sat Dec 04 2021 Jacco Ligthart <jacco@redsleeve.org> - 35.0-1.redsleeve
+- undo ExcludeArch
+
 * Fri May 14 2021 Honggang Li <honli@redhat.com> - 35.0-1
 - Update to upstream v35 release for features and fixes
 - Resolves: bz1915311
